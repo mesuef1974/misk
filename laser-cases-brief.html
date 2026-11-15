@@ -1,0 +1,364 @@
+<meta charset="utf-8">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>مشروع حفر الكفرات</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alexandria:wght@600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
+<style>
+/* التخطيط: عمود قراءة واحد بعرض 760px، رأس فيه لوحة عيّنة محفورة، ثم أقسام قصيرة بجداول تتمرّر داخل حاوياتها */
+:root{
+  --bg:#f2f5f4; --surface:#ffffff; --ink:#15211f; --muted:#56655f; --line:#d5ddd9;
+  --accent:#0b6a63; --accent-soft:#dcefeb;
+  --ok:#1c6b3c; --ok-bg:#dff1e5; --warn:#8a5a00; --warn-bg:#fbedcf; --stop:#a3222b; --stop-bg:#f9e0e1;
+  --leather:#b98a5e; --leather-edge:#8f6641; --burn:#4f2c11;
+  --display:"Alexandria","IBM Plex Sans Arabic","Segoe UI",Tahoma,sans-serif;
+  --body:"IBM Plex Sans Arabic","Segoe UI",Tahoma,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1716; --surface:#172220; --ink:#e7efec; --muted:#9fb0aa; --line:#2a3936;
+    --accent:#5cc7bb; --accent-soft:#143532;
+    --ok:#7fd49b; --ok-bg:#143122; --warn:#f0c26a; --warn-bg:#3a2c0c; --stop:#f29aa0; --stop-bg:#3d1719;
+    --leather:#a67a50; --leather-edge:#6f4d2f; --burn:#3a1f0b; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1716; --surface:#172220; --ink:#e7efec; --muted:#9fb0aa; --line:#2a3936;
+  --accent:#5cc7bb; --accent-soft:#143532;
+  --ok:#7fd49b; --ok-bg:#143122; --warn:#f0c26a; --warn-bg:#3a2c0c; --stop:#f29aa0; --stop-bg:#3d1719;
+  --leather:#a67a50; --leather-edge:#6f4d2f; --burn:#3a1f0b; color-scheme:dark;
+}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.85;margin:0}
+.page{max-width:760px;margin-inline:auto;padding-block:28px 56px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:34px;box-sizing:border-box}
+h1,h2,h3{font-family:var(--display);line-height:1.4;text-wrap:balance;margin:0}
+h1{font-size:1.75rem;font-weight:700}
+h2{font-size:1.2rem;font-weight:700;padding-block-end:8px;border-block-end:2px solid var(--accent)}
+h3{font-size:1rem;font-weight:600}
+p{margin:0}
+a{color:var(--accent);overflow-wrap:anywhere}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.head{display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+.head .txt{flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.date{color:var(--muted);font-size:.9rem}
+.lead{font-size:1.05rem}
+.plate{flex:0 0 auto;width:118px;height:232px;border-radius:22px;background:var(--leather);
+  border:3px solid var(--leather-edge);position:relative;display:flex;align-items:center;justify-content:center;margin-inline:auto;box-sizing:border-box}
+.plate::before{content:"";position:absolute;top:12px;left:12px;width:40px;height:40px;border-radius:12px;background:var(--leather-edge)}
+.plate span{font-family:var(--display);font-weight:700;font-size:1.35rem;color:var(--burn);letter-spacing:0}
+section{display:flex;flex-direction:column;gap:14px}
+ul,ol{margin:0;padding-inline-start:1.3em;display:flex;flex-direction:column;gap:6px}
+.verdicts{list-style:none;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.verdicts li{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.verdicts b{font-family:var(--display);font-weight:600}
+.scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:.94rem;font-variant-numeric:tabular-nums}
+th,td{padding:10px 14px;text-align:start;vertical-align:top;border-block-end:1px solid var(--line)}
+tr:last-child td{border-block-end:0}
+th{color:var(--muted);font-weight:600;font-size:.86rem;white-space:nowrap}
+td.n{white-space:nowrap}
+table.wide{min-width:620px}
+.chip{display:inline-block;border-radius:999px;padding:1px 10px;font-size:.82rem;font-weight:600;white-space:nowrap}
+.chip.ok{background:var(--ok-bg);color:var(--ok)}
+.chip.warn{background:var(--warn-bg);color:var(--warn)}
+.chip.stop{background:var(--stop-bg);color:var(--stop)}
+.note{background:var(--accent-soft);border-radius:10px;padding:12px 16px}
+.alert{background:var(--stop-bg);color:var(--stop);border-radius:10px;padding:12px 16px}
+.alert b{font-family:var(--display)}
+.ask{background:var(--surface);border:2px solid var(--accent);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.small{color:var(--muted);font-size:.88rem}
+footer{border-block-start:1px solid var(--line);padding-block-start:16px;display:flex;flex-direction:column;gap:8px}
+@media (max-width:560px){ .verdicts{grid-template-columns:1fr} h1{font-size:1.45rem} }
+</style>
+
+<main class="page" dir="rtl" lang="ar">
+
+<header class="head">
+  <div class="txt">
+    <p class="date">ملخص للشريكين، 12 نوفمبر 2026. حُدّث قسم السوق في اليوم نفسه بعد مسح بائعي إنستغرام، وأُضيف قسم التوريد وشرط الدباغة النباتية في 13 نوفمبر، ثم حُدّثت أقسام التوريد والحساب والخامات في اليوم نفسه بجولة بحث ثانية قصرت على الجلد النباتي الدباغة.</p>
+    <h1>حفر الكفرات بالليزر في قطر</h1>
+    <p class="lead">الترخيص لازم، والرخصة المنزلية لا تصلح لنا. الطريق شركة بسجل تجاري مع رخصة التجارة الإلكترونية، وقبلها إذن كتابي من الوزارة لكل منا. والسوق يقول إن مكاننا الجلد الطبيعي المحفور بالاسم، لا الصورة المطبوعة، وفيه ثلاث ماركات قطرية تطبع وترسم ولا تحفر. والكفر الخام أرخصه من قوانغتشو، لكننا لم نجد بعد موردًا يوثّق الدباغة النباتية لكفرات بالجملة، فكلفة الكفر الذي نريده تُعرف من عروض الأسعار لا من القوائم.</p>
+  </div>
+  <div class="plate" role="img" aria-label="عيّنة: كفر جلد محفور عليه اسم"><span>بالاسم</span></div>
+</header>
+
+<section>
+  <h2>الخلاصة</h2>
+  <ul class="verdicts">
+    <li><b>الرخصة</b><span>مطلوبة لأي بيع منتظم، ومنه إنستغرام. الرخصة المنزلية للقطريين، والحفر ليس من أنشطتها.</span></li>
+    <li><b>الطريق</b><span>شركة مقيدة في السجل التجاري، ثم رخصة التجارة الإلكترونية برسم 500 ريال، وتُزاول من البيت.</span></li>
+    <li><b>قبل كل شيء</b><span>إذن كتابي مسبق من وزارة التربية لكل منا، لأننا موظفان حكوميان مقيمان.</span></li>
+    <li><b>السوق</b><span>الصورة المطبوعة تُباع من 50 ريالًا. والجلد بالاسم فيه ثلاث ماركات بين 190 و250، فسقفنا نحو 190 وتمييزنا الحفر نفسه.</span></li>
+    <li><b>التوريد</b><span>لم نجد موردًا يوثّق دباغة نباتية لكفرات بالجملة بين 50 و300 قطعة. أسعار قوانغتشو، 6.5 إلى 11 دولارًا، لجلد غير محدد الدباغة، وسعر الكفر النباتي مجهول قبل عروض الأسعار.</span></li>
+    <li><b>شرط الخامة</b><span>لا نحفر إلا جلدًا نباتي الدباغة بالكامل، موثّقًا بمدبغة مسمّاة وتقرير مخبري. وهو يزيل مصدر الكروم لا الدخان، فالشفط والترشيح لازمان دائمًا.</span></li>
+  </ul>
+</section>
+
+<section>
+  <h2>الترخيص: كيف ومن أين وكم</h2>
+  <div class="scroll"><table>
+    <tr><th>الخطوة</th><th>الجهة</th><th>الكلفة</th></tr>
+    <tr><td>إذن كتابي مسبق لكل شريك</td><td>وزارة التربية، عبر مدير المدرسة</td><td class="n">بلا رسم</td></tr>
+    <tr><td>شركة مقيدة في السجل التجاري</td><td>النافذة الواحدة في وزارة التجارة والصناعة</td><td class="n">رسم القيد 500 ريال</td></tr>
+    <tr><td>موافقة على ملكية أجنبية فوق 49%</td><td>وزارة التجارة، ويُبت فيها خلال 15 يومًا</td><td class="n">غير منشور</td></tr>
+    <tr><td>رخصة التجارة الإلكترونية، واحدة لكل موقع أو حساب</td><td>وزارة التجارة</td><td class="n">500 ريال</td></tr>
+    <tr><td>بطاقة ضريبية خلال 60 يومًا من القيد</td><td>الهيئة العامة للضرائب، عبر «ضريبة»</td><td class="n">غير منشور</td></tr>
+  </table></div>
+  <p>مكاتب محاماة تقدّر إجمالي تأسيس الشركة بعشرة إلى ثمانية عشر ألف ريال دون الإيجار. هذا تقدير غير رسمي.</p>
+  <p>رخصة التجارة الإلكترونية صدرت خدمتها في سبتمبر 2026 لأنشطة لا تحتاج موقعًا ماديًا. قائمتها فيها «إكسسوارات الهواتف النقالة» و«المشغولات اليدوية والتحف والهدايا» و«البيع بالتجزئة عن طريق الإنترنت». وتُلزم بدفع إلكتروني، وإظهار رقمي السجل والرخصة، وسياسة استرجاع.</p>
+  <h3>لماذا لا تصلح الرخصة المنزلية</h3>
+  <ul>
+    <li>الوزارة تشترط أن يكون طالبها قطريًا، بحسب توضيحها في أغسطس 2024.</li>
+    <li>الحفر والطباعة على المنتجات وإكسسوارات الهواتف ليست بين أنشطتها الثلاثة والستين.</li>
+    <li>تعريفها يستبعد المعدات المقلقة للراحة والمواد الخطرة، وآلة الليزر قد تُعدّ منها.</li>
+  </ul>
+  <p class="alert"><b>لا ترخيص باسم طرف ثالث.</b> تسجيل المشروع باسم قطري ونحن المالكان الفعليان هو التستر التجاري: حبس حتى سنتين وغرامة حتى 500 ألف ريال على الطرفين، وإبعاد غير القطري جوازيًا.</p>
+  <p class="alert"><b>ولا بيع قبل الترخيص.</b> الاشتغال بالتجارة قبل القيد عقوبته حبس حتى ستة أشهر وغرامة حتى 200 ألف ريال. فلا إعلان ولا «السعر على الخاص» قبل اكتمال الأوراق.</p>
+</section>
+
+<section>
+  <h2>الموظف الحكومي</h2>
+  <ul>
+    <li>المادة 80 من قانون الموارد البشرية المدنية تحظر العمل للغير ولو خارج الدوام دون إذن كتابي مسبق، وتحظر التجارة التي تتعارض مع واجبات الوظيفة.</li>
+    <li>قانون الإقامة يجيز للوافد أن يكون شريكًا في شركة، ويشترط موافقة الجهة المختصة لأعمال الإدارة فيها.</li>
+    <li>النص لا يحسم هل إدارة مشروعنا الخاص «عمل للغير»، فالإذن الكتابي هو الاحتياط الواجب.</li>
+  </ul>
+  <p class="note">إن رُفض إذن أحدنا سقطت الشراكة بصيغتها. فالإذنان أول خطوة، قبل أي ريال.</p>
+</section>
+
+<section>
+  <h2>الضرائب</h2>
+  <div class="scroll"><table>
+    <tr><th>الضريبة</th><th>الحكم</th></tr>
+    <tr><td>القيمة المضافة</td><td>غير مطبقة في قطر</td></tr>
+    <tr><td>ضريبة الدخل</td><td>10% على حصة غير القطريين من الربح، أي على كامل ربح شركتنا. الرواتب لا تخضع</td></tr>
+    <tr><td>الإقرار السنوي</td><td>إلزامي خلال أربعة أشهر من نهاية السنة ولو كان الربح صفرًا. تأخيره 500 ريال يوميًا، وعدم التسجيل 20 ألفًا</td></tr>
+    <tr><td>الجمارك</td><td>5% عمومًا على الكفرات المستوردة</td></tr>
+    <tr><td>ضريبة خاصة بالعمل المنزلي</td><td>لا توجد</td></tr>
+  </table></div>
+  <p>ولا يوجد معيار قطري منشور خاص بآلات الليزر في المنازل. الموجود عام: صلاحية المنزل أمنًا وسلامة واشتراطات الدفاع المدني، وعدم إزعاج الجيران، وعدم البيع للجمهور من المنزل، فالتوصيل هو المتاح.</p>
+</section>
+
+<section>
+  <h2>السوق: من يقدّم الخدمة وبكم</h2>
+  <div class="scroll"><table>
+    <tr><th>المزوّد</th><th>ما يقدّمه</th><th>السعر بالريال</th><th>التسليم</th></tr>
+    <tr><td>Shelled</td><td>كفر مطبوع بتصاميم جاهزة وقسم للتخصيص</td><td class="n">99</td><td>يوم إلى يومين</td></tr>
+    <tr><td>Printaty، المرقاب مول</td><td>طباعة صورة الزبون</td><td class="n">95</td><td>غير منشور</td></tr>
+    <tr><td>JS Print (جمبو)</td><td>كفر مخصص</td><td class="n">40 إلى 100</td><td>خيار سريع</td></tr>
+    <tr><td>Picture World، 25 فرعًا</td><td>طباعة UV لصورة الزبون على كل الأجهزة، وحفر ليزر على الجلد دون ذكر الكفرات</td><td class="n">50 للكفر بالصورة</td><td>في اليوم نفسه أو التالي</td></tr>
+    <tr><td>Gifto Graphics، طوار مول</td><td>طباعة وحفر، وعلى كفر الزبون</td><td class="n">من 100، والمخصص من 180</td><td>غير منشور</td></tr>
+    <tr><td>Casetify، مستورد</td><td>كفر جاهز</td><td class="n">نحو 266</td><td>أسابيع</td></tr>
+  </table></div>
+  <h3>منافسو الجلد الطبيعي بالاسم</h3>
+  <div class="scroll"><table>
+    <tr><th>الماركة</th><th>المنتج</th><th>السعر بالريال</th><th>طريقة التخصيص</th></tr>
+    <tr><td>Double A</td><td>كفر جلد عجل</td><td>140، ومع أحرف مطبوعة 190، ومع أحرف مرسومة 210، ومع صورة مطبوعة 230</td><td>طباعة أو رسم يدوي</td></tr>
+    <tr><td>Twenty One («كفرات قطر»)، منذ 2018، نحو 7600 متابع</td><td>كفر جلد لآيفون 17</td><td class="n">235 إلى 250</td><td>يذكر نقوشًا وأحرفًا، والسعر على واتساب</td></tr>
+    <tr><td>Concepto</td><td>جلد فاخر</td><td class="n">250</td><td>رسم يدوي</td></tr>
+  </table></div>
+  <h3>الحفر خدمةً على غرض الزبون</h3>
+  <div class="scroll"><table>
+    <tr><th>المزوّد</th><th>الغرض</th><th>السعر بالريال</th></tr>
+    <tr><td>Gifto Graphics</td><td>ساعة الزبون</td><td class="n">150</td></tr>
+    <tr><td>Gifto Graphics</td><td>مرآة أو ترمس الزبون</td><td class="n">100</td></tr>
+    <tr><td>Gifto Graphics</td><td>كوب الزبون</td><td class="n">80</td></tr>
+    <tr><td>Gifto Graphics</td><td>بطاقة حقيبة ستانلس محفورة، مع القطعة</td><td class="n">50</td></tr>
+    <tr><td>In No Mind، سيتي سنتر</td><td>قطعة معدنية واحدة، من عرض يعود إلى 2021</td><td class="n">50</td></tr>
+  </table></div>
+  <h3>ما يعنيه هذا لنا</h3>
+  <ul>
+    <li>«صورة الزبون على الكفر» أضعف نصف في الفكرة. سلسلة بخمسة وعشرين فرعًا تطبعها ملونة في اليوم نفسه بخمسين ريالًا، والليزر يعطي لونًا واحدًا.</li>
+    <li>الجلد الطبيعي بالاسم ليس فراغًا: فيه ثلاث ماركات قطرية تبيع عبر إنستغرام بين 190 و250 ريالًا. لكنها تطبع أو ترسم، ولم نجد من يعلن حفر الليزر على الكفر.</li>
+    <li>سقف سعرنا في البداية نحو 190 ريالًا، وهو سعر Double A بالأحرف المطبوعة. فنطاق 150 إلى 180 صالح، و220 ليس واقعيًا الآن.</li>
+    <li>تمييزنا المحتمل: الحفر نفسه والخط العربي. يحتاج عيّنة تُقارن بكفر مطبوع قبل أن نبني عليه.</li>
+    <li>صفحات الماركات الثلاث التي قرأناها تعرض آيفون فقط. إن صحّ ذلك في كتالوجاتها كلها فسامسونج وشاومي، ولهما نحو ثلث السوق، فرصة.</li>
+  </ul>
+  <p class="small">بحث إنستغرام نفسه يتطلب تسجيل دخول، فوصل المسح إلى الحسابات عبر مواقعها فقط، ولم يظهر البائعون المنزليون بلا مواقع. ولم نجد سعرًا منشورًا لحفر الليزر على كفر تحديدًا، ولا سعر التخصيص عند Twenty One. يحسمهما سؤال على واتساب.</p>
+</section>
+
+<section>
+  <h2>الحساب</h2>
+  <div class="scroll"><table>
+    <tr><th>البند</th><th>ريال</th></tr>
+    <tr><td>سعر بيع كفر جلد طبيعي محفور</td><td class="n">150 إلى 180</td></tr>
+    <tr><td>كفر جلد طبيعي خام من الصين، غير محدد الدباغة، بحد أدنى 100 قطعة، واصلًا إلى الدوحة</td><td class="n">30 إلى 45</td></tr>
+    <tr><td>الكفر نفسه بجلد نباتي الدباغة موثّق، وهو ما سنشتريه</td><td class="n">مجهول، والأرجح أعلى</td></tr>
+    <tr><td>التوصيل داخل الدوحة، ويُحمَّل غالبًا على الزبون</td><td class="n">15 إلى 25</td></tr>
+    <tr><td>التالف، نحو 10%</td><td class="n">3 إلى 5</td></tr>
+    <tr><td>الهامش عند سعر 150 وكلفة كفر 45: 100 إن دفع الزبون التوصيل، و80 إن تحمّلنا منه 20. حدّ أعلى عند هذا السعر ما دام سعر الكفر النباتي مجهولًا</td><td class="n">80 إلى 100 على الأكثر</td></tr>
+  </table></div>
+  <p>بهذا الهامش، ثلاثة آلاف ريال شهريًا لكل شريك تعني 60 إلى 75 طلبًا في الشهر على الأقل، أي طلبين إلى طلبين ونصف يوميًا. وكل 10 ريالات تزيد في كلفة الكفر تنقص الهامش نحو 11 ريالًا مع التالف، فيرتفع عدد الطلبات اللازمة. وأول مئة طلب على الأقل تذهب لاسترداد كلفة التأسيس وحدها. الأرقام تقدير من الأسعار المنشورة لا قياس.</p>
+  <p class="small">رقم 30 إلى 45 ريالًا من أسعار قوائم قوانغتشو لجلد غير محدد الدباغة. الجولة الثانية لم تجد سعر جملة منشورًا لكفر نباتي الدباغة. المرجع الوحيد أسعار تجزئة: 29 إلى 48 دولارًا عند Galen Leather التركية، ونحو 177 دولارًا عند Geometric Goods البولندية. التفصيل في قسم التوريد أدناه.</p>
+  <h3>التوصيل</h3>
+  <div class="scroll"><table>
+    <tr><th>الخدمة</th><th>الكلفة للطلب</th><th>الدفع عند الاستلام</th></tr>
+    <tr><td>Ezzy Delivery</td><td>15 داخل 10 كم، و18 إلى 20 حتى 25 كم، و35 أبعد</td><td>نقدًا بلا رسوم، وبالبطاقة 2.5%</td></tr>
+    <tr><td>بريد قطر للتجارة الإلكترونية</td><td>25 للتوصيل و5 للتجهيز</td><td>5 ريالات</td></tr>
+    <tr><td>Snoonu وRafeeq</td><td>من 20 تقريبًا، والتعرفة الحالية غير منشورة</td><td>غير منشور</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2>الخامات</h2>
+  <div class="scroll"><table>
+    <tr><th>الخامة</th><th>النتيجة</th><th>الحكم</th></tr>
+    <tr><td>جلد طبيعي نباتي الدباغة بالكامل</td><td>حفر داكن عالي التباين. بلا مصدر كروم، لكن دخانه ضار ويلزمه شفط وترشيح</td><td><span class="chip ok">نبدأ به</span></td></tr>
+    <tr><td>جلد طبيعي مدبوغ بالكروم</td><td>حفر أضعف. دراسة من 2024 وجدت معه كرومًا سداسيًا مسرطنًا عاليًا في الهواء حين أُطفئت التهوية</td><td><span class="chip stop">لا نحفره</span></td></tr>
+    <tr><td>جلد «خالٍ من الكروم» أو شبه نباتي</td><td>دباغة بمعادن أخرى أو ألدهيد أو تانينات صناعية، أو دباغة مختلطة</td><td><span class="chip stop">لا نحفره</span></td></tr>
+    <tr><td>خشب وبامبو</td><td>ممتاز</td><td><span class="chip ok">آمن</span></td></tr>
+    <tr><td>ألمنيوم مؤكسد</td><td>ممتاز</td><td><span class="chip ok">آمن</span></td></tr>
+    <tr><td>سيليكون وTPU</td><td>تباين ضعيف وذوبان</td><td><span class="chip warn">يُجرَّب أولًا</span></td></tr>
+    <tr><td>بولي كربونات شفاف</td><td>اصفرار وتشوه مع CO2</td><td><span class="chip warn">غالبًا لا</span></td></tr>
+    <tr><td>جلد صناعي أو فينيل</td><td>ما فيه PVC يطلق غاز الكلور السام والأكّال للآلة، والبولي يوريثان يطلق سيانيد الهيدروجين</td><td><span class="chip stop">ممنوع</span></td></tr>
+  </table></div>
+  <p>كثير من الكفرات «الجلدية» الرخيصة جلد صناعي مجهول التركيب، فلا يُحفر ما لا نعرف خامته.</p>
+  <p>والكفر نفسه جلد ملصوق على هيكل من البولي كربونات أو TPU وله بطانة. لم نجد بيانات عن اللاصق والبطانة تحت الليزر، فالحفر سطحي لا يخترق الجلد، ويُسأل المورد عن الهيكل واللاصق، وتُجرَّب عيّنة قبل أي كمية. هذا استنتاجنا لا معلومة من مصدر.</p>
+</section>
+
+<section>
+  <h2>التوريد: من أين نشتري الكفر الخام</h2>
+  <p>الجولة الثانية قصرت البحث على الجلد النباتي الدباغة. نتيجتها: لم نجد موردًا واحدًا يصرّح كتابةً بدباغة نباتية موثّقة المصدر لكفرات الهواتف ويبيع بالجملة بين 50 و300 قطعة. الموجود صنفان: علامات تجزئة تصرّح بجلد توسكاني نباتي وتبيع الكفر بأكثر من مئة دولار، ومصانع تعرض الجلد النباتي خيارًا بلا مدبغة ولا شهادة.</p>
+  <p class="note">فالطريق العملي مواصفة مكتوبة في الطلب وفحص مخبري لقصاصة من الجلد. موقع المورد وحده لا يكفي لاختياره.</p>
+  <p>قوانغتشو في الصين تبقى الأرخص للكفر الجلدي المفصّل على كل جهاز: 6.5 إلى 11 دولارًا للقطعة عند 100 قطعة، لجلد غير محدد الدباغة. الهند (كانبور) وتركيا (إسطنبول) تعرضان الدباغة النباتية لكن بلا أسعار منشورة وبحد أدنى أعلى. ولم يظهر مورد جملة في باكستان وإيطاليا وإسبانيا والبرتغال والمغرب ومصر والإمارات.</p>
+  <p>الجلد الكامل الحبيبات بالدباغة النباتية أغلى من المدبوغ بالكروم ومن الصناعي، فأسعار القوائم أعلاه لا تصلح تقديرًا للكفر النباتي. سعره يُعرف من عروض الأسعار، ويُقاس بسقف البيع 190 ريالًا.</p>
+
+  <h3>الشرط الحاكم: جلد نباتي الدباغة موثّق، وشفط دائم</h3>
+  <ul>
+    <li>مصادر الليزر تتفق على أن الجلد المدبوغ نباتيًا يعطي حفرًا داكنًا عالي التباين.</li>
+    <li>دراسة Niu وزملائه (2024) حفرت ستة جلود بليزر CO2 مكتبي، ووجدت كرومًا سداسيًا عاليًا في الهواء مع الجلدين المدبوغين بالكروم حين أُطفئت التهوية. قرأنا ملخصها فقط، ولا رقم فيه للتركيز ولا نتيجة مع تشغيل التهوية.</li>
+    <li>في الدراسة نفسها أعطى أحد الجلدين النباتيين أعلى تركيز للجسيمات عند كل قدرة. فالجلد النباتي بلا مصدر كروم، لكنه ليس بلا دخان ضار.</li>
+    <li>تصحيح لما كتبناه سابقًا: دراسة 2021 التي «لم تجد زيادة» قاست محتوى الجلد نفسه بعد الحفر لا الهواء، فلا تنفي الانبعاث.</li>
+    <li>Trotec، صانع آلات ليزر، يعدّ الجلد المحتوي على الكروم السداسي غير صالح للمعالجة بالليزر.</li>
+    <li>لا بيانات عن ليزر الديود في أي مصدر، ولا دراسة تقيس غازات الجلد النباتي تحديدًا.</li>
+  </ul>
+  <p class="alert"><b>الاحتياط.</b> الشرط النباتي ضروري وغير كافٍ. لا يُحفر إلا جلد نباتي الدباغة موثّق، والشفط إلى الخارج مع الترشيح لازم مع كل جلد.</p>
+
+  <h3>«نباتي الدباغة» وحدها لا تكفي في الطلب</h3>
+  <ul>
+    <li>«خالٍ من الكروم» (chrome-free) يسمح بدباغة الألمنيوم والزركونيوم والتيتانيوم والألدهيد والتانينات الصناعية (syntan).</li>
+    <li>«شبه نباتي» (semi-vegetable) و«semi-chrome» دباغة مختلطة.</li>
+    <li>حتى تعريف «vegetable-tanned» يسمح بكميات صغيرة من مواد أخرى، والتانينات الصناعية والألدهيدات مصادر للفورمالدهيد.</li>
+    <li>الصياغة التي نطلبها: دباغة وإعادة دباغة بتانينات نباتية فقط وفق EN 15987، بلا كروم ولا ألمنيوم ولا زركونيوم ولا تيتانيوم ولا ألدهيد ولا syntan ولا راتنج. هذه الصياغة تركيبنا من التعريفات.</li>
+    <li>التشطيب: جلد طبيعي اللون أو مصبوغ بالأنيلين، بلا طبقة صبغ ولا طلاء PU أو أكريليك أو نيتروسليلوز.</li>
+  </ul>
+
+  <h3>كيف نتحقق من الدباغة</h3>
+  <div class="scroll"><table class="wide">
+    <tr><th>الوسيلة</th><th>ما تثبته</th><th>حدودها</th></tr>
+    <tr><td>تقرير مخبري ISO 17075-2</td><td>الكروم السداسي، والمقبول أقل من 3 ملغم/كغم</td><td>يثبت غياب الكروم السداسي لا نوع الدباغة</td></tr>
+    <tr><td>تقرير مخبري ISO 17072-2</td><td>مجموع الكروم والألمنيوم والتيتانيوم والزركونيوم والحديد، وحد الجلد النباتي 0.1%</td><td>أقوى دليل على غياب الدباغة المعدنية، ولا يكشف syntan</td></tr>
+    <tr><td>تقرير مخبري ISO 17226-1</td><td>الفورمالدهيد الحر، والحد 75 جزءًا في المليون</td><td>مؤشر على الألدهيد والتانينات الصناعية</td></tr>
+    <tr><td>علامة اتحاد الدباغة النباتية التوسكاني برقمها التسلسلي</td><td>دباغة نباتية من مدبغة عضو، ويُتحقق من الرقم لدى الاتحاد</td><td>لا تقول شيئًا عن التشطيب والطلاء</td></tr>
+    <tr><td>اختبارا الرماد والاحتراق في الورشة</td><td>رماد مخضرّ للكروم ورمادي للنباتي، والنباتي ينطفئ وحده</td><td>تقريبيان، ولا يكشفان الدباغة المختلطة ولا syntan</td></tr>
+    <tr><td>شهادة LWG</td><td>تدقيق بيئي للمدبغة</td><td>لا تثبت نوع الدباغة</td></tr>
+  </table></div>
+  <p class="small">الحدود الرقمية من المواصفة الفنية لاتحاد الدباغة النباتية التوسكاني. لم نجد سعرًا منشورًا للفحوص، فالمختبرات تسعّر عند الطلب.</p>
+
+  <h3>نراسلهم أولًا: من عنده قرينة على الدباغة النباتية</h3>
+  <p>الحكم مبني على ما يقوله موقع المورد نفسه عن كفرات الهواتف.</p>
+  <div class="scroll"><table class="wide">
+    <tr><th>المورد</th><th>ما يقوله موقعه</th><th>الحد الأدنى</th><th>الحكم</th></tr>
+    <tr><td>Pellove، شنجن ودونغقوان، الصين. جديد</td><td>منتج باسم «Vegetable-Tanned Leather Phone Case»، والجلد النباتي فيه خيار بين خامات، بلا مدبغة ولا منشأ</td><td class="n">100 لكل تصميم</td><td>الأقرب، ويُطلب الإثبات</td></tr>
+    <tr><td>India Leather Manufacturer، كانبور، الهند</td><td>«vegetable or chrome tannage» خيارًا عامًا لا للكفرات تحديدًا</td><td class="n">300</td><td>يُطلب مكتوبًا</td></tr>
+    <tr><td>Guangdong Boman Leather، الصين</td><td>ذكر الدباغة النباتية في الجولة الأولى، ولم يُعَد فحصه لأن متاجره محجوبة عن القراءة الآلية</td><td class="n">عند الطلب</td><td>يُطلب مكتوبًا</td></tr>
+    <tr><td>Guangzhou Beron Leather Goods، الصين. جديد</td><td>مقتطف بحث يذكر «Italian vegetable tanned leather» لكفر قديم. لم نفتح الصفحة</td><td class="n">غير مذكور</td><td>غير متحقق منه</td></tr>
+    <tr><td>YL Leather، إسطنبول، تركيا</td><td>«genuine leather» فقط. الأنسب تركيًا للجملة والعلامة الخاصة</td><td class="n">غير مذكور</td><td>لا يصرّح، ويُسأل</td></tr>
+  </table></div>
+
+  <h3>ثم من لا يصرّح بالدباغة، إن لم يكفِ الأولون</h3>
+  <div class="scroll"><table class="wide">
+    <tr><th>المورد</th><th>ما يعرضه</th><th>السعر بالدولار</th><th>الحد الأدنى</th></tr>
+    <tr><td>Aaron's Leather، الصين</td><td>OEM لكفرات آيفون وسامسونج وبكسل. يذكر «Top-Grain Cowhide» و«Crazy Horse» بلا ذكر للدباغة</td><td class="n">عند الطلب</td><td class="n">100 لكل تصميم</td></tr>
+    <tr><td>Guangzhou Zhilun Leather، الصين</td><td>كفر جلد MagSafe لآيفون 17 برو وبرو ماكس. لا موقع له يُقرأ</td><td class="n">6.50</td><td class="n">100</td></tr>
+    <tr><td>Guangzhou Qialino، الصين</td><td>كفرات جلد طبيعي بعلامته، وOEM من 100 قطعة لكل موديل ولون. متجره لم يُفتح</td><td class="n">8.99 إلى 11.29</td><td class="n">10 إلى 200</td></tr>
+    <tr><td>Zakara، كانبور، الهند</td><td>علامة خاصة بجلد علوي الحبيبات. تركيزه الحقائب والمحافظ</td><td class="n">عند الطلب</td><td class="n">50</td></tr>
+    <tr><td>Metsa، إسطنبول، تركيا</td><td>جلديات بالجملة، والكفرات عنده غير مؤكدة</td><td class="n">عند الطلب</td><td class="n">غير مذكور</td></tr>
+  </table></div>
+  <p>احتياط أخير: Guangzhou Nalun على 1688 ويحتاج وسيط شراء، وMaryadha وسيط التوريد الهندي، وLevina Leather في هانوي، وHodica في إسطنبول. لا أحد منهم يذكر الدباغة، وMaryadha وLevina لا يدرجان الكفرات في موقعيهما.</p>
+
+  <h3>مستبعدان</h3>
+  <ul>
+    <li>Sinco: صفحة جلوده تصف «الجلد النباتي» عنده بأنه «semi-vegetable tanning»، أي دباغة مختلطة. يعود إن أثبت دباغة نباتية كاملة.</li>
+    <li>YSK Leather Goods: الدباغة النباتية مذكورة للحقائب فقط، وموقعه لا يذكر كفرات الهواتف.</li>
+  </ul>
+
+  <h3>الكفر النباتي موجود في التجزئة، وبأي سعر</h3>
+  <p>Geometric Goods البولندية تصرّح بجلد توسكاني نباتي لكفر آيفون 17 وتبيعه بنحو 177 دولارًا. Galen Leather التركية تعتمد الجلد النباتي وتبيع الكفر بـ29 إلى 48 دولارًا، لكن برنامج الجملة عندها مغلق أمام طلبات جديدة. لا أحد منهما يبيع كفرًا خامًا بالجملة.</p>
+
+  <h3>ما نتجنبه</h3>
+  <ul>
+    <li>القوائم بين 0.6 و3.5 دولار، ومنها «Lambskin» بـ0.59 دولار وكفر «جاهز للحفر» بـ3 دولارات من xBlanks: جلد صناعي في الغالب ولا يُعرف تركيبه.</li>
+    <li>قوائم IndiaMART بين 50 و500 روبية، أي نحو 2 إلى 22 ريالًا: سوق محلي أغلبه صناعي أو غير محدد الدرجة، ولا مصدّرين فيه.</li>
+    <li>باكستان: مصدّرو سيالكوت الظاهرون متخصصون في القفازات والملابس والمحافظ لا الكفرات.</li>
+  </ul>
+
+  <h3>لماذا الصين للكفر تحديدًا</h3>
+  <p>هذا استنتاجنا لا معلومة من مصدر: الكفر قالب مفصّل على كل جهاز يُكسى جلدًا، ومصانع القوالب متركزة في قوانغدونغ. لذلك تظهر كفرات آيفون 17 هناك بأسعار وحدود دنيا لا تظهر في غيرها. الهند وتركيا أقوى في الجلد نفسه، وأنسب لاحقًا لمنتجات مسطحة كالمحافظ وحوامل البطاقات.</p>
+
+  <h3>الترتيب المقترح</h3>
+  <ol>
+    <li>رسالة استفسار واحدة موحّدة إلى الخمسة الأوائل: Pellove وIndia Leather Manufacturer وBoman وBeron وYL Leather. ثم إلى من لا يصرّح إن لم يكفِ الأولون.</li>
+    <li>السؤال الفاصل للجميع: هل الجلد نباتي الدباغة بالكامل ومن أي مدبغة، وهل يُكتب ذلك في الطلب مع قصاصة من الجلدة نفسها، وهل يقدّم تقريرَي ISO 17075-2 وISO 17072-2 لدفعة الجلد؟</li>
+    <li>عيّنات من ثلاثة أو أربعة ممن أجابوا بنعم، كفران لكل موديل، ثم اختبار حفر عليها. وتُفحص قصاصة الفائز في مختبر قبل أول طلب تجاري.</li>
+    <li>الاستيراد التجاري (50 إلى 100 قطعة) ينتظر السجل التجاري وقيد المستوردين. المتاح قبل الترخيص عيّنات فقط.</li>
+  </ol>
+  <p class="small">الأسعار أسعار قوائم منشورة في 13 نوفمبر 2026 لا عروض مؤكدة. لم يُراسَل أي مورد ولم تُطلب عيّنة بعد، ولم نتحقق من أحد. متاجر Alibaba و1688 وMade-in-China لم تُفتح آليًا، فأرقام Zhilun وQialino من نتائج البحث. والدراسات قرأنا ملخصاتها فقط.</p>
+</section>
+
+<section>
+  <h2>ثلاث توصيات للبداية</h2>
+  <ol>
+    <li><b>كفراتنا لا كفرات الزبائن.</b> الحفر محاولة واحدة لا تُمحى، وتلف كفر زبون فخم يعني أننا مدينون له بثمنه. كفر الزبون يُقبل لاحقًا لخامات مجرَّبة وبإقرار موقّع.</li>
+    <li><b>النص والخط العربي أولًا.</b> الصورة خدمة مميزة بعد ضبط وصفتها لكل خامة، فهي أول مصدر للشكاوى.</li>
+    <li><b>لا برمجيات لأول عشرين طلبًا.</b> واتساب ويدويًا، لنعرف هل يوجد طلب وأين يضيع الوقت. بعدها صفحة طلب بمعاينة حية وتحويل آلي إلى ملف جاهز للآلة.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>قواعد ومخاطر</h2>
+  <ul>
+    <li><b>تعارض المصالح.</b> لا بيع لطلاب مدرستينا ولا لأوليائهم، ولا تسويق داخل المدرسة.</li>
+    <li><b>محتوى الطلبات.</b> شعارات الأندية والماركات والشخصيات الكرتونية ملكية فكرية لغيرنا، وصور الأشخاص تحتاج رضا صاحبها. تلزمنا قائمة «ما لا نحفره» من اليوم الأول.</li>
+    <li><b>حفر صور ذوات الأرواح.</b> مسألة شرعية تُسأل قبل أن تصير الصورة منتجنا الرئيسي.</li>
+    <li><b>صور الزبائن بيانات شخصية.</b> تُحذف بعد التسليم بمدة معلنة، ولا تُستعمل في التسويق إلا بإذن.</li>
+    <li><b>السلامة.</b> شفط للأبخرة إلى الخارج مع ترشيح عند كل حفر، ولو كان الجلد نباتيًا، وطفاية قريبة، ولا تُترك الآلة تعمل بلا مراقبة.</li>
+  </ul>
+  <h3>الشراكة، مقترح</h3>
+  <p>عقد مكتوب قبل أول ريال: الآلة تبقى ملك صاحبها، والبرمجيات ملك صاحبها، والمشروع ينتفع بهما. تُخصم المصاريف ثم يُقسم الربح مناصفة، ويُكتب ما يحدث عند خروج أحدنا، ومن يملك الاسم وقائمة الزبائن.</p>
+</section>
+
+<section>
+  <h2>الخطوات القادمة</h2>
+  <ol>
+    <li>طلب الإذن الكتابي من الوزارة، لكل منا، بتسمية هذا النشاط.</li>
+    <li>سؤال وزارة التجارة عن النقاط الثلاث أدناه.</li>
+    <li>في الأثناء، عمل بلا بيع: ضبط وصفات الحفر على الجلد، وعيّنات لنا لا للبيع تُقارن بكفر مطبوع، وثلاثة عروض أسعار على واتساب من Twenty One وGifto وPicture World، ورسالة الاستفسار إلى الموردين الخمسة الأوائل في قسم التوريد، ثم طلب عيّنات ممن يوثّق الدباغة النباتية كتابةً.</li>
+    <li>قرار التأسيس بعد الجوابين. الموسم المستهدف رمضان (نحو 8 فبراير 2027) والعيد (نحو 9 إلى 11 مارس)، لا اليوم الوطني.</li>
+  </ol>
+  <h3>ما يحسمه سؤال الوزارة لا البحث</h3>
+  <ol>
+    <li>هل تقبل وزارة التجارة معلمَين حكوميين غير قطريين شريكين في سجل تجاري، وهل يكفي إذن جهة العمل؟</li>
+    <li>هل يُعفى السجل نفسه من عقد إيجار تجاري إذا كانت الرخصة إلكترونية؟</li>
+    <li>هل تغطي أنشطة البيع المذكورة عملية الحفر ذاتها، أم يلزم نشاط آخر؟</li>
+  </ol>
+</section>
+
+<section class="ask">
+  <h2>المطلوب من سلطان</h2>
+  <ol>
+    <li>نوع آلة الليزر بالضبط (CO2 أو ديود أو فايبر أو UV) وقدرتها ومساحة عملها.</li>
+    <li>هل عندك طابعة UV؟ إن وُجدت صارت الصورة الملونة ممكنة وتغيّر الحساب.</li>
+    <li>الخامات التي جرّبتها فعلًا، وما نجح منها وما فشل.</li>
+    <li>كيف تُشفط الأبخرة في مكان العمل اليوم، وهل تخرج إلى الخارج، وهل في مسارها مرشّح.</li>
+    <li>رأيك في البدء بالجلد الطبيعي والخط العربي بدل الصورة.</li>
+  </ol>
+</section>
+
+<footer>
+  <p class="small">هذا بحث معلوماتي من مصادر منشورة حتى 13 نوفمبر 2026، وليس استشارة قانونية. الأسعار والرسوم تتغير، فتُراجع عند الجهة قبل أي قرار مالي.</p>
+  <p class="small">المصادر الرئيسية: <a href="https://almeezan.qa/legislations/ministerial-decision/2026/25/general">قرار التجارة الإلكترونية 25 لسنة 2026</a>، <a href="https://www.moci.gov.qa/news/554">إعلان وزارة التجارة عن الرخصة</a>، <a href="https://almeezan.qa/legislations/ministerial-decision/2016/242/general">قرار تراخيص المنازل 242 لسنة 2016</a>، <a href="https://almeezan.qa/legislations/law/2023/3/general">قانون مكافحة التستر 3 لسنة 2023</a>، <a href="https://almeezan.qa/LawView.aspx?opt=&amp;LawID=7102&amp;language=ar">قانون الموارد البشرية المدنية 15 لسنة 2016</a>، <a href="https://almeezan.qa/legislations/law/2018/24/general">قانون ضريبة الدخل 24 لسنة 2018</a>، <a href="https://taxsummaries.pwc.com/qatar/corporate/other-taxes">ملخص PwC للضرائب في قطر</a>، <a href="https://www.pictureworldqatar.com/shop/mobile-cover-printing">Picture World</a>، <a href="https://giftographics.com/">Gifto Graphics</a>، <a href="https://shelled.shop/">Shelled</a>، <a href="https://doubleaqtr.com/products/creamy-togo-leather-strapless-case">Double A</a>، <a href="https://twentyoneqa.com/">Twenty One</a>، <a href="https://www.conceptodoha.com/products/matte-qatar-flag-strapless-embossed-crocodile-case">Concepto</a>، <a href="https://qgrabs.com/deals/custom-engraving-on-metal-qatar-qd00012296">In No Mind</a>، <a href="https://ezzydelivery.qa/help/client-faq/">Ezzy Delivery</a>، <a href="https://web.qatarpost.qa/B2B/FulfillmentSolutions">بريد قطر</a>.</p>
+  <p class="small">مصادر التوريد: <a href="https://www.made-in-china.com/products-search/hot-china-products/Iphone_Leather_Case.html">Made-in-China</a>، <a href="https://qialino.en.alibaba.com/">Qialino</a>، <a href="https://www.workus.ai/company/guangdong-boman-leather-co-ltd">Boman Leather</a>، <a href="https://yskleathergoods.com/leather-goods-manufacturer/">YSK Leather Goods</a>، <a href="https://aaronsleather.com/pages/custom-leather-phone-cases">Aaron's Leather</a>، <a href="https://www.sincoworld.com/leather-phone-case/">Sinco</a>، <a href="http://indialeathermanufacturer.com/">India Leather Manufacturer</a>، <a href="https://www.zakarabags.com/">Zakara</a>، <a href="https://www.maryadha.com/service">Maryadha</a>، <a href="https://dir.indiamart.com/impcat/leather-mobile-covers.html?biz=10">IndiaMART</a>، <a href="https://www.ylderi.com/">YL Leather</a>، <a href="https://www.metsaleather.com/turkish-leather-cases.html">Metsa Leather</a>، <a href="https://www.galenleather.com/collections/iphone-leather-wallet-cases">Galen Leather</a>، <a href="https://www.yellowpages.com.vn/products/395737634/leather-phone-case.html">الصفحات الصفراء الفيتنامية</a>، <a href="https://xblanks.net/product/customizable-laser-engraved-leather-phone-case/">xBlanks</a>، <a href="https://omtech.com/blogs/knowledge/leather-for-laser-engraving">OMTech</a>، <a href="https://www.thunderlaserusa.com/blog/which-materials-are-not-suitable-for-laser-cutting-and-engraving">Thunder Laser</a>، <a href="https://talk.dallasmakerspace.org/t/chrome-tanned-leather/87137">Dallas Makerspace</a>.</p>
+  <p class="small">مصادر الجولة الثانية: <a href="https://doi.org/10.1021/acs.chas.4c00010">دراسة Niu وزملائه 2024</a> (الملخص فقط)، <a href="https://doi.org/10.1177/15280837211022612">دراسة Gulbinienė وزملائها 2021</a> (الملخص فقط)، <a href="https://www.pellealvegetale.it/wp-content/uploads/2022/02/ENG-Technical-Specifications_second-edition-2021.pdf">المواصفة الفنية لاتحاد الدباغة النباتية التوسكاني</a>، <a href="https://www.leatherworkinggroup.com/fileadmin/uploads/lwg/Knowledge/LWG_List_of_Definitions_v1.1.pdf">تعريفات LWG</a>، <a href="https://www.troteclaser.com/en/faqs/unsuitable-materials-laser-processing/">Trotec</a>، <a href="https://www.ehs.ufl.edu/wp-content/uploads/2021/06/Laser-Cutter-Materials.pdf">جامعة فلوريدا</a>، <a href="https://pellove.com/products/vegetable-tanned-leather-phone-case/">Pellove</a>، <a href="https://www.sincoworld.com/our-leather/">صفحة جلود Sinco</a>، <a href="https://www.galenleather.com/pages/wholesale">جملة Galen Leather</a>، <a href="https://en.pinkoi.com/product/7JUQJ679">Geometric Goods</a>.</p>
+</footer>
+
+</main>
