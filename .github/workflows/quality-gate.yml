@@ -15,8 +15,8 @@ concurrency:
 
 env:
   DJANGO_SETTINGS_MODULE: config.settings.testing
-  SECRET_KEY: ci-testing-only
-  DATABASE_URL: postgres://app:app@localhost:5432/app
+  SECRET_KEY: ci-testing-only  # pragma: allowlist secret
+  DATABASE_URL: postgres://app:app@localhost:5432/app  # pragma: allowlist secret
 
 jobs:
   lint:
@@ -44,8 +44,8 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
-        env: { POSTGRES_USER: app, POSTGRES_PASSWORD: app, POSTGRES_DB: app }
-        ports: ["5432:5432"]
+        env: { POSTGRES_USER: app, POSTGRES_PASSWORD: app, POSTGRES_DB: app }  # pragma: allowlist secret
+        ports: ["5432:5432"]  # pragma: allowlist secret
         options: --health-cmd "pg_isready -U app" --health-interval 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4

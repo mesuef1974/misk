@@ -3,7 +3,7 @@ services:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: misk
-      POSTGRES_PASSWORD: misk
+      POSTGRES_PASSWORD: misk  # pragma: allowlist secret
       POSTGRES_DB: misk
     ports: ["5432:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
@@ -21,7 +21,7 @@ services:
     env_file: .env
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.production
-      DATABASE_URL: postgres://misk:misk@db:5432/misk
+      DATABASE_URL: postgres://misk:misk@db:5432/misk  # pragma: allowlist secret
       REDIS_URL: redis://redis:6379/0
       ALLOWED_HOSTS: localhost,127.0.0.1
       SECURE_SSL_REDIRECT: "0"

@@ -22,7 +22,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OK, FAIL, MISSING = "ok", "fail", "missing"
-TEST_ENV = {"DJANGO_SETTINGS_MODULE": "config.settings.testing", "SECRET_KEY": "ci-testing-only"}
+TEST_ENV = {
+    "DJANGO_SETTINGS_MODULE": "config.settings.testing",
+    "SECRET_KEY": "ci-testing-only",  # pragma: allowlist secret
+}
 
 
 def run(cmd: list[str], env: dict[str, str] | None = None, cwd: Path = ROOT) -> subprocess.CompletedProcess:
