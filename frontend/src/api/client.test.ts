@@ -20,6 +20,16 @@ describe("عميل API", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     document.head.innerHTML = "";
+    document.cookie = "csrftoken=; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  });
+
+  it("يفضّل رمز CSRF من الكوكي على <meta> القديم", async () => {
+    document.head.innerHTML = '<meta name="csrf-token" content="stale">';
+    document.cookie = "csrftoken=fresh";
+    respond(200, { ok: true });
+    await api.post("/api/x", {});
+    const headers = vi.mocked(fetch).mock.calls[0][1]?.headers as Record<string, string>;
+    expect(headers["X-CSRFToken"]).toBe("fresh");
   });
 
   it("يرسل CSRF مع الكتابة لا مع القراءة", async () => {
@@ -48,6 +58,13 @@ describe("عميل API", () => {
   it("يعرّب 401 ولا يعرض نص الخادم", async () => {
     respond(401, { detail: "Unauthorized" });
     expect((await failure(api.get("/api/x"))).message).toBe("يلزم تسجيل الدخول بحساب مشرف");
+  });
+
+  it("ينقل رسالة رفض تسجيل الدخول ويعرّب القفل", async () => {
+    respond(401, { detail: "اسم المستخدم أو كلمة المرور غير صحيحة" });
+    expect((await failure(api.post("/api/auth/login", {}))).message).toBe("اسم المستخدم أو كلمة المرور غير صحيحة");
+    respond(429, "Account locked");
+    expect((await failure(api.post("/api/auth/login", {}))).message).toBe("محاولات كثيرة؛ حاول بعد قليل");
   });
 
   it("يتحمّل جسمًا غير JSON وانقطاع الشبكة", async () => {

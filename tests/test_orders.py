@@ -116,6 +116,7 @@ def test_orders_api(client, staff_user, material, name_tag, calibration):
     body = {
         "client_ref": str(uuid.uuid4()),
         "customer_name": "زبون تجريبي",
+        "notes": "تغليف هدية",
         "items": [
             {
                 "template_slug": "name-tag",
@@ -131,6 +132,12 @@ def test_orders_api(client, staff_user, material, name_tag, calibration):
     assert Decimal(data["total"]) == Decimal("50.00")
     assert data["items"][0]["template_slug"] == "name-tag"
     assert client.post("/api/orders", body, content_type="application/json").json()["id"] == data["id"]
+    assert data["notes"] == "تغليف هدية"
+
+    detail = client.get(f"/api/orders/{data['id']}")
+    assert detail.status_code == 200
+    assert detail.json() == data
+    assert client.get("/api/orders/999999").status_code == 404
 
     url = f"/api/orders/{data['id']}/transition"
     assert client.post(url, {"to_status": "ready"}, content_type="application/json").status_code == 409
@@ -159,3 +166,17 @@ def test_order_list_query_count_is_constant(material, name_tag, django_assert_ma
         for order in selectors.orders():
             assert order.customer.name
             assert [item.template.slug for item in order.items.all()]
+
+
+@pytest.mark.django_db
+def test_order_detail_is_staff_only_and_constant_queries(
+    client, staff_user, django_user_model, material, name_tag, django_assert_max_num_queries
+):
+    order = _order(material, items=[_item(material), _item(material), _item(material)])
+    url = f"/api/orders/{order.pk}"
+    assert client.get(url).status_code == 401
+    client.force_login(django_user_model.objects.create_user(username="u", password="x" * 12))
+    assert client.get(url).status_code == 401
+    client.force_login(staff_user)
+    with django_assert_max_num_queries(6):  # جلسة + مستخدم + الطلب + بنود + قوالب + مواد
+        assert len(client.get(url).json()["items"]) == 3

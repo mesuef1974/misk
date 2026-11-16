@@ -58,6 +58,7 @@ class OrderOut(Schema):
     customer_name: str
     status: str
     occasion_date: date | None
+    notes: str
     total: Decimal
     items: list[ItemOut]
 
@@ -85,6 +86,14 @@ def create_order(request: HttpRequest, payload: OrderIn):
     except services.OrderError as exc:
         raise HttpError(422, str(exc)) from exc
     return selectors.order(order.pk)
+
+
+@router.get("/{order_id}", response=OrderOut)
+def get_order(request: HttpRequest, order_id: int):
+    try:
+        return selectors.order(order_id)
+    except Order.DoesNotExist as exc:
+        raise HttpError(404, "الطلب غير موجود") from exc
 
 
 @router.post("/{order_id}/transition", response=OrderOut)
