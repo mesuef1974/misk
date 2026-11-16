@@ -5,6 +5,8 @@ DEBUG = False
 
 # خلف وكيل Railway: الطلب يصل HTTP والـ X-Forwarded-Proto يحمل https.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# وكيل Railway واحد أمام التطبيق: بدونه يرى قفل الدخول عنوان الوكيل لكل الزوار.
+TRUSTED_PROXY_COUNT = int(env("TRUSTED_PROXY_COUNT", "1"))
 SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True

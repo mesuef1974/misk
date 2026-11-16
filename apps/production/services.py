@@ -90,6 +90,39 @@ def plan_sheets(*, material_id: int, actor=None) -> list[Sheet]:
 
 
 @transaction.atomic
+def release_order(*, order_id: int, actor=None) -> int:
+    """يرفع قطع الطلب عن الألواح المخطَّطة ويعيد عددها. الألواح المنفَّذة لا تُمسّ: قُصّت قطعها فعلًا.
+
+    اللوح الذي يفرغ يُحذف إن لم يُشغَّل قط، ويصير «تالفًا» إن كان عليه تشغيل فاشل (سجله محميّ ومادته استُهلكت).
+    idempotent: الاستدعاء الثاني لا يجد قطعًا فلا يكتب شيئًا.
+    """
+    sheets = list(
+        Sheet.objects.select_for_update()
+        .filter(status=Sheet.Status.PLANNED, placements__order_item__order_id=order_id)
+        .distinct()
+        .order_by("id")
+    )
+    if not sheets:
+        return 0
+    sheet_ids = [sheet.pk for sheet in sheets]
+    released, _ = Placement.objects.filter(sheet_id__in=sheet_ids, order_item__order_id=order_id).delete()
+    occupied = set(Placement.objects.filter(sheet_id__in=sheet_ids).values_list("sheet_id", flat=True))
+    empty = [pk for pk in sheet_ids if pk not in occupied]
+    ran = set(RunLog.objects.filter(sheet_id__in=empty).values_list("sheet_id", flat=True))
+    scrapped = sorted(ran)
+    deleted = [pk for pk in empty if pk not in ran]
+    Sheet.objects.filter(pk__in=scrapped).update(status=Sheet.Status.SCRAPPED)
+    Sheet.objects.filter(pk__in=deleted).delete()
+    record_audit(
+        action="production.release",
+        actor=actor,
+        target=f"order:{order_id}",
+        payload={"pieces": released, "sheets": sheet_ids, "deleted": deleted, "scrapped": scrapped},
+    )
+    return released
+
+
+@transaction.atomic
 def record_run(
     *,
     sheet_id: int,

@@ -99,7 +99,11 @@ AUTHENTICATION_BACKENDS = [
 ]
 AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = 1  # ساعة
-AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
+# القفل بالزوج (اسم، عنوان) لا بأيٍّ منهما: محاولات زائر لا تقفل غيره، ومعرفة اسم مشرف لا تكفي لقفله.
+AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
+# عدد الوكلاء الموثوقين أمام التطبيق؛ 0 = اتصال مباشر فيُؤخذ REMOTE_ADDR ويُهمَل X-Forwarded-For.
+TRUSTED_PROXY_COUNT = int(env("TRUSTED_PROXY_COUNT", "0"))
+AXES_CLIENT_IP_CALLABLE = "apps.core.auth.client_ip"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

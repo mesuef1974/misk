@@ -15,6 +15,7 @@ from apps.catalog import selectors as catalog_selectors
 from apps.catalog.models import Material, ProductTemplate
 from apps.core.services import record_audit
 
+from . import signals
 from .models import Customer, Order, OrderItem
 
 Status = Order.Status
@@ -104,7 +105,10 @@ def create_order(
 
 @transaction.atomic
 def transition(*, order_id: int, to_status: str, actor=None) -> Order:
-    """الانتقال إلى الحالة الحالية نفسها لا يغيّر شيئًا. التأكيد يشترط معايرة لكل مادة في الطلب."""
+    """الانتقال إلى الحالة الحالية نفسها لا يغيّر شيئًا. التأكيد يشترط معايرة لكل مادة في الطلب.
+
+    الإلغاء يرسل `order_cancelled` في المعاملة نفسها، وبه يرفع الإنتاج قطع الطلب عن الألواح التي لم تُقصّ.
+    """
     order = Order.objects.select_for_update().get(pk=order_id)
     if order.status == to_status:
         return order
@@ -125,4 +129,7 @@ def transition(*, order_id: int, to_status: str, actor=None) -> Order:
         target=f"order:{order.pk}",
         payload={"from": previous, "to": to_status},
     )
+    if to_status == Status.CANCELLED:
+        # send لا send_robust: خطأ المستقبِل يُرجِع الإلغاء كله، فلا يبقى طلب ملغى وقطعه على لوح.
+        signals.order_cancelled.send(sender=Order, order=order, actor=actor)
     return order

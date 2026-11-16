@@ -193,3 +193,64 @@ def test_production_api(client, staff_user, material, name_tag, calibration):
     again = client.post(url, body, content_type="application/json", headers={"X-Request-ID": "run-1"})
     assert again.json()["id"] == res.json()["id"]
     assert client.get("/api/production/sheets?status=done").json()[0]["id"] == sheet["id"]
+
+
+@pytest.mark.django_db
+def test_cancelling_order_releases_its_planned_pieces(material, name_tag, calibration):
+    from apps.core.models import AuditLog
+
+    kept = _confirmed_order(material, 30)
+    cancelled = _confirmed_order(material, 10)
+    first, second = sorted(services.plan_sheets(material_id=material.pk), key=lambda sheet: sheet.pk)
+    assert Placement.objects.filter(order_item__order=cancelled).count() == 10
+
+    order_services.transition(order_id=cancelled.pk, to_status="cancelled")
+    assert not Placement.objects.filter(order_item__order=cancelled).exists()
+    assert Placement.objects.filter(order_item__order=kept).count() == 30
+    # اللوح الثاني كان كله للطلب الملغى ولم يُشغَّل: يُحذف. الأول بقيت عليه قطع الطلب الآخر.
+    assert list(Sheet.objects.values_list("pk", "status")) == [(first.pk, "planned")]
+    audit = AuditLog.objects.get(action="production.release")
+    assert audit.target == f"order:{cancelled.pk}"
+    assert audit.payload == {
+        "pieces": 10,
+        "sheets": [first.pk, second.pk],
+        "deleted": [second.pk],
+        "scrapped": [],
+    }
+
+    assert services.release_order(order_id=cancelled.pk) == 0  # idempotent
+    assert AuditLog.objects.filter(action="production.release").count() == 1
+    assert services.plan_sheets(material_id=material.pk) == []  # الملغى لا يُعاد تخطيطه
+
+
+@pytest.mark.django_db
+def test_cancelling_keeps_cut_sheets_and_scraps_emptied_failed_ones(material, name_tag, calibration):
+    order = _confirmed_order(material, 40)
+    done, failed = sorted(services.plan_sheets(material_id=material.pk), key=lambda sheet: sheet.pk)
+    services.record_run(sheet_id=done.pk, request_id="r1", duration_s=60, outcome="ok")
+    services.record_run(sheet_id=failed.pk, request_id="r2", duration_s=60, outcome="failed")
+    order_services.transition(order_id=order.pk, to_status="in_production")
+
+    order_services.transition(order_id=order.pk, to_status="cancelled")
+    # ما قُصّ يبقى سجله كما هو؛ اللوح الذي فشل تشغيله وفرغ لا يُحذف (سجل تشغيله محميّ) بل يُعلَّم تالفًا.
+    assert Placement.objects.filter(sheet=done).count() == 35
+    assert not Placement.objects.filter(sheet=failed).exists()
+    assert dict(Sheet.objects.values_list("pk", "status")) == {done.pk: "done", failed.pk: "scrapped"}
+    assert RunLog.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_cancel_rolls_back_when_release_fails(material, name_tag, calibration, monkeypatch):
+    from apps.orders.models import Order
+
+    order = _confirmed_order(material, 2)
+    services.plan_sheets(material_id=material.pk)
+
+    def boom(**kwargs):
+        raise RuntimeError("تعذّر التحرير")
+
+    monkeypatch.setattr(services, "release_order", boom)
+    with pytest.raises(RuntimeError):
+        order_services.transition(order_id=order.pk, to_status="cancelled")
+    assert Order.objects.get(pk=order.pk).status == "confirmed"
+    assert Placement.objects.count() == 2
