@@ -9,9 +9,10 @@ from django.contrib.auth.models import AbstractBaseUser
 from django.db import IntegrityError, transaction
 from django.http import HttpRequest
 
+from .columns import column_length
 from .models import AuditLog
 
-REQUEST_ID_LENGTH = AuditLog._meta.get_field("request_id").max_length
+REQUEST_ID_LENGTH = column_length(AuditLog, "request_id")
 
 
 def record_audit(
@@ -31,7 +32,7 @@ def record_audit(
     known = actor if getattr(actor, "pk", None) else None
     row = AuditLog(
         action=action,
-        actor=known,
+        actor_id=known.pk if known else None,
         actor_name=known.get_username() if known else "",
         target=target,
         payload=payload or {},
