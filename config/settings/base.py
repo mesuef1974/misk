@@ -62,6 +62,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "axes.middleware.AxesMiddleware",
+    "apps.core.middleware.ContentSecurityPolicyMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -159,6 +160,22 @@ SESSION_COOKIE_AGE = 60 * 60 * 8
 X_FRAME_OPTIONS = "DENY"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+# كل شيء من أصل الموقع وحده: الواجهة مبنية في ملفات (لا سكربت مضمَّن)، ولا خطوط ولا صور خارجية.
+# 'unsafe-inline' للأنماط فقط (خصائص style التي يكتبها Vue ولوحة الإدارة)؛ السكربتات بلا استثناء.
+CONTENT_SECURITY_POLICY = "; ".join(
+    [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data:",
+        "font-src 'self' data:",
+        "connect-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ]
+)
 
 REDIS_URL = env("REDIS_URL", "")
 if REDIS_URL:

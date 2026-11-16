@@ -1,3 +1,4 @@
+import { appendPage, pageQuery } from "@/api/paging";
 import {
   buildCalibrationDraft,
   buildMaterialDraft,
@@ -15,7 +16,6 @@ import {
   emptyRunForm,
   formatDuration,
   groupPlacements,
-  indexOrderItems,
   usedFraction,
 } from "@/domain/production";
 import type { ProductTemplate } from "@/services/catalog";
@@ -142,6 +142,8 @@ describe("نموذج القالب", () => {
 });
 
 describe("حسابات اللوح", () => {
+  const sara = { order_item_id: 10, order_id: 3, customer_name: "أم سارة", template_slug: "card" };
+  const noor = { order_item_id: 11, order_id: 4, customer_name: "نور", template_slug: "tag" };
   const sheet: Sheet = {
     id: 1,
     material_id: 7,
@@ -149,35 +151,26 @@ describe("حسابات اللوح", () => {
     height_mm: "300.0",
     status: "planned",
     placements: [
-      { order_item_id: 10, copy_index: 0, x_mm: "5.0", y_mm: "5.0", width_mm: "300.0", height_mm: "150.0" },
-      { order_item_id: 11, copy_index: 0, x_mm: "308.0", y_mm: "5.0", width_mm: "100.0", height_mm: "90.0" },
-      { order_item_id: 10, copy_index: 1, x_mm: "5.0", y_mm: "158.0", width_mm: "300.0", height_mm: "150.0" },
+      { ...sara, copy_index: 0, x_mm: "5.0", y_mm: "5.0", width_mm: "300.0", height_mm: "150.0" },
+      { ...noor, copy_index: 0, x_mm: "308.0", y_mm: "5.0", width_mm: "100.0", height_mm: "90.0" },
+      { ...sara, copy_index: 1, x_mm: "5.0", y_mm: "158.0", width_mm: "300.0", height_mm: "150.0" },
     ],
+    runs: [],
   };
 
   it("تحسب نسبة الاستعمال وتجمّع القطع ببندها", () => {
     expect(usedFraction(sheet)).toBeCloseTo(0.55);
     expect(usedFraction({ ...sheet, width_mm: "0" })).toBe(0);
     expect(groupPlacements(sheet)).toEqual([
-      { number: 1, orderItemId: 10, copies: 2 },
-      { number: 2, orderItemId: 11, copies: 1 },
+      { number: 1, orderItemId: 10, orderId: 3, customerName: "أم سارة", templateSlug: "card", copies: 2 },
+      { number: 2, orderItemId: 11, orderId: 4, customerName: "نور", templateSlug: "tag", copies: 1 },
     ]);
   });
 
-  it("تفهرس بنود الطلبات", () => {
-    const index = indexOrderItems([
-      {
-        id: 3,
-        client_ref: "r",
-        customer_name: "أم سارة",
-        status: "confirmed",
-        occasion_date: null,
-        notes: "",
-        total: "0",
-        items: [{ id: 10, template_slug: "card", material_id: 7, params: {}, quantity: 2, unit_price: "1" }],
-      },
-    ]);
-    expect(index.get(10)).toEqual({ orderId: 3, customerName: "أم سارة", templateSlug: "card" });
+  it("تبني استعلام الصفحة وتضيف الصفحة التالية بلا تكرار", () => {
+    expect([pageQuery(), pageQuery({ status: "", offset: 0 })]).toEqual(["", ""]);
+    expect(pageQuery({ status: "ready", offset: 50 })).toBe("?status=ready&offset=50");
+    expect(appendPage([{ id: 3 }, { id: 2 }], [{ id: 2 }, { id: 1 }])).toEqual([{ id: 3 }, { id: 2 }, { id: 1 }]);
   });
 
   it("تنسّق المدة", () => {

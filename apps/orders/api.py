@@ -8,10 +8,11 @@ from decimal import Decimal
 from typing import Any
 
 from django.http import HttpRequest
-from ninja import Field, Router, Schema
+from ninja import Field, Query, Router, Schema
 from ninja.errors import HttpError
 
 from apps.core.auth import staff_auth
+from apps.core.paging import PageQuery, page_of
 
 from . import selectors, services
 from .models import Order
@@ -70,9 +71,15 @@ class OrderOut(Schema):
         return obj.customer.name
 
 
-@router.get("", response=list[OrderOut])
-def list_orders(request: HttpRequest, status: str | None = None):
-    return selectors.orders(status)
+class OrderPage(Schema):
+    items: list[OrderOut]
+    count: int  # كل ما يطابق التصفية، لا طول هذه الصفحة
+    counts: dict[str, int]  # عدد الطلبات لكل حالة في الجدول كله
+
+
+@router.get("", response=OrderPage)
+def list_orders(request: HttpRequest, page: Query[PageQuery], status: str | None = None):
+    return page_of(selectors.orders(status), page, selectors.status_counts(), status)
 
 
 @router.post("", response=OrderOut)

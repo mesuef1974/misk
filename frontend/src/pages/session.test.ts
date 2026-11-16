@@ -1,7 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
-import { ApiError } from "@/api/client";
+import { api, ApiError } from "@/api/client";
 import { safeNext } from "@/domain/navigation";
 import { routes } from "@/router";
 import { installGuards } from "@/router/guards";
@@ -13,7 +13,12 @@ vi.mock("@/services/session", () => ({
   sessionService: { me: vi.fn(), login: vi.fn(), logout: vi.fn() },
 }));
 vi.mock("@/services/orders", () => ({
-  ordersService: { list: vi.fn().mockResolvedValue([]), get: vi.fn(), create: vi.fn(), transition: vi.fn() },
+  ordersService: {
+    list: vi.fn().mockResolvedValue({ items: [], count: 0, counts: {} }),
+    get: vi.fn(),
+    create: vi.fn(),
+    transition: vi.fn(),
+  },
 }));
 vi.mock("@/services/catalog", () => ({
   catalogService: { materials: vi.fn().mockResolvedValue([]), templates: vi.fn().mockResolvedValue([]) },
@@ -62,16 +67,42 @@ describe("حارس المسارات", () => {
     expect(router.currentRoute.value.name).toBe("login");
   });
 
-  it("لا يسأل الخادم للصفحات العامة، ويعيد السؤال بعد تعذّره", async () => {
+  it("لا يسأل الخادم للصفحات العامة", async () => {
     await router.push("/about");
     expect(sessionService.me).not.toHaveBeenCalled();
+  });
 
+  it("تعذّر سؤال الخادم ليس غياب جلسة: لا يحوّل إلى الدخول ويعيد السؤال في التنقل التالي", async () => {
     vi.mocked(sessionService.me).mockRejectedValueOnce(new ApiError(0, "تعذّر الاتصال بالخادم"));
     await router.push("/orders");
-    expect(router.currentRoute.value.name).toBe("login");
-    vi.mocked(sessionService.me).mockResolvedValue(staff);
-    await router.push("/orders");
     expect(router.currentRoute.value.name).toBe("orders");
+    expect(useSessionStore().checked).toBe(false);
+
+    await router.push("/orders/new");
+    expect(sessionService.me).toHaveBeenCalledTimes(2);
+    expect(router.currentRoute.value.name).toBe("login");
+    expect(router.currentRoute.value.query.next).toBe("/orders/new");
+  });
+
+  it("401 أثناء العمل ينهي الجلسة ويعيد إلى الدخول مع حفظ الصفحة", async () => {
+    vi.mocked(sessionService.me).mockResolvedValue(staff);
+    await router.push("/orders/5");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "Unauthorized" }), { status: 401 })));
+    try {
+      await expect(api.get("/api/orders/5")).rejects.toMatchObject({ status: 401 });
+      await flushPromises();
+      expect(useSessionStore().user).toBeNull();
+      expect(router.currentRoute.value.name).toBe("login");
+      expect(router.currentRoute.value.query.next).toBe("/orders/5");
+
+      // مسارات الجلسة نفسها: 401 فيها جواب عادي (كلمة مرور خاطئة) لا جلسة انتهت.
+      await router.push("/about");
+      await expect(api.post("/api/auth/login", {})).rejects.toMatchObject({ status: 401 });
+      await flushPromises();
+      expect(router.currentRoute.value.name).toBe("about");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
