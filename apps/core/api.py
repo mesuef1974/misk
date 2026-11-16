@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpRequest
-from ninja import Field, NinjaAPI, Schema
+from ninja import Field, NinjaAPI, Query, Schema
 from ninja.errors import HttpError
 from ninja.security import django_auth
 from ninja.utils import check_csrf
@@ -81,7 +81,7 @@ def logout(request: HttpRequest):
 
 
 @api.get("/audit", response=list[AuditOut], auth=django_auth)
-def audit(request: HttpRequest, limit: int = 50):
+def audit(request: HttpRequest, limit: int = Query(50, ge=1)):
     if not request.user.is_staff:
         raise HttpError(403, "للمشرفين فقط")
     services.record_audit(action="audit.view", actor=request.user, request_id=request_id(request))

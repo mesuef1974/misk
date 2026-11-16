@@ -8,7 +8,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from apps.catalog import domain as catalog_domain
 from apps.catalog import selectors as catalog_selectors
@@ -30,6 +30,15 @@ TRANSITIONS: dict[str, set[str]] = {
 }
 
 
+MAX_ITEMS = 100
+MAX_QUANTITY = 1000  # كل نسخة قطعة في تخطيط الألواح
+MAX_NOTES_LENGTH = 2000
+NAME_LENGTH = Customer._meta.get_field("name").max_length
+_PRICE = OrderItem._meta.get_field("unit_price")
+PRICE_DIGITS, PRICE_DECIMALS = _PRICE.max_digits, _PRICE.decimal_places
+MAX_PRICE = Decimal(10) ** (PRICE_DIGITS - PRICE_DECIMALS)
+
+
 class OrderError(ValueError):
     """مخالفة لقاعدة عمل في الطلبات."""
 
@@ -43,6 +52,10 @@ class ItemInput:
     unit_price: Decimal | None = None
 
 
+def _existing_order(client_ref: uuid.UUID) -> Order | None:
+    return Order.objects.filter(client_ref=client_ref).first()
+
+
 @transaction.atomic
 def create_order(
     *,
@@ -53,15 +66,24 @@ def create_order(
     notes: str = "",
     actor=None,
 ) -> Order:
-    """إعادة الإرسال بالـ client_ref نفسه تعيد الطلب الموجود ولا تنشئ ثانيًا."""
-    existing = Order.objects.filter(client_ref=client_ref).first()
+    """إعادة الإرسال بالـ client_ref نفسه تعيد الطلب الموجود ولا تنشئ ثانيًا، ولو تزامن الطلبان.
+
+    الزبون يُطابَق بالاسم المنظَّف: طلبات الاسم نفسه على صف واحد (لا هاتف يميّز بعد).
+    """
+    existing = _existing_order(client_ref)
     if existing:
         return existing
     if not items:
         raise OrderError("الطلب يحتاج بندًا واحدًا على الأقل")
+    if len(items) > MAX_ITEMS:
+        raise OrderError(f"الطلب لا يزيد على {MAX_ITEMS} بند")
     name = " ".join(customer_name.split())
     if not name:
         raise OrderError("اسم الزبون مطلوب")
+    if len(name) > NAME_LENGTH:
+        raise OrderError(f"اسم الزبون أطول من {NAME_LENGTH} حرفًا")
+    if len(notes) > MAX_NOTES_LENGTH:
+        raise OrderError(f"الملاحظات أطول من {MAX_NOTES_LENGTH} حرف")
 
     templates = ProductTemplate.objects.filter(is_active=True).in_bulk(
         {item.template_slug for item in items}, field_name="slug"
@@ -75,25 +97,37 @@ def create_order(
             raise OrderError(f"البند {index}: القالب {item.template_slug} غير موجود أو موقوف")
         if material is None:
             raise OrderError(f"البند {index}: المادة {item.material_id} غير موجودة أو موقوفة")
-        if item.quantity < 1:
-            raise OrderError(f"البند {index}: الكمية يجب أن تكون 1 أو أكثر")
+        if not 1 <= item.quantity <= MAX_QUANTITY:
+            raise OrderError(f"البند {index}: الكمية بين 1 و{MAX_QUANTITY}")
         try:
             params = catalog_domain.clean_params(template.param_schema, item.params)
         except catalog_domain.ParamError as exc:
             raise OrderError(f"البند {index}: {exc}") from exc
         price = template.base_price if item.unit_price is None else item.unit_price
-        if price < 0:
+        if not price.is_finite() or price < 0:
             raise OrderError(f"البند {index}: السعر لا يكون سالبًا")
+        if price >= MAX_PRICE or price != price.quantize(Decimal(1).scaleb(-PRICE_DECIMALS)):
+            raise OrderError(f"البند {index}: السعر أقل من {MAX_PRICE} وبخانتين عشريتين على الأكثر")
         rows.append(
             OrderItem(
                 template=template, material=material, params=params, quantity=item.quantity, unit_price=price
             )
         )
 
-    customer = Customer.objects.create(name=name)
-    order = Order.objects.create(
-        client_ref=client_ref, customer=customer, occasion_date=occasion_date, notes=notes
-    )
+    try:
+        with transaction.atomic():  # نقطة حفظ: فشل القيد لا يُفسد المعاملة الخارجية
+            customer = Customer.objects.filter(name=name).order_by("id").first()
+            if customer is None:
+                customer = Customer.objects.create(name=name)
+            order = Order.objects.create(
+                client_ref=client_ref, customer=customer, occasion_date=occasion_date, notes=notes
+            )
+    except IntegrityError:
+        # طلب متزامن بالـ client_ref نفسه سبق بعد فحصنا: نعيد طلبه بدل 500.
+        existing = _existing_order(client_ref)
+        if existing is None:
+            raise
+        return existing
     for row in rows:
         row.order = order
     OrderItem.objects.bulk_create(rows)

@@ -254,3 +254,73 @@ def test_cancel_rolls_back_when_release_fails(material, name_tag, calibration, m
         order_services.transition(order_id=order.pk, to_status="cancelled")
     assert Order.objects.get(pk=order.pk).status == "confirmed"
     assert Placement.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_record_run_rejects_bad_input_with_domain_error(material, name_tag, calibration):
+    _confirmed_order(material, 1)
+    (sheet,) = services.plan_sheets(material_id=material.pk)
+    for bad in (
+        {"request_id": "r" * 65},
+        {"duration_s": -1},
+        {"duration_s": services.MAX_DURATION_S + 1},
+        {"outcome": "meh"},
+    ):
+        values = {"sheet_id": sheet.pk, "request_id": "r1", "duration_s": 1, "outcome": "ok", **bad}
+        with pytest.raises(services.ProductionError):
+            services.record_run(**values)
+    assert not RunLog.objects.exists()
+    sheet.refresh_from_db()
+    assert sheet.status == "planned"
+
+
+@pytest.mark.django_db
+def test_record_run_request_id_is_bound_to_its_sheet(material, name_tag, calibration):
+    _confirmed_order(material, 40)
+    first, second = services.plan_sheets(material_id=material.pk)
+    services.record_run(sheet_id=first.pk, request_id="r1", duration_s=1, outcome="ok")
+    with pytest.raises(services.ProductionError, match="request_id"):
+        services.record_run(sheet_id=second.pk, request_id="r1", duration_s=1, outcome="ok")
+    second.refresh_from_db()
+    assert second.status == "planned"
+    assert RunLog.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_record_run_survives_concurrent_duplicate(material, name_tag, calibration, monkeypatch):
+    """سجل بالمفتاح نفسه أُدرج بعد فحصَي الوجود: قيد التفرّد يرفض والخدمة تعيد الموجود بلا 500."""
+    _confirmed_order(material, 1)
+    (sheet,) = services.plan_sheets(material_id=material.pk)
+    values = {"sheet_id": sheet.pk, "request_id": "r1", "duration_s": 5, "outcome": "failed"}
+    winner = services.record_run(**values)
+    real, calls = services._existing_run, []
+
+    def racing(request_id, sheet_id):
+        calls.append(request_id)
+        return None if len(calls) <= 2 else real(request_id, sheet_id)
+
+    monkeypatch.setattr(services, "_existing_run", racing)
+    assert services.record_run(**values).pk == winner.pk
+    assert len(calls) == 3
+    assert RunLog.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_runs_api_rejects_bad_input_with_422(client, staff_user, material, name_tag, calibration):
+    _confirmed_order(material, 1)
+    (sheet,) = services.plan_sheets(material_id=material.pk)
+    client.force_login(staff_user)
+    url = f"/api/production/sheets/{sheet.pk}/runs"
+
+    def post(body, request_id="run-1"):
+        return client.post(
+            url, body, content_type="application/json", headers={"X-Request-ID": request_id}
+        ).status_code
+
+    ok = {"duration_s": 300, "outcome": "failed"}
+    assert post(ok, request_id="r" * 65) == 422
+    assert post({**ok, "duration_s": -1}) == 422
+    assert post({**ok, "duration_s": 10**12}) == 422
+    assert post({**ok, "notes": "م" * 2001}) == 422
+    assert not RunLog.objects.exists()
+    assert post(ok, request_id="r" * 64) == 200

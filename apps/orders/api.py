@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from django.http import HttpRequest
-from ninja import Router, Schema
+from ninja import Field, Router, Schema
 from ninja.errors import HttpError
 
 from apps.core.auth import staff_auth
@@ -20,19 +20,22 @@ router = Router(tags=["الطلبات"], auth=staff_auth)
 
 
 class ItemIn(Schema):
-    template_slug: str
+    template_slug: str = Field(min_length=1, max_length=100)
     material_id: int
     params: dict[str, Any] = {}
-    quantity: int = 1
-    unit_price: Decimal | None = None
+    quantity: int = Field(1, ge=1, le=services.MAX_QUANTITY)
+    unit_price: Decimal | None = Field(
+        None, ge=0, max_digits=services.PRICE_DIGITS, decimal_places=services.PRICE_DECIMALS
+    )
 
 
 class OrderIn(Schema):
+    # الحدود نفسها في الخدمة؛ هنا يُرفض الطلب قبل أي استعلام.
     client_ref: uuid.UUID
-    customer_name: str
-    items: list[ItemIn]
+    customer_name: str = Field(min_length=1, max_length=services.NAME_LENGTH)
+    items: list[ItemIn] = Field(min_length=1, max_length=services.MAX_ITEMS)
     occasion_date: date | None = None
-    notes: str = ""
+    notes: str = Field("", max_length=services.MAX_NOTES_LENGTH)
 
 
 class TransitionIn(Schema):

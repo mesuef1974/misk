@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from django.db import transaction
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 
 from apps.catalog.models import Calibration, Material
 from apps.core.services import record_audit
@@ -15,6 +16,8 @@ from .models import Placement, RunLog, Sheet
 
 MARGIN_MM = Decimal("5")
 GAP_MM = Decimal("3")
+MAX_DURATION_S = 7 * 24 * 60 * 60
+REQUEST_ID_LENGTH = RunLog._meta.get_field("request_id").max_length
 PLANNABLE = {Order.Status.CONFIRMED, Order.Status.IN_PRODUCTION}
 
 
@@ -121,6 +124,13 @@ def release_order(*, order_id: int, actor=None) -> int:
     return released
 
 
+def _existing_run(request_id: str, sheet_id: int) -> RunLog | None:
+    run = RunLog.objects.filter(request_id=request_id).first()
+    if run is not None and run.sheet_id != sheet_id:
+        raise ProductionError(f"request_id مستعمل لتشغيل اللوح {run.sheet_id}")
+    return run
+
+
 @transaction.atomic
 def record_run(
     *,
@@ -132,13 +142,24 @@ def record_run(
     notes: str = "",
     actor=None,
 ) -> RunLog:
-    """تسجيل مكرر بالـ request_id نفسه يعيد السجل الموجود. النجاح يغلق اللوح."""
+    """تسجيل مكرر بالـ request_id نفسه للوح نفسه يعيد السجل الموجود. النجاح يغلق اللوح.
+
+    طلبان متزامنان بالمفتاح نفسه: الثاني ينتظر قفل اللوح ثم يجد سجل الأول، وإن سبقه إدراج على لوح
+    آخر فقيد التفرّد يرفضه ويُقرأ الموجود؛ لا 500 في الحالين.
+    """
     if not request_id:
         raise ProductionError("request_id مطلوب لمنع التسجيل المكرر")
-    existing = RunLog.objects.filter(request_id=request_id).first()
+    if len(request_id) > REQUEST_ID_LENGTH:
+        raise ProductionError(f"request_id أطول من {REQUEST_ID_LENGTH} حرفًا")
+    if not 0 <= duration_s <= MAX_DURATION_S:
+        raise ProductionError("مدة التشغيل خارج المدى المسموح")
+    existing = _existing_run(request_id, sheet_id)
     if existing:
         return existing
     sheet = Sheet.objects.select_for_update().select_related("material").get(pk=sheet_id)
+    existing = _existing_run(request_id, sheet_id)  # بعد القفل: طلب متزامن ربما سجّل وأغلق اللوح
+    if existing:
+        return existing
     if sheet.status != Sheet.Status.PLANNED:
         raise ProductionError(f"اللوح {sheet.pk} ليس مخطَّطًا ({sheet.get_status_display()})")
     calibration = None
@@ -164,8 +185,18 @@ def record_run(
         notes=notes,
         request_id=request_id,
     )
-    run.full_clean()
-    run.save()
+    try:
+        run.full_clean(validate_unique=False)  # التفرّد يحسمه القيد عند الحفظ لا فحص يسبقه
+    except ValidationError as exc:
+        raise ProductionError("; ".join(exc.messages)) from exc
+    try:
+        with transaction.atomic():
+            run.save()
+    except IntegrityError:
+        existing = _existing_run(request_id, sheet_id)
+        if existing is None:
+            raise
+        return existing
     if outcome == RunLog.Outcome.OK:
         sheet.status = Sheet.Status.DONE
         sheet.save(update_fields=["status", "updated_at"])

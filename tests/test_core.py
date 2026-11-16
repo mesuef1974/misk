@@ -228,3 +228,12 @@ def test_api_docs_are_staff_only(client, staff_user, django_user_model, path):
     assert client.get(path).status_code == 302
     client.force_login(staff_user)
     assert client.get(path).status_code == 200
+
+
+@pytest.mark.django_db
+def test_audit_limit_is_validated_and_capped(client, staff_user):
+    client.force_login(staff_user)
+    assert client.get("/api/audit?limit=-1").status_code == 422
+    assert client.get("/api/audit?limit=0").status_code == 422
+    assert client.get("/api/audit?limit=1").status_code == 200
+    assert client.get("/api/audit?limit=100000").status_code == 200
