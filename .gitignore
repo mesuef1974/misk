@@ -1,0 +1,12 @@
+# بيانات شخصية (أسماء وأرقام) تبقى محلية: PDPPL
+/build/
+/laser/*.docx
+/laser/*.pdf
+# بيانات الزبائن والطلبات مستقبلًا
+/data/
+*.sqlite3
+.env
+
+desktop.ini
+__pycache__/
+.ruff_cache/
