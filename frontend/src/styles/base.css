@@ -29,10 +29,10 @@ body {
   line-height: 1.8;
 }
 a { color: var(--accent); }
-.topbar { position: sticky; inset-block-start: 0; background: var(--surface); border-block-end: 1px solid var(--line); }
-.topbar .inner { max-inline-size: 960px; margin-inline: auto; padding-inline: 16px; display: flex; align-items: center; gap: 16px; min-block-size: 52px; }
+.topbar { position: sticky; inset-block-start: 0; z-index: 1; background: var(--surface); border-block-end: 1px solid var(--line); }
+.topbar .inner { max-inline-size: 960px; margin-inline: auto; padding-inline: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 0 16px; min-block-size: 52px; }
 .topbar .brand { font-weight: 700; color: var(--ink); text-decoration: none; margin-inline-end: auto; }
-.topbar nav { display: flex; gap: 4px; }
+.topbar nav { display: flex; flex-wrap: wrap; align-items: center; gap: 0 4px; }
 .topbar nav a { text-decoration: none; color: var(--muted); padding: 14px 12px; border-block-end: 3px solid transparent; }
 .topbar nav a.router-link-active { color: var(--accent); border-block-end-color: var(--accent); }
 .wrap { max-inline-size: 960px; margin-inline: auto; padding-inline: 16px; padding-block: 32px 64px; }
@@ -66,3 +66,26 @@ input, select, textarea {
 input[type="checkbox"] { inline-size: 20px; min-block-size: 20px; accent-color: var(--accent); }
 input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--risk); }
 .notice { border: 1px solid var(--risk); border-inline-start-width: 4px; border-radius: 8px; padding: 10px 14px; color: var(--risk); background: var(--surface); }
+.notice.ok { border-color: var(--accent); color: var(--accent); }
+
+/* شرائح التصفية وشبكة النماذج، مشتركة بين صفحات القوائم والنماذج. */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-block-end: 16px; }
+.chip {
+  min-block-size: 40px; padding-inline: 14px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); color: var(--muted); font: inherit; font-size: 15px; cursor: pointer;
+}
+.chip.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chip .count { font-variant-numeric: tabular-nums; opacity: 0.75; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 16px; }
+.form-grid .wide { grid-column: 1 / -1; }
+.form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block-start: 16px; }
+.check { display: flex; align-items: center; gap: 8px; min-block-size: 44px; }
+.cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.num { font-variant-numeric: tabular-nums; }
+.hint { font-size: 14px; color: var(--muted); }
+/* الشاشة الضيقة: روابط التنقل تلتفّ على أسطر، فلا يُثبَّت الشريط كي لا يحجب ثلث الشاشة. */
+@media (max-width: 640px) {
+  .topbar { position: static; }
+  .topbar nav a { padding: 8px 10px; }
+}
