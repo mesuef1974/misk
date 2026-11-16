@@ -37,6 +37,8 @@ class MaterialOut(Schema):
     sheet_width_mm: Decimal
     sheet_height_mm: Decimal
     sheet_cost: Decimal
+    supplier: str
+    notes: str
 
 
 class CalibrationIn(Schema):
@@ -60,6 +62,7 @@ class CalibrationOut(Schema):
     lines_per_cm: int | None
     min_line_mm: Decimal
     measured_on: date
+    notes: str
 
 
 class TemplateIn(Schema):

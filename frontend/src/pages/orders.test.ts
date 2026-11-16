@@ -17,12 +17,28 @@ vi.mock("@/services/catalog", () => ({
   catalogService: { materials: vi.fn(), templates: vi.fn() },
 }));
 
-const materials: Material[] = [{ id: 7, name: "جلد نباتي", kind: "leather", thickness_mm: "2.0" }];
+const materials: Material[] = [
+  {
+    id: 7,
+    name: "جلد نباتي",
+    kind: "leather",
+    thickness_mm: "2.0",
+    sheet_width_mm: "600.0",
+    sheet_height_mm: "305.0",
+    sheet_cost: "45.00",
+    supplier: "",
+    notes: "",
+  },
+];
 const templates: ProductTemplate[] = [
   {
     id: 1,
     slug: "card",
     name: "بطاقة مقوّسة",
+    generator: "card",
+    width_mm: "90.0",
+    height_mm: "55.0",
+    safe_margin_mm: "3.0",
     base_price: "25.00",
     param_schema: [{ name: "name", type: "text", label: "الاسم" }],
   },

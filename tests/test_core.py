@@ -148,3 +148,92 @@ def test_login_locks_out_after_repeated_failures(client, staff_user, settings):
     locked = _login(client)  # كلمة المرور الصحيحة لا تفتح حسابًا مقفلًا
     assert locked.status_code == 429
     assert client.get("/api/me").status_code == 401
+
+
+def _fail_logins(client, count, **extra):
+    for _ in range(count):
+        client.post(
+            "/api/auth/login",
+            {"username": "staff", "password": "y" * 12},
+            content_type="application/json",
+            **extra,
+        )
+
+
+@pytest.mark.django_db
+def test_lockout_is_per_username_and_address_pair(client, staff_user, django_user_model, settings):
+    """محاولات زائر لا تقفل مشرفًا من عنوان آخر، ولا تقفل اسمًا آخر من العنوان نفسه."""
+    settings.AXES_ENABLED = True
+    django_user_model.objects.create_user(username="second", password="x" * 12, is_staff=True)
+    attacker = {"REMOTE_ADDR": "203.0.113.9"}
+    _fail_logins(client, settings.AXES_FAILURE_LIMIT, **attacker)
+    body = {"username": "staff", "password": "x" * 12}
+    assert (
+        client.post("/api/auth/login", body, content_type="application/json", **attacker).status_code == 429
+    )
+    other_name = client.post(
+        "/api/auth/login",
+        {"username": "second", "password": "x" * 12},
+        content_type="application/json",
+        **attacker,
+    )
+    assert other_name.status_code == 200
+    client.post("/api/auth/logout")
+    elsewhere = client.post(
+        "/api/auth/login", body, content_type="application/json", REMOTE_ADDR="198.51.100.4"
+    )
+    assert elsewhere.status_code == 200
+
+
+@pytest.mark.django_db
+def test_lockout_behind_proxy_keys_on_forwarded_client(client, staff_user, settings):
+    """خلف الوكيل REMOTE_ADDR واحد لكل الزوار؛ القفل يتبع العنوان الذي كتبه الوكيل."""
+    settings.AXES_ENABLED = True
+    settings.TRUSTED_PROXY_COUNT = 1
+    proxy = {"REMOTE_ADDR": "10.0.0.1"}
+    _fail_logins(client, settings.AXES_FAILURE_LIMIT, HTTP_X_FORWARDED_FOR="203.0.113.9", **proxy)
+    body = {"username": "staff", "password": "x" * 12}
+    post = lambda forwarded: client.post(  # noqa: E731
+        "/api/auth/login", body, content_type="application/json", HTTP_X_FORWARDED_FOR=forwarded, **proxy
+    )
+    assert post("203.0.113.9").status_code == 429
+    # خانة يكتبها العميل قبل خانة الوكيل لا تُخرجه من القفل.
+    assert post("198.51.100.4, 203.0.113.9").status_code == 429
+    assert post("198.51.100.4").status_code == 200
+
+
+def test_client_ip_trusts_only_proxy_written_hops(rf, settings):
+    from apps.core.auth import client_ip
+
+    request = rf.get("/", REMOTE_ADDR="10.0.0.1", HTTP_X_FORWARDED_FOR="1.1.1.1, 2.2.2.2 , 3.3.3.3")
+    settings.TRUSTED_PROXY_COUNT = 0
+    assert client_ip(request) == "10.0.0.1"  # بلا وكيل موثوق الترويسة يكتبها أي أحد
+    settings.TRUSTED_PROXY_COUNT = 1
+    assert client_ip(request) == "3.3.3.3"
+    settings.TRUSTED_PROXY_COUNT = 2
+    assert client_ip(request) == "2.2.2.2"
+    settings.TRUSTED_PROXY_COUNT = 4
+    assert client_ip(request) == "10.0.0.1"  # الترويسة أقصر من عدد الوكلاء
+    settings.TRUSTED_PROXY_COUNT = 1
+    assert client_ip(rf.get("/", REMOTE_ADDR="10.0.0.1")) == "10.0.0.1"
+    assert client_ip(rf.get("/", REMOTE_ADDR="10.0.0.1", HTTP_X_FORWARDED_FOR="x, مزوَّر")) == "10.0.0.1"
+    assert client_ip(rf.get("/", REMOTE_ADDR="10.0.0.1", HTTP_X_FORWARDED_FOR="2001:DB8::1")) == "2001:db8::1"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("path", ["/api/docs/", "/api/openapi.json"])
+def test_api_docs_are_staff_only(client, staff_user, django_user_model, path):
+    assert client.get(path).status_code == 302
+    client.force_login(django_user_model.objects.create_user(username="u", password="x" * 12))
+    assert client.get(path).status_code == 302
+    client.force_login(staff_user)
+    assert client.get(path).status_code == 200
+
+
+@pytest.mark.django_db
+def test_audit_limit_is_validated_and_capped(client, staff_user):
+    client.force_login(staff_user)
+    assert client.get("/api/audit?limit=-1").status_code == 422
+    assert client.get("/api/audit?limit=0").status_code == 422
+    assert client.get("/api/audit?limit=1").status_code == 200
+    assert client.get("/api/audit?limit=100000").status_code == 200

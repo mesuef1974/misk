@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from django.db import transaction
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 
 from apps.catalog.models import Calibration, Material
 from apps.core.services import record_audit
@@ -15,6 +16,8 @@ from .models import Placement, RunLog, Sheet
 
 MARGIN_MM = Decimal("5")
 GAP_MM = Decimal("3")
+MAX_DURATION_S = 7 * 24 * 60 * 60
+REQUEST_ID_LENGTH = RunLog._meta.get_field("request_id").max_length
 PLANNABLE = {Order.Status.CONFIRMED, Order.Status.IN_PRODUCTION}
 
 
@@ -90,6 +93,45 @@ def plan_sheets(*, material_id: int, actor=None) -> list[Sheet]:
 
 
 @transaction.atomic
+def release_order(*, order_id: int, actor=None) -> int:
+    """يرفع قطع الطلب عن الألواح المخطَّطة ويعيد عددها. الألواح المنفَّذة لا تُمسّ: قُصّت قطعها فعلًا.
+
+    اللوح الذي يفرغ يُحذف إن لم يُشغَّل قط، ويصير «تالفًا» إن كان عليه تشغيل فاشل (سجله محميّ ومادته استُهلكت).
+    idempotent: الاستدعاء الثاني لا يجد قطعًا فلا يكتب شيئًا.
+    """
+    # استعلام فرعي لا join مع distinct: PostgreSQL يرفض FOR UPDATE مع DISTINCT.
+    on_order = Placement.objects.filter(order_item__order_id=order_id).values("sheet_id")
+    sheets = list(
+        Sheet.objects.select_for_update().filter(status=Sheet.Status.PLANNED, pk__in=on_order).order_by("id")
+    )
+    if not sheets:
+        return 0
+    sheet_ids = [sheet.pk for sheet in sheets]
+    released, _ = Placement.objects.filter(sheet_id__in=sheet_ids, order_item__order_id=order_id).delete()
+    occupied = set(Placement.objects.filter(sheet_id__in=sheet_ids).values_list("sheet_id", flat=True))
+    empty = [pk for pk in sheet_ids if pk not in occupied]
+    ran = set(RunLog.objects.filter(sheet_id__in=empty).values_list("sheet_id", flat=True))
+    scrapped = sorted(ran)
+    deleted = [pk for pk in empty if pk not in ran]
+    Sheet.objects.filter(pk__in=scrapped).update(status=Sheet.Status.SCRAPPED)
+    Sheet.objects.filter(pk__in=deleted).delete()
+    record_audit(
+        action="production.release",
+        actor=actor,
+        target=f"order:{order_id}",
+        payload={"pieces": released, "sheets": sheet_ids, "deleted": deleted, "scrapped": scrapped},
+    )
+    return released
+
+
+def _existing_run(request_id: str, sheet_id: int) -> RunLog | None:
+    run = RunLog.objects.filter(request_id=request_id).first()
+    if run is not None and run.sheet_id != sheet_id:
+        raise ProductionError(f"request_id مستعمل لتشغيل اللوح {run.sheet_id}")
+    return run
+
+
+@transaction.atomic
 def record_run(
     *,
     sheet_id: int,
@@ -100,13 +142,24 @@ def record_run(
     notes: str = "",
     actor=None,
 ) -> RunLog:
-    """تسجيل مكرر بالـ request_id نفسه يعيد السجل الموجود. النجاح يغلق اللوح."""
+    """تسجيل مكرر بالـ request_id نفسه للوح نفسه يعيد السجل الموجود. النجاح يغلق اللوح.
+
+    طلبان متزامنان بالمفتاح نفسه: الثاني ينتظر قفل اللوح ثم يجد سجل الأول، وإن سبقه إدراج على لوح
+    آخر فقيد التفرّد يرفضه ويُقرأ الموجود؛ لا 500 في الحالين.
+    """
     if not request_id:
         raise ProductionError("request_id مطلوب لمنع التسجيل المكرر")
-    existing = RunLog.objects.filter(request_id=request_id).first()
+    if len(request_id) > REQUEST_ID_LENGTH:
+        raise ProductionError(f"request_id أطول من {REQUEST_ID_LENGTH} حرفًا")
+    if not 0 <= duration_s <= MAX_DURATION_S:
+        raise ProductionError("مدة التشغيل خارج المدى المسموح")
+    existing = _existing_run(request_id, sheet_id)
     if existing:
         return existing
     sheet = Sheet.objects.select_for_update().select_related("material").get(pk=sheet_id)
+    existing = _existing_run(request_id, sheet_id)  # بعد القفل: طلب متزامن ربما سجّل وأغلق اللوح
+    if existing:
+        return existing
     if sheet.status != Sheet.Status.PLANNED:
         raise ProductionError(f"اللوح {sheet.pk} ليس مخطَّطًا ({sheet.get_status_display()})")
     calibration = None
@@ -132,8 +185,18 @@ def record_run(
         notes=notes,
         request_id=request_id,
     )
-    run.full_clean()
-    run.save()
+    try:
+        run.full_clean(validate_unique=False)  # التفرّد يحسمه القيد عند الحفظ لا فحص يسبقه
+    except ValidationError as exc:
+        raise ProductionError("; ".join(exc.messages)) from exc
+    try:
+        with transaction.atomic():
+            run.save()
+    except IntegrityError:
+        existing = _existing_run(request_id, sheet_id)
+        if existing is None:
+            raise
+        return existing
     if outcome == RunLog.Outcome.OK:
         sheet.status = Sheet.Status.DONE
         sheet.save(update_fields=["status", "updated_at"])

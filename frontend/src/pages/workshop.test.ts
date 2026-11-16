@@ -1,0 +1,320 @@
+import { flushPromises, mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
+import { createMemoryHistory, createRouter, type Router } from "vue-router";
+import { ApiError } from "@/api/client";
+import { routes } from "@/router";
+import { catalogService, type Calibration, type Material, type ProductTemplate } from "@/services/catalog";
+import { ordersService, type Order } from "@/services/orders";
+import { productionService, type Sheet } from "@/services/production";
+import { sessionService } from "@/services/session";
+import HomePage from "./HomePage.vue";
+import MaterialsPage from "./MaterialsPage.vue";
+import ProductionPage from "./ProductionPage.vue";
+import TemplatesPage from "./TemplatesPage.vue";
+
+vi.mock("@/services/catalog", () => ({
+  catalogService: {
+    materials: vi.fn(),
+    templates: vi.fn(),
+    saveMaterial: vi.fn(),
+    saveTemplate: vi.fn(),
+    calibrations: vi.fn(),
+    addCalibration: vi.fn(),
+  },
+}));
+vi.mock("@/services/orders", () => ({
+  ordersService: { list: vi.fn(), get: vi.fn(), create: vi.fn(), transition: vi.fn() },
+}));
+vi.mock("@/services/production", () => ({
+  productionService: { sheets: vi.fn(), plan: vi.fn(), recordRun: vi.fn() },
+}));
+vi.mock("@/services/session", () => ({
+  sessionService: { me: vi.fn(), login: vi.fn(), logout: vi.fn() },
+}));
+
+const leather: Material = {
+  id: 7,
+  name: "جلد نباتي",
+  kind: "leather",
+  thickness_mm: "2.00",
+  sheet_width_mm: "600.0",
+  sheet_height_mm: "305.0",
+  sheet_cost: "45.00",
+  supplier: "مدبغة",
+  notes: "",
+};
+const card: ProductTemplate = {
+  id: 1,
+  slug: "card",
+  name: "بطاقة مقوّسة",
+  generator: "card",
+  width_mm: "90.0",
+  height_mm: "55.0",
+  safe_margin_mm: "3.0",
+  base_price: "25.00",
+  param_schema: [{ name: "name", type: "text", label: "الاسم" }],
+};
+const calibration: Calibration = {
+  id: 3,
+  material_id: 7,
+  operation: "engrave",
+  power_pct: 30,
+  speed_mm_s: "200.0",
+  passes: 1,
+  lines_per_cm: null,
+  min_line_mm: "0.40",
+  measured_on: "2026-11-16",
+  notes: "",
+};
+const order: Order = {
+  id: 4,
+  client_ref: "r",
+  customer_name: "أم سارة",
+  status: "confirmed",
+  occasion_date: null,
+  notes: "",
+  total: "50.00",
+  items: [{ id: 10, template_slug: "card", material_id: 7, params: { name: "سارة" }, quantity: 2, unit_price: "25.00" }],
+};
+
+function sheet(overrides: Partial<Sheet> = {}): Sheet {
+  return {
+    id: 1,
+    material_id: 7,
+    width_mm: "600.0",
+    height_mm: "305.0",
+    status: "planned",
+    placements: [
+      { order_item_id: 10, copy_index: 0, x_mm: "5.0", y_mm: "5.0", width_mm: "90.0", height_mm: "55.0" },
+      { order_item_id: 10, copy_index: 1, x_mm: "98.0", y_mm: "5.0", width_mm: "90.0", height_mm: "55.0" },
+    ],
+    ...overrides,
+  };
+}
+
+let router: Router;
+
+async function show(component: object, path: string) {
+  await router.push(path);
+  await router.isReady();
+  const wrapper = mount(component, { global: { plugins: [router] } });
+  await flushPromises();
+  return wrapper;
+}
+
+function button(page: ReturnType<typeof mount>, text: string) {
+  const found = page.findAll("button").find((candidate) => candidate.text() === text);
+  if (!found) throw new Error(`لا زر بنص «${text}»`);
+  return found;
+}
+
+beforeEach(() => {
+  setActivePinia(createPinia());
+  router = createRouter({ history: createMemoryHistory(), routes });
+  vi.mocked(catalogService.materials).mockReset().mockResolvedValue([leather]);
+  vi.mocked(catalogService.templates).mockReset().mockResolvedValue([card]);
+  vi.mocked(catalogService.calibrations).mockReset().mockResolvedValue([calibration]);
+  vi.mocked(catalogService.saveMaterial).mockReset();
+  vi.mocked(catalogService.saveTemplate).mockReset();
+  vi.mocked(catalogService.addCalibration).mockReset();
+  vi.mocked(ordersService.list).mockReset().mockResolvedValue([order]);
+  vi.mocked(productionService.sheets).mockReset().mockResolvedValue([sheet()]);
+  vi.mocked(productionService.plan).mockReset();
+  vi.mocked(productionService.recordRun).mockReset();
+  vi.mocked(sessionService.me).mockReset().mockResolvedValue({ id: 1, username: "staff", is_staff: true });
+});
+
+describe("صفحة المواد", () => {
+  it("تعرض المواد وتضيف مادة جديدة", async () => {
+    const wood: Material = { ...leather, id: 8, name: "خشب بتولا", kind: "wood", thickness_mm: "3.00" };
+    vi.mocked(catalogService.saveMaterial).mockResolvedValue(wood);
+    const page = await show(MaterialsPage, "/materials");
+    expect(page.text()).toContain("جلد نباتي");
+    expect(page.text()).toContain("600.0 × 305.0 مم");
+
+    await button(page, "مادة جديدة").trigger("click");
+    await page.get("form").trigger("submit");
+    expect(page.findAll(".error").length).toBeGreaterThan(0);
+    expect(catalogService.saveMaterial).not.toHaveBeenCalled();
+
+    const inputs = page.findAll(".editor input");
+    await inputs[0].setValue("خشب بتولا");
+    await inputs[1].setValue("3");
+    await page.get(".editor select").setValue("wood");
+    await page.get("form").trigger("submit");
+    await flushPromises();
+    expect(catalogService.saveMaterial).toHaveBeenCalledWith({
+      name: "خشب بتولا",
+      kind: "wood",
+      thickness_mm: "3",
+      sheet_cost: "0",
+      supplier: "",
+      notes: "",
+    });
+    expect(page.find(".editor").exists()).toBe(false);
+    expect(page.findAll(".material")).toHaveLength(2);
+  });
+
+  it("تقفل مفتاح المادة عند التعديل وتعرض خطأ الخادم", async () => {
+    vi.mocked(catalogService.saveMaterial).mockRejectedValue(new ApiError(422, "قيمة غير صالحة"));
+    const page = await show(MaterialsPage, "/materials");
+    await button(page, "تعديل").trigger("click");
+    const inputs = page.findAll(".editor input");
+    expect(inputs[0].attributes("disabled")).toBeDefined();
+    expect(inputs[1].attributes("disabled")).toBeDefined();
+    await page.get("form").trigger("submit");
+    await flushPromises();
+    expect(page.get('[role="alert"]').text()).toContain("قيمة غير صالحة");
+    expect(page.find(".editor").exists()).toBe(true);
+  });
+
+  it("تفتح معايرات المادة وتسجّل معايرة", async () => {
+    vi.mocked(catalogService.addCalibration).mockResolvedValue({ ...calibration, id: 9, operation: "cut", power_pct: 80 });
+    const page = await show(MaterialsPage, "/materials");
+    await button(page, "المعايرات").trigger("click");
+    await flushPromises();
+    expect(catalogService.calibrations).toHaveBeenCalledWith(7);
+    expect(page.findAll("tbody tr")).toHaveLength(1);
+
+    const form = page.get(".calibrations form");
+    await form.get("select").setValue("cut");
+    const inputs = form.findAll("input");
+    await inputs[0].setValue("80");
+    await inputs[1].setValue("12.5");
+    await inputs[4].setValue("0.3");
+    await form.trigger("submit");
+    await flushPromises();
+    expect(vi.mocked(catalogService.addCalibration).mock.calls[0][1]).toMatchObject({
+      operation: "cut",
+      power_pct: 80,
+      speed_mm_s: "12.5",
+      min_line_mm: "0.3",
+      passes: 1,
+      lines_per_cm: null,
+    });
+    expect(page.findAll("tbody tr")).toHaveLength(2);
+  });
+});
+
+describe("صفحة القوالب", () => {
+  it("تعدّل قالبًا وتضيف حقلًا إلى مخططه", async () => {
+    vi.mocked(catalogService.saveTemplate).mockImplementation(async (draft) => ({ ...card, ...draft }));
+    const page = await show(TemplatesPage, "/templates");
+    expect(page.text()).toContain("الاسم (نص)");
+
+    await button(page, "تعديل").trigger("click");
+    expect(page.get(".editor input").attributes("disabled")).toBeDefined();
+    await button(page, "إضافة حقل").trigger("click");
+    const added = page.findAll(".schema-field")[1];
+    await added.get("input").setValue("gift");
+    await added.get("select").setValue("bool");
+    await page.get("form").trigger("submit");
+    await flushPromises();
+
+    expect(vi.mocked(catalogService.saveTemplate).mock.calls[0][0]).toMatchObject({
+      slug: "card",
+      width_mm: "90",
+      param_schema: [
+        { name: "name", type: "text", label: "الاسم" },
+        { name: "gift", type: "bool" },
+      ],
+    });
+    expect(page.find(".editor").exists()).toBe(false);
+    expect(page.text()).toContain("gift (نعم/لا)");
+  });
+
+  it("تمنع الحفظ بحقل بلا اسم", async () => {
+    const page = await show(TemplatesPage, "/templates");
+    await button(page, "تعديل").trigger("click");
+    await button(page, "إضافة حقل").trigger("click");
+    await page.get("form").trigger("submit");
+    expect(page.text()).toContain("اسم الحقل مطلوب");
+    expect(catalogService.saveTemplate).not.toHaveBeenCalled();
+  });
+});
+
+describe("صفحة الإنتاج", () => {
+  it("ترسم اللوح وتسمّي قطعه بطلبها", async () => {
+    const page = await show(ProductionPage, "/production");
+    expect(page.findAll("svg .piece")).toHaveLength(2);
+    expect(page.get(".legend").text()).toContain("بطاقة مقوّسة — أم سارة");
+    expect(page.get(".legend").text()).toContain("× 2");
+    expect(page.get(".head").text()).toContain("جلد نباتي");
+  });
+
+  it("تخطّط ألواح المادة وتذكر حين لا قطع تنتظر", async () => {
+    vi.mocked(productionService.plan).mockResolvedValueOnce([sheet({ id: 2 })]).mockResolvedValueOnce([]);
+    const page = await show(ProductionPage, "/production");
+    await page.get(".plan select").setValue("7");
+    await page.get(".plan").trigger("submit");
+    await flushPromises();
+    expect(productionService.plan).toHaveBeenCalledWith(7);
+    expect(page.findAll(".sheet-card")).toHaveLength(2);
+    expect(page.get(".plan .notice").text()).toContain("خُطِّطت 2 قطعة على 1 لوح");
+
+    await page.get(".plan").trigger("submit");
+    await flushPromises();
+    expect(page.get(".plan .notice").text()).toContain("لا قطع تنتظر التخطيط");
+  });
+
+  it("تعرض رفض التخطيط من الخادم", async () => {
+    vi.mocked(productionService.plan).mockRejectedValue(new ApiError(422, "القطعة أكبر من اللوح بعد الهامش"));
+    const page = await show(ProductionPage, "/production");
+    await page.get(".plan select").setValue("7");
+    await page.get(".plan").trigger("submit");
+    await flushPromises();
+    expect(page.get('.plan [role="alert"]').text()).toContain("أكبر من اللوح");
+  });
+
+  it("تسجّل التشغيل بمفتاح واحد يبقى عند إعادة المحاولة ثم تغلق اللوح", async () => {
+    vi.mocked(productionService.recordRun)
+      .mockRejectedValueOnce(new ApiError(0, "تعذّر الاتصال بالخادم"))
+      .mockResolvedValueOnce({ id: 5, sheet_id: 1, outcome: "ok", duration_s: 200, material_cost: "45.00" });
+    const page = await show(ProductionPage, "/production");
+    await button(page, "تسجيل تشغيل").trigger("click");
+    await flushPromises();
+    const form = page.get(".run");
+    await form.trigger("submit");
+    expect(form.text()).toContain("مدة التشغيل مطلوبة");
+
+    const inputs = form.findAll("input");
+    await inputs[0].setValue("3");
+    await inputs[1].setValue("20");
+    await form.findAll("select")[1].setValue("3");
+    await form.trigger("submit");
+    await flushPromises();
+    expect(form.get('[role="alert"]').text()).toContain("تعذّر الاتصال");
+
+    await form.trigger("submit");
+    await flushPromises();
+    const calls = vi.mocked(productionService.recordRun).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0][1]).toEqual({ duration_s: 200, outcome: "ok", calibration_id: 3, notes: "" });
+    expect(calls[0][2]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(calls[1][2]).toBe(calls[0][2]);
+
+    expect(page.find(".run").exists()).toBe(false);
+    expect(page.get(".state").text()).toBe("نُفِّذ");
+    expect(page.text()).toContain("سُجّل التشغيل: نجح · 3 د 20 ث");
+    expect(page.findAll("button").some((candidate) => candidate.text() === "تسجيل تشغيل")).toBe(false);
+  });
+});
+
+describe("اللوحة الرئيسية", () => {
+  it("تعرض للمشرف أعداد الطلبات المفتوحة والألواح والكتالوج", async () => {
+    const page = await show(HomePage, "/");
+    const tiles = page.findAll(".tile").map((tile) => tile.text());
+    expect(tiles).toContain("1مؤكَّد");
+    expect(tiles).toContain("0مسودة");
+    expect(tiles).toContain("1ألواح تنتظر التشغيل");
+    expect(tiles).toContain("1مواد");
+  });
+
+  it("تدعو غير المشرف إلى الدخول ولا تطلب بيانات", async () => {
+    vi.mocked(sessionService.me).mockResolvedValue(null);
+    const page = await show(HomePage, "/");
+    expect(page.text()).toContain("دخول المشرف");
+    expect(page.find(".tile").exists()).toBe(false);
+    expect(ordersService.list).not.toHaveBeenCalled();
+  });
+});

@@ -164,3 +164,45 @@ def test_catalog_api_roundtrip(client, staff_user):
         content_type="application/json",
     )
     assert res.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        {"name": "n", "type": "int", "min": "5"},
+        {"name": "n", "type": "int", "max": 2.5},
+        {"name": "n", "type": "int", "min": True},
+        {"name": "n", "type": "int", "min": 9, "max": 3},
+        {"name": "c", "type": "choice", "choices": ["a", {"b": 1}]},
+        {"name": "c", "type": "choice", "choices": ["a", 1.5]},
+        {"name": "c", "type": "choice", "choices": ["a", "a"]},
+    ],
+)
+def test_validate_schema_rejects_bad_bounds_and_choices(field):
+    with pytest.raises(domain.ParamError):
+        domain.validate_schema([field])
+
+
+def test_validate_schema_accepts_int_bounds_and_scalar_choices():
+    schema = [
+        {"name": "n", "type": "int", "min": 1, "max": 9},
+        {"name": "c", "type": "choice", "choices": ["a", 1, "1"]},
+    ]
+    assert domain.validate_schema(schema) == schema
+
+
+def test_clean_params_treats_whitespace_only_text_as_empty():
+    required = [{"name": "text", "type": "text"}]
+    with pytest.raises(domain.ParamError) as info:
+        domain.clean_params(required, {"text": "  \t\n "})
+    assert info.value.errors == {"text": "مطلوب"}
+    optional = [{"name": "text", "type": "text", "required": False}]
+    assert domain.clean_params(optional, {"text": "   "}) == {}
+
+
+def test_clean_params_ignores_non_int_bound_in_stored_schema():
+    """قالب حُفظ قبل فحص الحدود لا يكسر إنشاء الطلب (كان TypeError → 500)."""
+    stored = [{"name": "n", "type": "int", "min": "5", "max": 9}]
+    assert domain.clean_params(stored, {"n": 3}) == {"n": 3}
+    with pytest.raises(domain.ParamError):
+        domain.clean_params(stored, {"n": 10})

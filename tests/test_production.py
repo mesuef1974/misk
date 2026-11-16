@@ -193,3 +193,134 @@ def test_production_api(client, staff_user, material, name_tag, calibration):
     again = client.post(url, body, content_type="application/json", headers={"X-Request-ID": "run-1"})
     assert again.json()["id"] == res.json()["id"]
     assert client.get("/api/production/sheets?status=done").json()[0]["id"] == sheet["id"]
+
+
+@pytest.mark.django_db
+def test_cancelling_order_releases_its_planned_pieces(material, name_tag, calibration):
+    from apps.core.models import AuditLog
+
+    kept = _confirmed_order(material, 30)
+    cancelled = _confirmed_order(material, 10)
+    first, second = sorted(services.plan_sheets(material_id=material.pk), key=lambda sheet: sheet.pk)
+    assert Placement.objects.filter(order_item__order=cancelled).count() == 10
+
+    order_services.transition(order_id=cancelled.pk, to_status="cancelled")
+    assert not Placement.objects.filter(order_item__order=cancelled).exists()
+    assert Placement.objects.filter(order_item__order=kept).count() == 30
+    # اللوح الثاني كان كله للطلب الملغى ولم يُشغَّل: يُحذف. الأول بقيت عليه قطع الطلب الآخر.
+    assert list(Sheet.objects.values_list("pk", "status")) == [(first.pk, "planned")]
+    audit = AuditLog.objects.get(action="production.release")
+    assert audit.target == f"order:{cancelled.pk}"
+    assert audit.payload == {
+        "pieces": 10,
+        "sheets": [first.pk, second.pk],
+        "deleted": [second.pk],
+        "scrapped": [],
+    }
+
+    assert services.release_order(order_id=cancelled.pk) == 0  # idempotent
+    assert AuditLog.objects.filter(action="production.release").count() == 1
+    assert services.plan_sheets(material_id=material.pk) == []  # الملغى لا يُعاد تخطيطه
+
+
+@pytest.mark.django_db
+def test_cancelling_keeps_cut_sheets_and_scraps_emptied_failed_ones(material, name_tag, calibration):
+    order = _confirmed_order(material, 40)
+    done, failed = sorted(services.plan_sheets(material_id=material.pk), key=lambda sheet: sheet.pk)
+    services.record_run(sheet_id=done.pk, request_id="r1", duration_s=60, outcome="ok")
+    services.record_run(sheet_id=failed.pk, request_id="r2", duration_s=60, outcome="failed")
+    order_services.transition(order_id=order.pk, to_status="in_production")
+
+    order_services.transition(order_id=order.pk, to_status="cancelled")
+    # ما قُصّ يبقى سجله كما هو؛ اللوح الذي فشل تشغيله وفرغ لا يُحذف (سجل تشغيله محميّ) بل يُعلَّم تالفًا.
+    assert Placement.objects.filter(sheet=done).count() == 35
+    assert not Placement.objects.filter(sheet=failed).exists()
+    assert dict(Sheet.objects.values_list("pk", "status")) == {done.pk: "done", failed.pk: "scrapped"}
+    assert RunLog.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_cancel_rolls_back_when_release_fails(material, name_tag, calibration, monkeypatch):
+    from apps.orders.models import Order
+
+    order = _confirmed_order(material, 2)
+    services.plan_sheets(material_id=material.pk)
+
+    def boom(**kwargs):
+        raise RuntimeError("تعذّر التحرير")
+
+    monkeypatch.setattr(services, "release_order", boom)
+    with pytest.raises(RuntimeError):
+        order_services.transition(order_id=order.pk, to_status="cancelled")
+    assert Order.objects.get(pk=order.pk).status == "confirmed"
+    assert Placement.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_record_run_rejects_bad_input_with_domain_error(material, name_tag, calibration):
+    _confirmed_order(material, 1)
+    (sheet,) = services.plan_sheets(material_id=material.pk)
+    for bad in (
+        {"request_id": "r" * 65},
+        {"duration_s": -1},
+        {"duration_s": services.MAX_DURATION_S + 1},
+        {"outcome": "meh"},
+    ):
+        values = {"sheet_id": sheet.pk, "request_id": "r1", "duration_s": 1, "outcome": "ok", **bad}
+        with pytest.raises(services.ProductionError):
+            services.record_run(**values)
+    assert not RunLog.objects.exists()
+    sheet.refresh_from_db()
+    assert sheet.status == "planned"
+
+
+@pytest.mark.django_db
+def test_record_run_request_id_is_bound_to_its_sheet(material, name_tag, calibration):
+    _confirmed_order(material, 40)
+    first, second = services.plan_sheets(material_id=material.pk)
+    services.record_run(sheet_id=first.pk, request_id="r1", duration_s=1, outcome="ok")
+    with pytest.raises(services.ProductionError, match="request_id"):
+        services.record_run(sheet_id=second.pk, request_id="r1", duration_s=1, outcome="ok")
+    second.refresh_from_db()
+    assert second.status == "planned"
+    assert RunLog.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_record_run_survives_concurrent_duplicate(material, name_tag, calibration, monkeypatch):
+    """سجل بالمفتاح نفسه أُدرج بعد فحصَي الوجود: قيد التفرّد يرفض والخدمة تعيد الموجود بلا 500."""
+    _confirmed_order(material, 1)
+    (sheet,) = services.plan_sheets(material_id=material.pk)
+    values = {"sheet_id": sheet.pk, "request_id": "r1", "duration_s": 5, "outcome": "failed"}
+    winner = services.record_run(**values)
+    real, calls = services._existing_run, []
+
+    def racing(request_id, sheet_id):
+        calls.append(request_id)
+        return None if len(calls) <= 2 else real(request_id, sheet_id)
+
+    monkeypatch.setattr(services, "_existing_run", racing)
+    assert services.record_run(**values).pk == winner.pk
+    assert len(calls) == 3
+    assert RunLog.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_runs_api_rejects_bad_input_with_422(client, staff_user, material, name_tag, calibration):
+    _confirmed_order(material, 1)
+    (sheet,) = services.plan_sheets(material_id=material.pk)
+    client.force_login(staff_user)
+    url = f"/api/production/sheets/{sheet.pk}/runs"
+
+    def post(body, request_id="run-1"):
+        return client.post(
+            url, body, content_type="application/json", headers={"X-Request-ID": request_id}
+        ).status_code
+
+    ok = {"duration_s": 300, "outcome": "failed"}
+    assert post(ok, request_id="r" * 65) == 422
+    assert post({**ok, "duration_s": -1}) == 422
+    assert post({**ok, "duration_s": 10**12}) == 422
+    assert post({**ok, "notes": "م" * 2001}) == 422
+    assert not RunLog.objects.exists()
+    assert post(ok, request_id="r" * 64) == 200

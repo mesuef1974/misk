@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.http import HttpRequest
-from ninja import Router, Schema
+from ninja import Field, Router, Schema
 from ninja.errors import HttpError
 
 from apps.catalog.models import Calibration, Material
@@ -40,10 +40,10 @@ class SheetOut(Schema):
 
 
 class RunIn(Schema):
-    duration_s: int
+    duration_s: int = Field(ge=0, le=services.MAX_DURATION_S)
     outcome: str
     calibration_id: int | None = None
-    notes: str = ""
+    notes: str = Field("", max_length=2000)
 
 
 class RunOut(Schema):
@@ -74,6 +74,8 @@ def plan(request: HttpRequest, payload: PlanIn):
 def record_run(request: HttpRequest, sheet_id: int, payload: RunIn):
     if payload.outcome not in RunLog.Outcome.values:
         raise HttpError(422, "نتيجة غير معروفة")
+    if len(request_id(request)) > services.REQUEST_ID_LENGTH:
+        raise HttpError(422, f"X-Request-ID أطول من {services.REQUEST_ID_LENGTH} حرفًا")
     try:
         return services.record_run(
             sheet_id=sheet_id, request_id=request_id(request), actor=request.user, **payload.dict()

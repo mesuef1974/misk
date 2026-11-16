@@ -180,3 +180,90 @@ def test_order_detail_is_staff_only_and_constant_queries(
     client.force_login(staff_user)
     with django_assert_max_num_queries(6):  # جلسة + مستخدم + الطلب + بنود + قوالب + مواد
         assert len(client.get(url).json()["items"]) == 3
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"customer_name": "ن" * 121},
+        {"notes": "م" * 2001},
+        {"items": "too-many"},
+        {"items": {"quantity": 1001}},
+        {"items": {"quantity": 10**12}},
+        {"items": {"unit_price": Decimal("10.505")}},
+        {"items": {"unit_price": Decimal("1000000")}},
+        {"items": {"unit_price": Decimal("NaN")}},
+        {"items": {"unit_price": Decimal("Infinity")}},
+    ],
+)
+def test_create_order_enforces_field_bounds(material, name_tag, overrides):
+    items = overrides.get("items")
+    if items == "too-many":
+        overrides = {"items": [_item(material)] * 101}
+    elif items:
+        overrides = {"items": [_item(material, **items)]}
+    with pytest.raises(services.OrderError):
+        _order(material, **overrides)
+    assert not Order.objects.exists()
+    assert not Customer.objects.exists()
+
+
+@pytest.mark.django_db
+def test_create_order_accepts_values_at_the_bounds(material, name_tag):
+    order = _order(
+        material,
+        customer_name="ن" * 120,
+        notes="م" * 2000,
+        items=[_item(material, quantity=1000, unit_price=Decimal("999999.99"))],
+    )
+    assert order.items.get().unit_price == Decimal("999999.99")
+
+
+@pytest.mark.django_db
+def test_orders_api_rejects_out_of_bounds_payload(client, staff_user, material, name_tag):
+    client.force_login(staff_user)
+    item = {"template_slug": "name-tag", "material_id": material.pk, "params": {"text": "نور"}}
+
+    def post(**changes):
+        body = {"client_ref": str(uuid.uuid4()), "customer_name": "زبون", "items": [item], **changes}
+        return client.post("/api/orders", body, content_type="application/json").status_code
+
+    assert post() == 200
+    assert post(customer_name="ن" * 121) == 422
+    assert post(notes="م" * 2001) == 422
+    assert post(items=[]) == 422
+    assert post(items=[item] * 101) == 422
+    assert post(items=[{**item, "quantity": 10**12}]) == 422
+    assert post(items=[{**item, "quantity": 0}]) == 422
+    assert post(items=[{**item, "unit_price": "10.505"}]) == 422
+    assert post(items=[{**item, "unit_price": "-1"}]) == 422
+    assert post(items=[{**item, "unit_price": "12345678.00"}]) == 422
+    assert Order.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_same_customer_name_reuses_one_row(material, name_tag):
+    first = _order(material, customer_name="أم  خالد")
+    second = _order(material, customer_name=" أم خالد ")
+    other = _order(material, customer_name="أبو خالد")
+    assert first.customer_id == second.customer_id != other.customer_id
+    assert Customer.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_create_order_survives_concurrent_duplicate(material, name_tag, monkeypatch):
+    """طلب متزامن بالـ client_ref نفسه أدرج بعد فحص الوجود: يُعاد طلبه بلا 500 ولا صفوف زائدة."""
+    winner = _order(material)
+    real, calls = services._existing_order, []
+
+    def racing(client_ref):
+        calls.append(client_ref)
+        return None if len(calls) == 1 else real(client_ref)
+
+    monkeypatch.setattr(services, "_existing_order", racing)
+    again = _order(material, client_ref=winner.client_ref, customer_name="زبون لم يُنشأ")
+    assert again.pk == winner.pk
+    assert len(calls) == 2
+    assert (Order.objects.count(), Customer.objects.count(), OrderItem.objects.count()) == (1, 1, 1)
+    assert AuditLog.objects.filter(action="orders.create").count() == 1

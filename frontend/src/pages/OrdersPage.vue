@@ -66,14 +66,6 @@ onMounted(() => store.load());
 </template>
 
 <style scoped>
-.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-block-end: 16px; }
-.chip {
-  min-block-size: 40px; padding-inline: 14px; border: 1px solid var(--line); border-radius: 999px;
-  background: var(--surface); color: var(--muted); font: inherit; font-size: 15px; cursor: pointer;
-}
-.chip.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
-.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.count { font-variant-numeric: tabular-nums; opacity: 0.75; }
 .retry { margin-inline-start: 12px; }
 .orders { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .order {
