@@ -1,4 +1,10 @@
-# مولّدات العيّنات في samples/ (الإصدارات المثبتة في بيئة المحرّك 2026-11-16)
-shapely==2.1.2
-arabic-reshaper==3.0.0
-python-bidi==0.6.7
+Django>=5.2,<5.3
+django-ninja>=1.3
+django-vite>=3.0
+whitenoise[brotli]>=6.8
+django-axes>=7.0
+psycopg[binary]>=3.2
+dj-database-url>=2.3
+gunicorn>=23.0
+redis>=5.2
+celery[redis]>=5.4

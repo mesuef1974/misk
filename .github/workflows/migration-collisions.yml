@@ -1,0 +1,26 @@
+name: تصادم أرقام الهجرات
+
+on:
+  pull_request:
+    paths: ["**/migrations/*.py"]
+
+concurrency:
+  group: migration-collisions-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  collisions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/check_migration_collisions.py --base origin/${{ github.base_ref }}

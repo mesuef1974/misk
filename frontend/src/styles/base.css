@@ -1,0 +1,41 @@
+/* RTL-first: خصائص منطقية فقط (inline/block)، لا left/right. */
+:root {
+  --bg: #f6f4ef;
+  --surface: #ffffff;
+  --ink: #1d2327;
+  --muted: #5b656c;
+  --line: #e0dcd2;
+  --accent: #0f6b5c;
+  --risk: #a23a2e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181a;
+    --surface: #1d2326;
+    --ink: #eceff0;
+    --muted: #a3adb2;
+    --line: #333b3f;
+    --accent: #5cc7b2;
+    --risk: #ee9c90;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.8;
+}
+a { color: var(--accent); }
+.topbar { position: sticky; inset-block-start: 0; background: var(--surface); border-block-end: 1px solid var(--line); }
+.topbar .inner { max-inline-size: 960px; margin-inline: auto; padding-inline: 16px; display: flex; align-items: center; gap: 16px; min-block-size: 52px; }
+.topbar .brand { font-weight: 700; color: var(--ink); text-decoration: none; margin-inline-end: auto; }
+.topbar nav { display: flex; gap: 4px; }
+.topbar nav a { text-decoration: none; color: var(--muted); padding: 14px 12px; border-block-end: 3px solid transparent; }
+.topbar nav a.router-link-exact-active { color: var(--accent); border-block-end-color: var(--accent); }
+.wrap { max-inline-size: 960px; margin-inline: auto; padding-inline: 16px; padding-block: 32px 64px; }
+h1 { font-size: clamp(26px, 5vw, 36px); line-height: 1.3; }
+.lead { font-size: 19px; color: var(--muted); }
+code { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; }

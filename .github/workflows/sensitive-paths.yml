@@ -1,0 +1,41 @@
+name: المسارات الحسّاسة
+
+# يوسم الطلب الذي يمسّ مسارًا حسّاسًا (من قائمة فرع الأساس) بوسم مراجعة أمنية. لا يحجب بنفسه؛ الحجب في merge_gate.py.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: فحص ووسم
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          python3 - <<'PY'
+          import fnmatch, json, os, subprocess
+          base, pr = os.environ["BASE"], os.environ["PR"]
+          rules = json.loads(subprocess.check_output(["git", "show", f"origin/{base}:security/sensitive_paths.json"], text=True))
+          changed = subprocess.check_output(["git", "diff", "--name-only", f"origin/{base}...HEAD"], text=True).split()
+          hits = {cat: [p for p in changed if any(fnmatch.fnmatch(p, g) for g in globs)]
+                  for cat, globs in rules["mandatory_review_when_diff_touches"].items()}
+          hits = {k: v for k, v in hits.items() if v}
+          if hits:
+              body = "مراجعة أمنية إلزامية — مسارات حسّاسة:\n" + "\n".join(f"- {k}: " + ", ".join(v) for k, v in hits.items())
+              subprocess.run(["gh", "pr", "edit", pr, "--add-label", "مراجعة-أمنية"], check=False)
+              subprocess.run(["gh", "pr", "comment", pr, "--body", body], check=True)
+              print(body)
+          else:
+              print("لا مسارات حسّاسة")
+          PY
