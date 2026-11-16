@@ -10,7 +10,7 @@ from ninja.security import django_auth
 from ninja.utils import check_csrf
 
 from . import selectors, services
-from .auth import request_id
+from .auth import client_ip, request_id, staff_auth
 
 # الوثائق ومخطط OpenAPI يكشفان كل المسارات والمخططات: للمشرفين فقط، وغيرهم يُحوَّل إلى دخول لوحة الإدارة.
 api = NinjaAPI(title="مسك", version="1.0", docs_url="/docs/", docs_decorator=staff_member_required)
@@ -44,6 +44,14 @@ class PingOut(Schema):
     site: str
 
 
+class ClientAddressOut(Schema):
+    remote_addr: str
+    x_forwarded_for: str
+    x_real_ip: str
+    trusted_proxy_count: int
+    client_ip: str
+
+
 @api.get("/ping", response=PingOut)
 def ping(request: HttpRequest):
     from django.conf import settings
@@ -58,6 +66,23 @@ def _me(user) -> dict:
 @api.get("/me", response=MeOut, auth=django_auth)
 def me(request: HttpRequest):
     return _me(request.user)
+
+
+@api.get("/diagnostics/client-address", response=ClientAddressOut, auth=staff_auth)
+def client_address(request: HttpRequest):
+    """ما يصل التطبيق من عنوان الطالب نفسه: للتحقق من أن `TRUSTED_PROXY_COUNT` يطابق وكيل النشر.
+
+    العنوان المحسوب `client_ip` هو ما يُقفل عليه الدخول؛ يجب أن يساوي عنوان المتصفح العام.
+    """
+    from django.conf import settings
+
+    return {
+        "remote_addr": request.META.get("REMOTE_ADDR", ""),
+        "x_forwarded_for": request.META.get("HTTP_X_FORWARDED_FOR", ""),
+        "x_real_ip": request.META.get("HTTP_X_REAL_IP", ""),
+        "trusted_proxy_count": settings.TRUSTED_PROXY_COUNT,
+        "client_ip": client_ip(request) or "",
+    }
 
 
 @api.post("/auth/login", response=MeOut)

@@ -237,3 +237,30 @@ def test_audit_limit_is_validated_and_capped(client, staff_user):
     assert client.get("/api/audit?limit=0").status_code == 422
     assert client.get("/api/audit?limit=1").status_code == 200
     assert client.get("/api/audit?limit=100000").status_code == 200
+
+
+@pytest.mark.django_db
+def test_client_address_diagnostics_is_staff_only(client, staff_user, django_user_model, settings):
+    path = "/api/diagnostics/client-address"
+    assert client.get(path).status_code == 401
+    django_user_model.objects.create_user("plain", password="x" * 12)
+    client.login(username="plain", password="x" * 12)
+    assert client.get(path).status_code == 401
+
+    client.force_login(staff_user)
+    settings.TRUSTED_PROXY_COUNT = 1
+    seen = client.get(
+        path,
+        REMOTE_ADDR="10.0.0.1",
+        HTTP_X_FORWARDED_FOR="1.1.1.1, 203.0.113.9",
+        HTTP_X_REAL_IP="203.0.113.9",
+    )
+    assert seen.json() == {
+        "remote_addr": "10.0.0.1",
+        "x_forwarded_for": "1.1.1.1, 203.0.113.9",
+        "x_real_ip": "203.0.113.9",
+        "trusted_proxy_count": 1,
+        "client_ip": "203.0.113.9",
+    }
+    bare = client.get(path, REMOTE_ADDR="10.0.0.1").json()
+    assert (bare["x_forwarded_for"], bare["x_real_ip"], bare["client_ip"]) == ("", "", "10.0.0.1")
