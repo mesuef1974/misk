@@ -1,0 +1,50 @@
+[project]
+name = "misk"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+exclude = [".venv", "node_modules", "samples", "build", "frontend", "frontend_dist", "staticfiles", "**/migrations/*", ".worktrees"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "S", "DJ", "N"]
+ignore = ["E501", "S101", "S105", "S106", "S603", "S607", "DJ001", "N806"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B"]
+"conftest.py" = ["S"]
+"config/settings/*.py" = ["F403", "F405", "E402"]
+"scripts/**" = ["S", "B"]
+"automation/**" = ["S", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "config", "automation"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.testing"
+python_files = ["test_*.py"]
+addopts = ["--tb=short", "--strict-markers", "--reuse-db"]
+norecursedirs = [".*", "node_modules", "samples", "build", "frontend", "frontend_dist", "staticfiles", ".worktrees"]
+markers = ["slow: اختبارات بطيئة", "integration: تكامل"]
+
+[tool.coverage.run]
+source = ["apps", "config"]
+omit = ["*/migrations/*", "*/tests/*", "config/wsgi.py", "config/asgi.py", "config/settings/development.py"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main"]
+ignore_missing_imports = true
+exclude = ["migrations", "frontend", ".worktrees"]
+
+[tool.django-stubs]
+django_settings_module = "config.settings.testing"

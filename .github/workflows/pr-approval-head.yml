@@ -1,0 +1,27 @@
+name: سطر الاعتماد يطابق الرأس
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+
+concurrency:
+  group: pr-approval-head-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  approval-head:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # السكربت من فرع الأساس لا من رأس الطلب، وإلا عدّله طلب ليتجاوزه.
+          ref: ${{ github.event.pull_request.base.ref }}
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/pr_approval_head_check.py "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}"

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "purpose": "مسارات تلزمها مراجعة بشرية قبل الدمج، ومسارات محظورة على الدمج الآلي مهما اخضرّت الفحوص. تُقرأ من فرع الأساس لا من رأس الطلب.",
+  "forbidden_for_auto_merge": [
+    "**/migrations/*",
+    "config/settings/*",
+    "**/permissions*",
+    "**/rbac*",
+    "**/auth*",
+    "**/crypto*",
+    "**/*upload*",
+    "**/*export*",
+    "docker-compose*.yml"
+  ],
+  "mandatory_review_when_diff_touches": {
+    "authorization_identity": ["**/permissions*", "**/rbac*", "**/auth*", "config/settings/*"],
+    "data_and_privacy": ["**/crypto*", "**/*export*", "**/*import*", "**/*upload*"],
+    "deploy_and_ci": [".github/**", "Dockerfile", "railway.toml", "scripts/railway-*.sh", "scripts/*gate*.py", "scripts/approval.py"]
+  },
+  "mandatory_review_when_diff_content_matches": {
+    "secrets_like": ["(?i)(secret|password|api[_-]?key|token)\\s*[=:]\\s*['\"][^'\"]{8,}"],
+    "unsafe_django": ["mark_safe\\(", "\\.extra\\(", "RawSQL\\(", "csrf_exempt"]
+  }
+}
