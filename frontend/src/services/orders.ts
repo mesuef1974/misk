@@ -17,6 +17,7 @@ export interface Order {
   customer_name: string;
   status: string;
   occasion_date: string | null;
+  notes: string;
   total: string;
   items: OrderItem[];
 }
@@ -41,6 +42,7 @@ export interface OrderDraft {
 
 export const ordersService = {
   list: () => api.get<Order[]>("/api/orders"),
+  get: (orderId: number) => api.get<Order>(`/api/orders/${orderId}`),
   create: (draft: OrderDraft) => api.post<Order>("/api/orders", draft),
   transition: (orderId: number, toStatus: string) =>
     api.post<Order>(`/api/orders/${orderId}/transition`, { to_status: toStatus }),

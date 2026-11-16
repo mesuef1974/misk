@@ -1,9 +1,33 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { useAppStore } from "@/stores/app";
+import { useOrdersStore } from "@/stores/orders";
+import { useSessionStore } from "@/stores/session";
 
 const store = useAppStore();
-onMounted(() => store.loadPing());
+const session = useSessionStore();
+const router = useRouter();
+const leaving = ref(false);
+
+onMounted(() => {
+  store.loadPing();
+  session.ensureChecked();
+});
+
+async function logout(): Promise<void> {
+  leaving.value = true;
+  try {
+    await session.logout();
+    // بيانات الطلبات لا تبقى في الذاكرة بعد الخروج.
+    useOrdersStore().clear();
+    await router.push({ name: "login" });
+  } catch {
+    // تعذّر الوصول إلى الخادم: الجلسة ما زالت قائمة والزر يبقى ظاهرًا لإعادة المحاولة.
+  } finally {
+    leaving.value = false;
+  }
+}
 </script>
 
 <template>
@@ -14,6 +38,11 @@ onMounted(() => store.loadPing());
         <RouterLink to="/">الرئيسية</RouterLink>
         <RouterLink to="/orders">الطلبات</RouterLink>
         <RouterLink to="/about">عن المنصة</RouterLink>
+        <template v-if="session.user">
+          <span class="who">{{ session.user.username }}</span>
+          <button type="button" class="btn" :disabled="leaving" @click="logout">خروج</button>
+        </template>
+        <RouterLink v-else-if="session.checked" to="/login">دخول</RouterLink>
       </nav>
     </div>
   </header>
@@ -21,3 +50,7 @@ onMounted(() => store.loadPing());
     <RouterView />
   </main>
 </template>
+
+<style scoped>
+.who { color: var(--muted); font-size: 15px; }
+</style>

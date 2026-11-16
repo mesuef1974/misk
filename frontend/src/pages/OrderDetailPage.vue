@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { errorMessage } from "@/api/client";
 import OrderStatusBadge from "@/components/OrderStatusBadge.vue";
 import {
@@ -22,6 +22,8 @@ const catalog = useCatalogStore();
 const busy = ref(false);
 const actionError = ref("");
 const confirmingCancel = ref(false);
+const settled = ref(false);
+const lookupError = ref("");
 
 const order = computed(() => orders.byId(props.orderId));
 const actions = computed(() => (order.value ? nextStatuses(order.value.status) : []));
@@ -52,7 +54,21 @@ function display(value: ParamValue): string {
   return String(value);
 }
 
-onMounted(() => Promise.all([orders.ensureLoaded(), catalog.ensureLoaded()]));
+/** الطلب من المخزن إن كان فيه (جاء من القائمة أو أُنشئ للتو)، وإلا يُجلب وحده بلا تحميل القائمة كلها. */
+async function lookup(): Promise<void> {
+  lookupError.value = "";
+  settled.value = false;
+  try {
+    if (!order.value) await orders.fetchOne(props.orderId);
+  } catch (error) {
+    lookupError.value = errorMessage(error);
+  } finally {
+    settled.value = true;
+  }
+}
+
+onMounted(() => Promise.all([lookup(), catalog.ensureLoaded()]));
+watch(() => props.orderId, lookup);
 
 async function move(toStatus: OrderStatus): Promise<void> {
   // الإلغاء لا رجعة فيه: الضغطة الأولى تطلب التأكيد فقط.
@@ -79,11 +95,11 @@ async function move(toStatus: OrderStatus): Promise<void> {
     <RouterLink class="btn" :to="{ name: 'orders' }">رجوع للطلبات</RouterLink>
   </div>
 
-  <div v-if="orders.loadError" class="notice" role="alert">
-    {{ orders.loadError }}
-    <button type="button" class="btn retry" @click="orders.load()">إعادة المحاولة</button>
+  <div v-if="lookupError" class="notice" role="alert">
+    {{ lookupError }}
+    <button type="button" class="btn retry" @click="lookup()">إعادة المحاولة</button>
   </div>
-  <p v-else-if="!orders.loaded" class="muted" role="status">يحمّل الطلب…</p>
+  <p v-else-if="!order && !settled" class="muted" role="status">يحمّل الطلب…</p>
   <p v-else-if="!order" class="panel muted">لا طلب بهذا الرقم.</p>
 
   <template v-else>
@@ -104,6 +120,11 @@ async function move(toStatus: OrderStatus): Promise<void> {
         <span class="muted">المجموع</span>
         <strong class="num">{{ formatMoney(order.total) }}</strong>
       </div>
+    </section>
+
+    <section v-if="order.notes" class="panel order-notes">
+      <span class="muted">ملاحظات</span>
+      <p>{{ order.notes }}</p>
     </section>
 
     <h2>البنود</h2>
@@ -150,6 +171,9 @@ async function move(toStatus: OrderStatus): Promise<void> {
 .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px 24px; }
 .summary > div { display: flex; flex-direction: column; align-items: start; gap: 2px; }
 .summary .muted { font-size: 14px; }
+.order-notes { margin-block-start: 8px; }
+.order-notes .muted { font-size: 14px; }
+.order-notes p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 h2 { font-size: 20px; margin-block: 24px 12px; }
 .lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .line { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; }

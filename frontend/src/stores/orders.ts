@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
-import { errorMessage } from "@/api/client";
+import { ApiError, errorMessage } from "@/api/client";
 import { ordersService, type Order, type OrderDraft } from "@/services/orders";
 
 export const useOrdersStore = defineStore("orders", () => {
@@ -44,6 +44,22 @@ export const useOrdersStore = defineStore("orders", () => {
     if (!loaded.value && !loading.value) await load();
   }
 
+  /** طلب واحد من الخادم، للرابط المباشر إلى طلب ليس في القائمة. undefined حين لا طلب بهذا الرقم. */
+  async function fetchOne(orderId: number): Promise<Order | undefined> {
+    try {
+      return upsert(await ordersService.get(orderId));
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return undefined;
+      throw error;
+    }
+  }
+
+  function clear(): void {
+    orders.value = [];
+    loaded.value = false;
+    loadError.value = "";
+  }
+
   // الكتابة ترمي الخطأ للصفحة لتعرضه بجانب الإجراء الذي سبّبه.
   async function create(draft: OrderDraft): Promise<Order> {
     return upsert(await ordersService.create(draft));
@@ -53,5 +69,18 @@ export const useOrdersStore = defineStore("orders", () => {
     return upsert(await ordersService.transition(orderId, toStatus));
   }
 
-  return { orders, loading, loaded, loadError, countByStatus, byId, load, ensureLoaded, create, transition };
+  return {
+    orders,
+    loading,
+    loaded,
+    loadError,
+    countByStatus,
+    byId,
+    load,
+    ensureLoaded,
+    fetchOne,
+    clear,
+    create,
+    transition,
+  };
 });

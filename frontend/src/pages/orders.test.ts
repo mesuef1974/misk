@@ -11,7 +11,7 @@ import OrderNewPage from "./OrderNewPage.vue";
 import OrdersPage from "./OrdersPage.vue";
 
 vi.mock("@/services/orders", () => ({
-  ordersService: { list: vi.fn(), create: vi.fn(), transition: vi.fn() },
+  ordersService: { list: vi.fn(), get: vi.fn(), create: vi.fn(), transition: vi.fn() },
 }));
 vi.mock("@/services/catalog", () => ({
   catalogService: { materials: vi.fn(), templates: vi.fn() },
@@ -35,6 +35,7 @@ function order(overrides: Partial<Order> = {}): Order {
     customer_name: "أم سارة",
     status: "draft",
     occasion_date: "2026-12-01",
+    notes: "",
     total: "50.00",
     items: [
       { id: 10, template_slug: "card", material_id: 7, params: { name: "سارة" }, quantity: 2, unit_price: "25.00" },
@@ -57,6 +58,7 @@ beforeEach(() => {
   setActivePinia(createPinia());
   router = createRouter({ history: createMemoryHistory(), routes });
   vi.mocked(ordersService.list).mockReset().mockResolvedValue([order(), order({ id: 2, status: "ready" })]);
+  vi.mocked(ordersService.get).mockReset().mockResolvedValue(order());
   vi.mocked(ordersService.create).mockReset();
   vi.mocked(ordersService.transition).mockReset();
   vi.mocked(catalogService.materials).mockReset().mockResolvedValue(materials);
@@ -100,6 +102,31 @@ describe("تفاصيل الطلب", () => {
     expect(page.text()).toContain("جلد نباتي");
     expect(page.text()).toContain("الاسم");
     expect(page.findAll(".actions .btn").map((button) => button.text())).toEqual(["تأكيد الطلب", "إلغاء الطلب"]);
+    expect(page.find(".order-notes").exists()).toBe(false);
+  });
+
+  it("تجلب الطلب وحده من الرابط المباشر وتعرض ملاحظاته", async () => {
+    vi.mocked(ordersService.get).mockResolvedValue(order({ id: 7, notes: "تغليف هدية" }));
+    const page = await show(OrderDetailPage, "/orders/7", { orderId: 7 });
+    expect(ordersService.get).toHaveBeenCalledWith(7);
+    expect(ordersService.list).not.toHaveBeenCalled();
+    expect(page.get(".order-notes").text()).toContain("تغليف هدية");
+  });
+
+  it("لا تجلب طلبًا موجودًا في المخزن", async () => {
+    useOrdersStore().orders = [order()];
+    const page = await show(OrderDetailPage, "/orders/1", { orderId: 1 });
+    expect(ordersService.get).not.toHaveBeenCalled();
+    expect(page.text()).toContain("بطاقة مقوّسة");
+  });
+
+  it("تعرض خطأ الجلب وتعيد المحاولة", async () => {
+    vi.mocked(ordersService.get).mockRejectedValueOnce(new ApiError(0, "تعذّر الاتصال بالخادم"));
+    const page = await show(OrderDetailPage, "/orders/1", { orderId: 1 });
+    expect(page.get('[role="alert"]').text()).toContain("تعذّر الاتصال بالخادم");
+    await page.get(".retry").trigger("click");
+    await flushPromises();
+    expect(page.text()).toContain("بطاقة مقوّسة");
   });
 
   it("تنقل الحالة وتعرض رفض الخادم", async () => {
@@ -134,6 +161,7 @@ describe("تفاصيل الطلب", () => {
   });
 
   it("تقول إن الطلب غير موجود", async () => {
+    vi.mocked(ordersService.get).mockRejectedValue(new ApiError(404, "الطلب غير موجود"));
     expect((await show(OrderDetailPage, "/orders/99", { orderId: 99 })).text()).toContain("لا طلب بهذا الرقم");
   });
 });

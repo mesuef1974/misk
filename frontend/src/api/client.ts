@@ -1,4 +1,4 @@
-// عميل fetch صغير: جلسة Django (كوكي HttpOnly) + CSRF من <meta>. لا توكنات في localStorage.
+// عميل fetch صغير: جلسة Django (كوكي HttpOnly) + CSRF من كوكي csrftoken. لا توكنات في localStorage.
 
 /** خطأ من الخادم أو من الشبكة. `status` صفر حين لا يصل الطلب أصلًا. */
 export class ApiError extends Error {
@@ -16,9 +16,13 @@ const FALLBACK: Record<number, string> = {
   401: "يلزم تسجيل الدخول بحساب مشرف",
   403: "لا صلاحية لهذا الإجراء",
   404: "غير موجود",
+  429: "محاولات كثيرة؛ حاول بعد قليل",
 };
 
+/** الكوكي أولًا: Django يبدّل الرمز عند تسجيل الدخول، فقيمة <meta> التي حُمّلت مع الصفحة تبطل بعده. */
 function csrfToken(): string {
+  const cookie = document.cookie.split("; ").find((part) => part.startsWith("csrftoken="));
+  if (cookie) return decodeURIComponent(cookie.slice("csrftoken=".length));
   return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? "";
 }
 
@@ -60,8 +64,9 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     throw new ApiError(0, FALLBACK[0]);
   }
   if (!res.ok) {
-    // 401 من Ninja نصّه «Unauthorized»؛ رسالتنا العربية أوضح للمستخدم.
-    const detail = res.status === 401 ? "" : await serverDetail(res);
+    // 401 من Ninja نصّه «Unauthorized»؛ رسالتنا العربية أوضح. رسالة رفض تسجيل الدخول عربية فتُنقل.
+    const raw = await serverDetail(res);
+    const detail = raw === "Unauthorized" ? "" : raw;
     throw new ApiError(res.status, detail || FALLBACK[res.status] || `تعذّر تنفيذ الطلب (${res.status})`);
   }
   return (await res.json()) as T;
