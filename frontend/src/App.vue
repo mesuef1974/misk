@@ -12,6 +12,7 @@ onMounted(() => store.loadPing());
       <RouterLink class="brand" to="/">{{ store.siteTitle }}</RouterLink>
       <nav>
         <RouterLink to="/">الرئيسية</RouterLink>
+        <RouterLink to="/orders">الطلبات</RouterLink>
         <RouterLink to="/about">عن المنصة</RouterLink>
       </nav>
     </div>
