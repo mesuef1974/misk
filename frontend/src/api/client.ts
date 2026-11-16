@@ -47,7 +47,12 @@ async function serverDetail(res: Response): Promise<string> {
   return "";
 }
 
-async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+async function request<T>(
+  method: string,
+  url: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, {
@@ -57,6 +62,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
         Accept: "application/json",
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
         ...(method !== "GET" ? { "X-CSRFToken": csrfToken() } : {}),
+        ...headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
@@ -78,7 +84,9 @@ export function errorMessage(error: unknown): string {
 
 export const api = {
   get: <T>(url: string) => request<T>("GET", url),
-  post: <T>(url: string, body: unknown) => request<T>("POST", url, body),
+  /** `headers` لترويسات العملية نفسها، مثل X-Request-ID لمنع التسجيل المكرر. */
+  post: <T>(url: string, body: unknown, headers?: Record<string, string>) =>
+    request<T>("POST", url, body, headers),
   put: <T>(url: string, body: unknown) => request<T>("PUT", url, body),
   del: <T>(url: string) => request<T>("DELETE", url),
 };
