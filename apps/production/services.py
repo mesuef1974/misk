@@ -96,11 +96,10 @@ def release_order(*, order_id: int, actor=None) -> int:
     اللوح الذي يفرغ يُحذف إن لم يُشغَّل قط، ويصير «تالفًا» إن كان عليه تشغيل فاشل (سجله محميّ ومادته استُهلكت).
     idempotent: الاستدعاء الثاني لا يجد قطعًا فلا يكتب شيئًا.
     """
+    # استعلام فرعي لا join مع distinct: PostgreSQL يرفض FOR UPDATE مع DISTINCT.
+    on_order = Placement.objects.filter(order_item__order_id=order_id).values("sheet_id")
     sheets = list(
-        Sheet.objects.select_for_update()
-        .filter(status=Sheet.Status.PLANNED, placements__order_item__order_id=order_id)
-        .distinct()
-        .order_by("id")
+        Sheet.objects.select_for_update().filter(status=Sheet.Status.PLANNED, pk__in=on_order).order_by("id")
     )
     if not sheets:
         return 0
