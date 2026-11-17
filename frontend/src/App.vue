@@ -1,21 +1,26 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAppStore } from "@/stores/app";
 import { useCatalogStore } from "@/stores/catalog";
 import { useOrdersStore } from "@/stores/orders";
 import { useProductionStore } from "@/stores/production";
+import { THEME_LABELS } from "@/domain/theme";
 import { useSessionStore } from "@/stores/session";
+import { useThemeStore } from "@/stores/theme";
 
 const store = useAppStore();
 const session = useSessionStore();
+const theme = useThemeStore();
 const router = useRouter();
 const leaving = ref(false);
 
 onMounted(() => {
   store.loadPing();
   session.ensureChecked();
+  window.addEventListener("storage", theme.onStorage);
 });
+onBeforeUnmount(() => window.removeEventListener("storage", theme.onStorage));
 
 async function logout(): Promise<void> {
   leaving.value = true;
@@ -45,6 +50,10 @@ async function logout(): Promise<void> {
         <RouterLink to="/materials">المواد</RouterLink>
         <RouterLink to="/templates">القوالب</RouterLink>
         <RouterLink to="/about">عن المنصة</RouterLink>
+        <!-- المفتاح نفسه يحكم لوحة Django: الاختيار محفوظ في المتصفح بالمفتاح الذي تقرؤه اللوحة. -->
+        <button type="button" class="btn theme-switch" :aria-label="`وضع الألوان: ${THEME_LABELS[theme.theme]}. اضغط للتبديل`" @click="theme.cycle">
+          الوضع: {{ THEME_LABELS[theme.theme] }}
+        </button>
         <!-- لوحة Django صفحة يخدمها الخادم لا مسار في الواجهة: رابط عادي بتحميل كامل. -->
         <a v-if="session.user?.admin_url" :href="session.user.admin_url">لوحة الإدارة</a>
         <template v-if="session.user">
@@ -62,4 +71,5 @@ async function logout(): Promise<void> {
 
 <style scoped>
 .who { color: var(--muted); font-size: 15px; }
+.theme-switch { padding-inline: 12px; font-size: 15px; color: var(--muted); }
 </style>

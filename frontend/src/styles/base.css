@@ -1,8 +1,9 @@
 /* RTL-first: خصائص منطقية فقط (inline/block)، لا left/right. */
 @import "../static/brand/tokens.css";
-/* الألوان في static/brand/tokens.css بقيمتين؛ الداكن يتبع النظام ما لم يُفرض الفاتح بـ data-theme. */
+/* الألوان في static/brand/tokens.css بقيمتين؛ الوضع يتبع النظام ما لم يفرضه مفتاح الوضع بـ data-theme. */
 :root { color-scheme: light dark; }
 :root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
 body {
   margin: 0;

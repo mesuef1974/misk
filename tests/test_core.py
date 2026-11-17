@@ -267,3 +267,12 @@ def test_admin_inherits_platform_identity(client, staff_user, settings):
     # الملفان موجودان فعلًا حيث يجمعهما collectstatic.
     assert finders.find("brand/tokens.css")
     assert finders.find("core/admin-theme.css")
+
+
+def test_spa_applies_stored_theme_before_paint(client):
+    from django.contrib.staticfiles import finders
+
+    # سكربت الوضع ملف ثابت يسبق حزم الواجهة في <head>، فيُضبط data-theme قبل الرسم.
+    page = client.get("/").content.decode()
+    assert page.index("/static/core/theme-init.js") < page.index("src/main.ts")
+    assert finders.find("core/theme-init.js")
