@@ -187,3 +187,17 @@ describe("رابط لوحة الإدارة في القائمة", () => {
     expect((await nav({ ...staff, is_staff: false, admin_url: null })).exists()).toBe(false);
   });
 });
+
+describe("شعار الشريط العلوي", () => {
+  it("رابط الرئيسية يعرض الشعار ويحمل اسمًا مقروءًا", async () => {
+    vi.mocked(sessionService.me).mockResolvedValue(null);
+    const { default: App } = await import("@/App.vue");
+    const { useAppStore } = await import("@/stores/app");
+    const app = mount(App, { global: { plugins: [router] } });
+    useAppStore().siteTitle = "مسك";
+    await flushPromises();
+    const brand = app.find("a.brand");
+    expect(brand.find("svg.brand-lockup").exists()).toBe(true);
+    expect(brand.attributes("aria-label")).toBe("مسك");
+  });
+});

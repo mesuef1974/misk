@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import BrandLockup from "@/components/BrandLockup.vue";
 import { useAppStore } from "@/stores/app";
 import { useCatalogStore } from "@/stores/catalog";
 import { useOrdersStore } from "@/stores/orders";
@@ -42,7 +43,8 @@ async function logout(): Promise<void> {
 <template>
   <header class="topbar">
     <div class="inner">
-      <RouterLink class="brand" to="/">{{ store.siteTitle }}</RouterLink>
+      <!-- الشعار مسارات بلا نص حي: الاسم المقروء على الرابط نفسه. -->
+      <RouterLink class="brand" to="/" :aria-label="store.siteTitle"><BrandLockup :height="34" /></RouterLink>
       <nav>
         <RouterLink to="/">الرئيسية</RouterLink>
         <RouterLink to="/orders">الطلبات</RouterLink>
@@ -70,6 +72,7 @@ async function logout(): Promise<void> {
 </template>
 
 <style scoped>
+.brand { display: flex; align-items: center; padding-block: 8px; }
 .who { color: var(--muted); font-size: 15px; }
 .theme-switch { padding-inline: 12px; font-size: 15px; color: var(--muted); }
 </style>
