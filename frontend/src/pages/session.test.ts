@@ -19,7 +19,7 @@ vi.mock("@/services/catalog", () => ({
   catalogService: { materials: vi.fn().mockResolvedValue([]), templates: vi.fn().mockResolvedValue([]) },
 }));
 
-const staff: SessionUser = { id: 1, username: "staff", is_staff: true };
+const staff: SessionUser = { id: 1, username: "staff", is_staff: true, admin_url: "/admin/" };
 
 let router: Router;
 
@@ -57,7 +57,7 @@ describe("حارس المسارات", () => {
   });
 
   it("يرفض غير المشرف", async () => {
-    vi.mocked(sessionService.me).mockResolvedValue({ ...staff, is_staff: false });
+    vi.mocked(sessionService.me).mockResolvedValue({ ...staff, is_staff: false, admin_url: null });
     await router.push("/orders");
     expect(router.currentRoute.value.name).toBe("login");
   });
@@ -133,5 +133,26 @@ describe("مخزن الجلسة", () => {
     await session.logout();
     expect(session.user).toBeNull();
     expect(session.isStaff).toBe(false);
+  });
+});
+
+describe("رابط لوحة الإدارة في القائمة", () => {
+  async function nav(user: SessionUser | null) {
+    vi.mocked(sessionService.me).mockResolvedValue(user);
+    const { default: App } = await import("@/App.vue");
+    const app = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
+    return app.find('nav a[href="/admin/"]');
+  }
+
+  it("يظهر للمشرف بالمسار الذي يعطيه الخادم", async () => {
+    const link = await nav(staff);
+    expect(link.exists()).toBe(true);
+    expect(link.text()).toBe("لوحة الإدارة");
+  });
+
+  it("يغيب عن الزائر وعن من لا مسار له", async () => {
+    expect((await nav(null)).exists()).toBe(false);
+    expect((await nav({ ...staff, is_staff: false, admin_url: null })).exists()).toBe(false);
   });
 });

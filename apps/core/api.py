@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpRequest
+from django.urls import reverse
 from ninja import Field, NinjaAPI, Query, Schema
 from ninja.errors import HttpError
 from ninja.security import django_auth
@@ -20,6 +21,8 @@ class MeOut(Schema):
     id: int
     username: str
     is_staff: bool
+    # مسار لوحة الإدارة يُضبط بـ ADMIN_URL وقد يكون غير المعتاد: لا يُكشف إلا للمشرف.
+    admin_url: str | None
 
 
 class LoginIn(Schema):
@@ -52,7 +55,12 @@ def ping(request: HttpRequest):
 
 
 def _me(user) -> dict:
-    return {"id": user.pk, "username": user.get_username(), "is_staff": user.is_staff}
+    return {
+        "id": user.pk,
+        "username": user.get_username(),
+        "is_staff": user.is_staff,
+        "admin_url": reverse("admin:index") if user.is_staff else None,
+    }
 
 
 @api.get("/me", response=MeOut, auth=django_auth)
