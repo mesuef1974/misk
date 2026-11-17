@@ -12,7 +12,7 @@ export class ApiError extends Error {
 }
 
 const FALLBACK: Record<number, string> = {
-  0: "تعذّر الاتصال بالخادم",
+  0: "تعذّر الاتصال. تحقّق من الشبكة ثم أعد المحاولة",
   401: "يلزم تسجيل الدخول بحساب مشرف",
   403: "لا صلاحية لهذا الإجراء",
   404: "غير موجود",
@@ -84,7 +84,7 @@ async function request<T>(
     // 401 من Ninja نصّه «Unauthorized»؛ رسالتنا العربية أوضح. رسالة رفض تسجيل الدخول عربية فتُنقل.
     const raw = await serverDetail(res);
     const detail = raw === "Unauthorized" ? "" : raw;
-    throw new ApiError(res.status, detail || FALLBACK[res.status] || `تعذّر تنفيذ الطلب (${res.status})`);
+    throw new ApiError(res.status, detail || FALLBACK[res.status] || `تعذّر إتمام العملية (${res.status})`);
   }
   return (await res.json()) as T;
 }

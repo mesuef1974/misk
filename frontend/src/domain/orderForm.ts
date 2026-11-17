@@ -53,7 +53,7 @@ export function buildDraft(
 ): { draft: OrderDraft | null; errors: FormErrors } {
   const errors: FormErrors = { items: {} };
   const customerName = form.customerName.split(/\s+/).filter(Boolean).join(" ");
-  if (!customerName) errors.customerName = "اسم الزبون مطلوب";
+  if (!customerName) errors.customerName = "اسم العميل مطلوب";
 
   const items: OrderItemDraft[] = [];
   for (const item of form.items) {

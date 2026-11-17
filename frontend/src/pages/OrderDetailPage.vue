@@ -105,7 +105,7 @@ async function move(toStatus: OrderStatus): Promise<void> {
   <template v-else>
     <section class="panel summary">
       <div>
-        <span class="muted">الزبون</span>
+        <span class="muted">العميل</span>
         <strong>{{ order.customer_name }}</strong>
       </div>
       <div>
@@ -171,11 +171,10 @@ async function move(toStatus: OrderStatus): Promise<void> {
 .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px 24px; }
 .summary > div { display: flex; flex-direction: column; align-items: start; gap: 2px; }
 .summary .muted { font-size: 14px; }
-.order-notes { margin-block-start: 8px; }
 .order-notes .muted { font-size: 14px; }
 .order-notes p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-h2 { font-size: 20px; margin-block: 24px 12px; }
-.lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+h2 { font-size: 20px; margin: 0; }
+.lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .line { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; }
 .what { display: flex; flex-direction: column; flex: 1 1 260px; min-inline-size: 0; line-height: 1.6; }
 .price { display: flex; flex-direction: column; align-items: end; line-height: 1.6; }
@@ -183,7 +182,6 @@ dl { display: grid; grid-template-columns: auto 1fr; gap: 0 12px; margin-block: 
 dt { color: var(--muted); }
 dd { margin: 0; overflow-wrap: anywhere; }
 .num { font-variant-numeric: tabular-nums; }
-.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block-start: 20px; }
-.notice { margin-block-start: 16px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .retry { margin-inline-start: 12px; }
 </style>
