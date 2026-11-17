@@ -11,10 +11,19 @@ admin.site.index_title = "لوحة الإدارة"
 
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
-    list_display = ("created_at", "action", "target", "actor")
+    list_display = ("created_at", "action", "target", "actor_name")
     list_filter = ("action",)
     search_fields = ("target", "request_id")
-    readonly_fields = ("created_at", "updated_at", "action", "target", "actor", "payload", "request_id")
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "action",
+        "target",
+        "actor",
+        "actor_name",
+        "payload",
+        "request_id",
+    )
 
     def has_add_permission(self, request):
         return False

@@ -8,7 +8,9 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
 from apps.catalog.models import Calibration, Material
+from apps.core.columns import column_length
 from apps.core.services import record_audit
+from apps.orders import services as order_services
 from apps.orders.models import Order, OrderItem
 
 from . import domain
@@ -17,7 +19,7 @@ from .models import Placement, RunLog, Sheet
 MARGIN_MM = Decimal("5")
 GAP_MM = Decimal("3")
 MAX_DURATION_S = 7 * 24 * 60 * 60
-REQUEST_ID_LENGTH = RunLog._meta.get_field("request_id").max_length
+REQUEST_ID_LENGTH = column_length(RunLog, "request_id")
 PLANNABLE = {Order.Status.CONFIRMED, Order.Status.IN_PRODUCTION}
 
 
@@ -124,6 +126,26 @@ def release_order(*, order_id: int, actor=None) -> int:
     return released
 
 
+@transaction.atomic
+def scrap_sheet(*, sheet_id: int, actor=None) -> Sheet:
+    """يُتلف لوحًا مخطَّطًا (مادة معيبة أو قصّ فاسد) ويرفع قطعه عنه، فيلتقطها التخطيط التالي على لوح جديد.
+
+    اللوح المنفَّذ لا يُتلَف: قطعه قُصّت وسُلّمت لطلباتها. idempotent: اللوح التالف يُعاد كما هو.
+    """
+    sheet = Sheet.objects.select_for_update().get(pk=sheet_id)
+    if sheet.status == Sheet.Status.SCRAPPED:
+        return sheet
+    if sheet.status != Sheet.Status.PLANNED:
+        raise ProductionError(f"اللوح {sheet.pk} ليس مخطَّطًا ({sheet.get_status_display()})")
+    released, _ = Placement.objects.filter(sheet=sheet).delete()
+    sheet.status = Sheet.Status.SCRAPPED
+    sheet.save(update_fields=["status", "updated_at"])
+    record_audit(
+        action="production.scrap", actor=actor, target=f"sheet:{sheet.pk}", payload={"pieces": released}
+    )
+    return sheet
+
+
 def _existing_run(request_id: str, sheet_id: int) -> RunLog | None:
     run = RunLog.objects.filter(request_id=request_id).first()
     if run is not None and run.sheet_id != sheet_id:
@@ -144,6 +166,9 @@ def record_run(
 ) -> RunLog:
     """تسجيل مكرر بالـ request_id نفسه للوح نفسه يعيد السجل الموجود. النجاح يغلق اللوح.
 
+    أول تشغيل (نجح أو فشل) ينقل طلبات اللوح المؤكَّدة إلى «قيد التنفيذ»: العمل عليها بدأ فعلًا.
+    «جاهز» يبقى قرار المشرف: بعد القصّ تجميع وتغليف لا يراهما النظام.
+
     طلبان متزامنان بالمفتاح نفسه: الثاني ينتظر قفل اللوح ثم يجد سجل الأول، وإن سبقه إدراج على لوح
     آخر فقيد التفرّد يرفضه ويُقرأ الموجود؛ لا 500 في الحالين.
     """
@@ -156,6 +181,9 @@ def record_run(
     existing = _existing_run(request_id, sheet_id)
     if existing:
         return existing
+    # الطلبات تُقفل قبل اللوح، بترتيب الإلغاء نفسه (طلب ثم ألواحه)، فلا يتشابك القفلان.
+    on_sheet = Placement.objects.filter(sheet_id=sheet_id).values("order_item__order_id")
+    orders = list(Order.objects.select_for_update().filter(pk__in=on_sheet).order_by("id"))
     sheet = Sheet.objects.select_for_update().select_related("material").get(pk=sheet_id)
     existing = _existing_run(request_id, sheet_id)  # بعد القفل: طلب متزامن ربما سجّل وأغلق اللوح
     if existing:
@@ -203,4 +231,7 @@ def record_run(
     record_audit(
         action="production.run", actor=actor, target=f"sheet:{sheet.pk}", payload={"outcome": outcome}
     )
+    for order in orders:
+        if order.status == Order.Status.CONFIRMED:
+            order_services.transition(order_id=order.pk, to_status=Order.Status.IN_PRODUCTION, actor=actor)
     return run

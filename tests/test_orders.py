@@ -144,8 +144,11 @@ def test_orders_api(client, staff_user, material, name_tag, calibration):
     assert client.post(url, {"to_status": "nope"}, content_type="application/json").status_code == 422
     res = client.post(url, {"to_status": "confirmed"}, content_type="application/json")
     assert res.json()["status"] == "confirmed"
-    assert len(client.get("/api/orders?status=confirmed").json()) == 1
-    assert client.get("/api/orders?status=draft").json() == []
+    confirmed = client.get("/api/orders?status=confirmed").json()
+    assert [row["id"] for row in confirmed["items"]] == [data["id"]]
+    assert (confirmed["count"], confirmed["counts"]) == (1, {"confirmed": 1})
+    drafts = client.get("/api/orders?status=draft").json()
+    assert (drafts["items"], drafts["count"], drafts["counts"]) == ([], 0, {"confirmed": 1})
     assert (
         client.post(
             "/api/orders/999999/transition", {"to_status": "confirmed"}, content_type="application/json"
@@ -267,3 +270,38 @@ def test_create_order_survives_concurrent_duplicate(material, name_tag, monkeypa
     assert len(calls) == 2
     assert (Order.objects.count(), Customer.objects.count(), OrderItem.objects.count()) == (1, 1, 1)
     assert AuditLog.objects.filter(action="orders.create").count() == 1
+
+
+@pytest.mark.django_db
+def test_orders_list_is_paginated(client, staff_user, material, name_tag, django_assert_max_num_queries):
+    """الصفحة تجلب `limit` طلبًا لا الجدول كله، والعدّ للجدول كله، بعدد استعلامات لا يتبع عدد الطلبات."""
+    ids = [_order(material).pk for _ in range(5)]
+    client.force_login(staff_user)
+    with django_assert_max_num_queries(8):
+        first = client.get("/api/orders?limit=2").json()
+    second = client.get("/api/orders?limit=2&offset=2").json()
+    last = client.get("/api/orders?limit=2&offset=4").json()
+    seen = [row["id"] for page in (first, second, last) for row in page["items"]]
+    assert seen == sorted(ids, reverse=True)  # الأحدث أولًا، بلا تكرار ولا إسقاط
+    assert first["count"] == 5 and first["counts"] == {"draft": 5}
+    assert len(client.get("/api/orders").json()["items"]) == 5
+    for bad in ("limit=0", "limit=201", "offset=-1", "limit=x"):
+        assert client.get(f"/api/orders?{bad}").status_code == 422
+
+
+@pytest.mark.django_db
+def test_admin_locks_items_once_order_leaves_draft(rf, material, name_tag, calibration, django_user_model):
+    from django.contrib.admin.sites import site
+
+    from apps.orders.admin import OrderItemInline
+
+    request = rf.get("/")
+    request.user = django_user_model.objects.create_superuser(username="root", password="x" * 12)
+    inline = OrderItemInline(Order, site)
+    order = _order(material)
+    assert inline.has_change_permission(request, order) and inline.has_add_permission(request, order)
+    assert inline.has_delete_permission(request, order)
+    order = services.transition(order_id=order.pk, to_status="confirmed")
+    assert not inline.has_change_permission(request, order)
+    assert not inline.has_add_permission(request, order)
+    assert not inline.has_delete_permission(request, order)

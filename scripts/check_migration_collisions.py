@@ -9,6 +9,7 @@ worktree لكل بطاقة يعني فرعين قد يضيفان 0007_x.py في 
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import re
 import subprocess
@@ -88,7 +89,8 @@ def open_prs() -> dict[str, dict]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    sys.stdout.reconfigure(encoding="utf-8")
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="origin/main")
     args = ap.parse_args(argv)

@@ -61,6 +61,12 @@ export function formatDate(iso: string | null): string {
   return day.format(new Date(year, month - 1, dayOfMonth));
 }
 
+/** تاريخ لحظة ISO (بمنطقتها الزمنية) كما يراه المستخدم محليًّا. */
+export function formatInstant(iso: string): string {
+  const instant = new Date(iso);
+  return Number.isNaN(instant.getTime()) ? "" : day.format(instant);
+}
+
 export function lineTotal(quantity: number, unitPrice: string | number): number {
   return quantity * Number(unitPrice);
 }

@@ -1,5 +1,4 @@
 // الإنتاج: تسميات الحالات، وحسابات اللوح، ونموذج تسجيل التشغيل. منطق خالص يُختبر بلا واجهة.
-import type { Order } from "@/services/orders";
 import type { RunDraft, Sheet } from "@/services/production";
 
 export const SHEET_STATUSES = ["planned", "done", "scrapped"] as const;
@@ -38,6 +37,9 @@ export function formatDuration(seconds: number): string {
 export interface PieceGroup {
   number: number;
   orderItemId: number;
+  orderId: number;
+  customerName: string;
+  templateSlug: string;
   copies: number;
 }
 
@@ -50,32 +52,14 @@ export function groupPlacements(sheet: Sheet): PieceGroup[] {
       groups.set(placement.order_item_id, {
         number: groups.size + 1,
         orderItemId: placement.order_item_id,
+        orderId: placement.order_id,
+        customerName: placement.customer_name,
+        templateSlug: placement.template_slug,
         copies: 1,
       });
     }
   }
   return [...groups.values()];
-}
-
-export interface ItemRef {
-  orderId: number;
-  customerName: string;
-  templateSlug: string;
-}
-
-/** فهرس بنود الطلبات المحمَّلة، لتسمية القطع على اللوح بطلبها وقالبها. */
-export function indexOrderItems(orders: Order[]): Map<number, ItemRef> {
-  const index = new Map<number, ItemRef>();
-  for (const order of orders) {
-    for (const item of order.items) {
-      index.set(item.id, {
-        orderId: order.id,
-        customerName: order.customer_name,
-        templateSlug: item.template_slug,
-      });
-    }
-  }
-  return index;
 }
 
 export interface RunForm {

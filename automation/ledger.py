@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import secrets
 import sys
@@ -84,7 +85,8 @@ def new_card(title: str, body: str, success: str = "") -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    sys.stdout.reconfigure(encoding="utf-8")
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     p_new = sub.add_parser("new")
@@ -113,8 +115,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{args.card} → {args.event}")
     elif args.cmd == "list":
         for c in all_cards():
-            s, f = state(c), first(c)
-            print(f"{c}  {s['event']:<14} {f.get('title', '')}")
+            s, f = state(c) or {}, first(c) or {}
+            print(f"{c}  {s.get('event', ''):<14} {f.get('title', '')}")
     elif args.cmd == "show":
         for e in events(args.card):
             print(json.dumps(e, ensure_ascii=False))

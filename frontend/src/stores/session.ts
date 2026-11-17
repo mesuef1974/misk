@@ -5,6 +5,7 @@ import { sessionService, type SessionUser } from "@/services/session";
 
 export const useSessionStore = defineStore("session", () => {
   const user = ref<SessionUser | null>(null);
+  /** true حين أجاب الخادم عمّن يملك الجلسة. يبقى false إن تعذّر السؤال: غياب الجواب ليس غياب الجلسة. */
   const checked = ref(false);
   let pending: Promise<void> | null = null;
 
@@ -20,8 +21,7 @@ export const useSessionStore = defineStore("session", () => {
         checked.value = true;
       })
       .catch(() => {
-        // تعذّر السؤال (شبكة أو خادم): نعامله كغياب الجلسة ونعيد السؤال في التنقل التالي.
-        user.value = null;
+        // تعذّر السؤال (شبكة أو خادم): لا نعرف حال الجلسة، ونعيد السؤال في التنقل التالي.
       })
       .finally(() => {
         pending = null;
@@ -41,9 +41,14 @@ export const useSessionStore = defineStore("session", () => {
       // 401: الجلسة انتهت أصلًا، والنتيجة المطلوبة تحققت.
       if (!(error instanceof ApiError && error.status === 401)) throw error;
     }
+    expire();
+  }
+
+  /** الخادم قال إن الجلسة انتهت (401 أثناء العمل): لا مستخدم، والجواب معلوم. */
+  function expire(): void {
     user.value = null;
     checked.value = true;
   }
 
-  return { user, checked, isStaff, ensureChecked, login, logout };
+  return { user, checked, isStaff, ensureChecked, login, logout, expire };
 });

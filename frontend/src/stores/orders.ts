@@ -1,19 +1,26 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import { ApiError, errorMessage } from "@/api/client";
+import { appendPage } from "@/api/paging";
 import { ordersService, type Order, type OrderDraft } from "@/services/orders";
 
 export const useOrdersStore = defineStore("orders", () => {
+  /** ما حُمّل من صفحات التصفية الحالية، الأحدث أولًا. */
   const orders = ref<Order[]>([]);
+  /** الحالة التي حُمّلت القائمة بها؛ فارغ = كل الحالات. */
+  const status = ref("");
+  /** كل ما يطابق التصفية في الخادم. */
+  const total = ref(0);
+  /** عدد الطلبات لكل حالة في الخادم كله، لا في ما حُمّل. */
+  const countByStatus = ref<Record<string, number>>({});
   const loading = ref(false);
+  const loadingMore = ref(false);
   const loaded = ref(false);
   const loadError = ref("");
+  let latest = 0;
 
-  const countByStatus = computed(() => {
-    const counts: Record<string, number> = {};
-    for (const order of orders.value) counts[order.status] = (counts[order.status] ?? 0) + 1;
-    return counts;
-  });
+  const totalAll = computed(() => Object.values(countByStatus.value).reduce((sum, count) => sum + count, 0));
+  const hasMore = computed(() => orders.value.length < total.value);
 
   function byId(orderId: number): Order | undefined {
     return orders.value.find((order) => order.id === orderId);
@@ -27,16 +34,41 @@ export const useOrdersStore = defineStore("orders", () => {
     return order;
   }
 
-  async function load(): Promise<void> {
+  /** الصفحة الأولى بتصفية الحالة. رد طلب أقدم يُهمل إن سبقه طلب أحدث (نقرات متتالية على التصفية). */
+  async function load(forStatus = ""): Promise<void> {
+    const ticket = ++latest;
     loading.value = true;
     loadError.value = "";
     try {
-      orders.value = await ordersService.list();
+      const page = await ordersService.list({ status: forStatus });
+      if (ticket !== latest) return;
+      orders.value = page.items;
+      status.value = forStatus;
+      total.value = page.count;
+      countByStatus.value = page.counts;
       loaded.value = true;
     } catch (error) {
-      loadError.value = errorMessage(error);
+      if (ticket === latest) loadError.value = errorMessage(error);
     } finally {
-      loading.value = false;
+      if (ticket === latest) loading.value = false;
+    }
+  }
+
+  async function loadMore(): Promise<void> {
+    if (loadingMore.value || !hasMore.value) return;
+    const ticket = latest;
+    loadingMore.value = true;
+    loadError.value = "";
+    try {
+      const page = await ordersService.list({ status: status.value, offset: orders.value.length });
+      if (ticket !== latest) return;
+      orders.value = appendPage(orders.value, page.items);
+      total.value = page.count;
+      countByStatus.value = page.counts;
+    } catch (error) {
+      if (ticket === latest) loadError.value = errorMessage(error);
+    } finally {
+      loadingMore.value = false;
     }
   }
 
@@ -55,7 +87,11 @@ export const useOrdersStore = defineStore("orders", () => {
   }
 
   function clear(): void {
+    latest += 1;
     orders.value = [];
+    status.value = "";
+    total.value = 0;
+    countByStatus.value = {};
     loaded.value = false;
     loadError.value = "";
   }
@@ -71,12 +107,18 @@ export const useOrdersStore = defineStore("orders", () => {
 
   return {
     orders,
+    status,
+    total,
+    totalAll,
+    hasMore,
     loading,
+    loadingMore,
     loaded,
     loadError,
     countByStatus,
     byId,
     load,
+    loadMore,
     ensureLoaded,
     fetchOne,
     clear,
