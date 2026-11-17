@@ -206,3 +206,50 @@ def test_clean_params_ignores_non_int_bound_in_stored_schema():
     assert domain.clean_params(stored, {"n": 3}) == {"n": 3}
     with pytest.raises(domain.ParamError):
         domain.clean_params(stored, {"n": 10})
+
+
+@pytest.mark.django_db
+def test_seed_catalog_is_idempotent_and_audited():
+    from django.core.management import call_command
+
+    call_command("seed_catalog", "--dry-run")
+    assert not Material.objects.exists()
+    assert not ProductTemplate.objects.exists()
+
+    call_command("seed_catalog")
+    call_command("seed_catalog")
+    assert Material.objects.count() == 4
+    assert ProductTemplate.objects.count() == 5
+    assert not Calibration.objects.exists()
+    assert not Material.objects.exclude(notes="").exists()
+    assert AuditLog.objects.filter(action="catalog.template.upsert").count() == 10
+
+
+@pytest.mark.django_db
+def test_seed_catalog_rejects_bad_file_without_writing(tmp_path):
+    import json
+
+    from django.core.management import CommandError, call_command
+
+    bad = tmp_path / "catalog.json"
+    bad.write_text(
+        json.dumps(
+            {
+                "materials": [{"name": "خشب", "kind": "wood", "thickness_mm": "3.00"}],
+                "templates": [
+                    {
+                        "slug": "x",
+                        "name": "س",
+                        "generator": "g",
+                        "width_mm": "10.0",
+                        "height_mm": "10.0",
+                        "param_schema": [{"name": "a", "type": "nope"}],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(CommandError):
+        call_command("seed_catalog", "--file", str(bad))
+    assert not Material.objects.exists()
