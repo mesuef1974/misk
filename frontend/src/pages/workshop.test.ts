@@ -5,7 +5,7 @@ import { ApiError } from "@/api/client";
 import { routes } from "@/router";
 import { catalogService, type Calibration, type Material, type ProductTemplate } from "@/services/catalog";
 import { ordersService, type Order } from "@/services/orders";
-import { productionService, type Sheet } from "@/services/production";
+import { productionService, type Run, type Sheet } from "@/services/production";
 import { sessionService } from "@/services/session";
 import HomePage from "./HomePage.vue";
 import MaterialsPage from "./MaterialsPage.vue";
@@ -26,7 +26,7 @@ vi.mock("@/services/orders", () => ({
   ordersService: { list: vi.fn(), get: vi.fn(), create: vi.fn(), transition: vi.fn() },
 }));
 vi.mock("@/services/production", () => ({
-  productionService: { sheets: vi.fn(), plan: vi.fn(), recordRun: vi.fn() },
+  productionService: { sheets: vi.fn(), plan: vi.fn(), recordRun: vi.fn(), scrap: vi.fn() },
 }));
 vi.mock("@/services/session", () => ({
   sessionService: { me: vi.fn(), login: vi.fn(), logout: vi.fn() },
@@ -77,6 +77,8 @@ const order: Order = {
   items: [{ id: 10, template_slug: "card", material_id: 7, params: { name: "سارة" }, quantity: 2, unit_price: "25.00" }],
 };
 
+const piece = { order_item_id: 10, order_id: 4, customer_name: "أم سارة", template_slug: "card" };
+
 function sheet(overrides: Partial<Sheet> = {}): Sheet {
   return {
     id: 1,
@@ -85,12 +87,29 @@ function sheet(overrides: Partial<Sheet> = {}): Sheet {
     height_mm: "305.0",
     status: "planned",
     placements: [
-      { order_item_id: 10, copy_index: 0, x_mm: "5.0", y_mm: "5.0", width_mm: "90.0", height_mm: "55.0" },
-      { order_item_id: 10, copy_index: 1, x_mm: "98.0", y_mm: "5.0", width_mm: "90.0", height_mm: "55.0" },
+      { ...piece, copy_index: 0, x_mm: "5.0", y_mm: "5.0", width_mm: "90.0", height_mm: "55.0" },
+      { ...piece, copy_index: 1, x_mm: "98.0", y_mm: "5.0", width_mm: "90.0", height_mm: "55.0" },
     ],
+    runs: [],
     ...overrides,
   };
 }
+
+function sheetsPage(items: Sheet[] = [sheet()], count = items.length) {
+  const counts: Record<string, number> = {};
+  for (const item of items) counts[item.status] = (counts[item.status] ?? 0) + 1;
+  return { items, count, counts };
+}
+
+const okRun: Run = {
+  id: 5,
+  sheet_id: 1,
+  outcome: "ok",
+  duration_s: 200,
+  material_cost: "45.00",
+  notes: "",
+  created_at: "2026-11-16T10:00:00+00:00",
+};
 
 let router: Router;
 
@@ -117,10 +136,11 @@ beforeEach(() => {
   vi.mocked(catalogService.saveMaterial).mockReset();
   vi.mocked(catalogService.saveTemplate).mockReset();
   vi.mocked(catalogService.addCalibration).mockReset();
-  vi.mocked(ordersService.list).mockReset().mockResolvedValue([order]);
-  vi.mocked(productionService.sheets).mockReset().mockResolvedValue([sheet()]);
+  vi.mocked(ordersService.list).mockReset().mockResolvedValue({ items: [order], count: 1, counts: { confirmed: 1 } });
+  vi.mocked(productionService.sheets).mockReset().mockResolvedValue(sheetsPage());
   vi.mocked(productionService.plan).mockReset();
   vi.mocked(productionService.recordRun).mockReset();
+  vi.mocked(productionService.scrap).mockReset();
   vi.mocked(sessionService.me).mockReset().mockResolvedValue({ id: 1, username: "staff", is_staff: true, admin_url: "/admin/" });
 });
 
@@ -239,7 +259,57 @@ describe("صفحة الإنتاج", () => {
     expect(page.findAll("svg .piece")).toHaveLength(2);
     expect(page.get(".legend").text()).toContain("بطاقة مقوّسة — أم سارة");
     expect(page.get(".legend").text()).toContain("× 2");
+    expect(page.get(".legend a").text()).toBe("طلب 4");
     expect(page.get(".head").text()).toContain("جلد نباتي");
+    expect(ordersService.list).not.toHaveBeenCalled(); // أسماء القطع من اللوح نفسه، لا من قائمة الطلبات
+  });
+
+  it("تصفّي من الخادم وتعرض سجل تشغيل اللوح وتحمّل المزيد", async () => {
+    const done = sheet({ id: 3, status: "done", runs: [{ ...okRun, sheet_id: 3, notes: "حافة محترقة قليلًا" }] });
+    vi.mocked(productionService.sheets)
+      .mockResolvedValueOnce({ items: [sheet()], count: 1, counts: { planned: 1, done: 2 } })
+      .mockResolvedValueOnce({ items: [done], count: 2, counts: { planned: 1, done: 2 } })
+      .mockResolvedValueOnce({ items: [sheet({ id: 2, status: "done" })], count: 2, counts: { planned: 1, done: 2 } });
+    const page = await show(ProductionPage, "/production");
+    expect(page.findAll(".chip")[0].text()).toContain("3");
+    expect(page.find(".runs").exists()).toBe(false);
+
+    await page.findAll(".chip").find((chip) => chip.text().startsWith("نُفِّذ"))!.trigger("click");
+    await flushPromises();
+    expect(productionService.sheets).toHaveBeenLastCalledWith({ status: "done" });
+    expect(page.get(".runs").text()).toContain("نجح · 3 د 20 ث · كلفة المادة 45.00 ر.ق");
+    expect(page.get(".runs").text()).toContain("حافة محترقة قليلًا");
+
+    await page.get(".more button").trigger("click");
+    await flushPromises();
+    expect(productionService.sheets).toHaveBeenLastCalledWith({ status: "done", offset: 1 });
+    expect(page.findAll(".sheet-card")).toHaveLength(2);
+    expect(page.find(".more").exists()).toBe(false);
+  });
+
+  it("تتلف اللوح بعد تأكيد وتعرض رفض الخادم", async () => {
+    vi.mocked(productionService.scrap)
+      .mockRejectedValueOnce(new ApiError(409, "اللوح 1 ليس مخطَّطًا (نُفِّذ)"))
+      .mockResolvedValueOnce(sheet({ status: "scrapped", placements: [] }));
+    const page = await show(ProductionPage, "/production");
+    await button(page, "إتلاف اللوح").trigger("click");
+    expect(productionService.scrap).not.toHaveBeenCalled();
+    await button(page, "تراجع").trigger("click");
+    expect(page.findAll("button").some((candidate) => candidate.text() === "تأكيد الإتلاف")).toBe(false);
+
+    await button(page, "إتلاف اللوح").trigger("click");
+    await button(page, "تأكيد الإتلاف").trigger("click");
+    await flushPromises();
+    expect(page.get('.sheet-card [role="alert"]').text()).toContain("ليس مخطَّطًا");
+
+    await button(page, "إتلاف اللوح").trigger("click");
+    await button(page, "تأكيد الإتلاف").trigger("click");
+    await flushPromises();
+    expect(productionService.scrap).toHaveBeenLastCalledWith(1);
+    expect(page.get(".state").text()).toBe("تالف");
+    expect(page.findAll("svg .piece")).toHaveLength(0);
+    expect(page.findAll("button").some((candidate) => candidate.text() === "إتلاف اللوح")).toBe(false);
+    expect(page.findAll(".chip").find((chip) => chip.text().startsWith("تالف"))!.text()).toContain("1");
   });
 
   it("تخطّط ألواح المادة وتذكر حين لا قطع تنتظر", async () => {
@@ -269,7 +339,7 @@ describe("صفحة الإنتاج", () => {
   it("تسجّل التشغيل بمفتاح واحد يبقى عند إعادة المحاولة ثم تغلق اللوح", async () => {
     vi.mocked(productionService.recordRun)
       .mockRejectedValueOnce(new ApiError(0, "تعذّر الاتصال بالخادم"))
-      .mockResolvedValueOnce({ id: 5, sheet_id: 1, outcome: "ok", duration_s: 200, material_cost: "45.00" });
+      .mockResolvedValueOnce(okRun);
     const page = await show(ProductionPage, "/production");
     await button(page, "تسجيل تشغيل").trigger("click");
     await flushPromises();
@@ -295,7 +365,7 @@ describe("صفحة الإنتاج", () => {
 
     expect(page.find(".run").exists()).toBe(false);
     expect(page.get(".state").text()).toBe("نُفِّذ");
-    expect(page.text()).toContain("سُجّل التشغيل: نجح · 3 د 20 ث");
+    expect(page.get(".runs").text()).toContain("نجح · 3 د 20 ث · كلفة المادة 45.00 ر.ق");
     expect(page.findAll("button").some((candidate) => candidate.text() === "تسجيل تشغيل")).toBe(false);
   });
 });
