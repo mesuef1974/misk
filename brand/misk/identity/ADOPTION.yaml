@@ -1,4 +1,4 @@
-release: misk/v5
+release: misk/v6
 concept: a1
 purpose: ما في دليل الهوية، وما طُبّق منه آليًا في هذا المشروع، وما تبقّى على جلسة المشروع. مولَّد من سِمة؛ لا يُعدَّل يدويًا.
 applied_by_delivery:
@@ -24,10 +24,9 @@ sections:
   title: الخط
   status: provided
   files:
-  - fonts/Almarai-Regular.ttf
-  - fonts/Cairo[slnt,wght].ttf
-  - fonts/OFL-Almarai.txt
-  - fonts/OFL-Cairo.txt
+  - fonts/IBMPlexSansArabic-Medium.ttf
+  - fonts/IBMPlexSansArabic-Regular.ttf
+  - fonts/OFL-IBMPlexSansArabic.txt
 - id: pattern
   title: النمط
   status: provided
@@ -111,7 +110,7 @@ token_map:
   light:
     role: bg
     var: --misk-bg
-    value: '#f5f3ee'
+    value: '#f8f2e9'
   dark:
     role: bg
     var: --misk-bg
@@ -120,7 +119,7 @@ token_map:
   light:
     role: surface
     var: --misk-surface
-    value: '#f1f7f4'
+    value: '#fdf2f5'
   dark:
     role: surface
     var: --misk-surface
@@ -129,7 +128,7 @@ token_map:
   light:
     role: text
     var: --misk-text
-    value: '#17201d'
+    value: '#35242c'
   dark:
     role: text
     var: --misk-text
@@ -138,7 +137,7 @@ token_map:
   light:
     role: text-muted
     var: --misk-text-muted
-    value: '#5e6763'
+    value: '#6c5c61'
   dark:
     role: text-muted
     var: --misk-text-muted
@@ -147,7 +146,7 @@ token_map:
   light:
     role: border
     var: --misk-border
-    value: '#cfd6d3'
+    value: '#ddd0d4'
   dark:
     role: border
     var: --misk-border
@@ -156,7 +155,7 @@ token_map:
   light:
     role: brand
     var: --misk-brand
-    value: '#1e4d43'
+    value: '#68112f'
   dark:
     role: brand-strong
     var: --misk-brand-strong
@@ -177,8 +176,9 @@ checks:
   detail: كل المتغيرات اللونية النهارية مطابقة
 - id: font-family
   section: type
-  ok: true
-  detail: عائلة Cairo مذكورة في أنماط المشروع
+  ok: false
+  detail: عائلة IBM Plex Sans Arabic غير مذكورة في أنماط المشروع
+  action: أضف @font-face أو استيرادًا للخط IBM Plex Sans Arabic من identity/fonts واجعله عائلة العناوين والنص.
 - id: motion-included
   section: motion
   ok: true
@@ -198,18 +198,18 @@ checks:
 - id: icons-used
   section: icons
   ok: false
-  detail: '6 من 10 أيقونة مستعملة في الواجهة؛ غير المستعملة: delivery، giveaways، phone-case، portrait'
+  detail: '9 من 10 أيقونة مستعملة في الواجهة؛ غير المستعملة: portrait'
   action: استعمل أيقونات identity/icons كما هي حيث تعرض الواجهة معناها؛ ما لا موضع له في التطبيق يُذكر للمالك ولا يُحشر.
 - id: pattern-used
   section: pattern
-  ok: true
-  detail: النمط مستعمل في frontend/src/styles/base.css
+  ok: false
+  detail: النمط غير مستعمل في الواجهة
+  action: ضع identity/patterns/motif-*.svg في الصفحات حيث تضعه شاشات identity/screens.
 - id: screens-compared
   section: applications
-  ok: false
-  detail: اختبار يقارن صفحات المشروع بشاشات الدليل غير موجود
-  action: ابنِ الصفحات على screens/app-dark.html، screens/app-light.html، screens/landing.html، screens/mobile.html، screens/print.html
-    واكتب اختبارًا يصيّرها بمقاس كل شاشة ويقارنها بصورتها (يذكر identity/screens).
+  ok: true
+  detail: اختبار يقارن صفحات المشروع بشاشات الدليل موجود
 gaps:
+- font-family
 - icons-used
-- screens-compared
+- pattern-used

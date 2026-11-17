@@ -29,8 +29,8 @@ html[data-theme="dark"] { color-scheme: dark; }
   inset-block-end: 0;
   block-size: 16.667%;
   background: var(--ink);
-  -webkit-mask: url("motif.svg") top center / 240px 120px repeat;
-  mask: url("motif.svg") top center / 240px 120px repeat;
+  -webkit-mask: url("motif-mono.svg") top center / 240px 120px repeat;
+  mask: url("motif-mono.svg") top center / 240px 120px repeat;
 }
 
 /* الحركة نفسها التي في motion.css (sima-rise) لأن الرمز هنا قناع لا أجزاء svg. */

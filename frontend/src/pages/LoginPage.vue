@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { errorMessage } from "@/api/client";
+import BrandPanel from "@/components/BrandPanel.vue";
 import { safeNext } from "@/domain/navigation";
 import { useSessionStore } from "@/stores/session";
 
@@ -32,6 +33,9 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
+  <!-- صفحة مقسومة: النموذج في نصف ولوح الهوية بلون السمة في النصف الآخر (يختفي على الجوال). -->
+  <div class="login-split">
+  <div class="login-side">
   <h1>تسجيل الدخول</h1>
   <form class="panel login" novalidate @submit.prevent="submit">
     <label class="field">
@@ -55,9 +59,15 @@ async function submit(): Promise<void> {
       {{ busy ? "يتحقق…" : "دخول" }}
     </button>
   </form>
+  </div>
+  <BrandPanel />
+  </div>
 </template>
 
 <style scoped>
+.login-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: stretch; min-block-size: min(560px, calc(100vh - 104px)); }
+.login-side { display: flex; flex-direction: column; justify-content: center; }
+@media (max-width: 860px) { .login-split { grid-template-columns: 1fr; min-block-size: 0; } }
 .login { display: grid; gap: 16px; inline-size: 100%; max-inline-size: 420px; }
 .login .btn { justify-self: start; }
 </style>

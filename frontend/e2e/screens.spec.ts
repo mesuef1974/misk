@@ -240,8 +240,8 @@ test("landing: صفحة الزائر", async ({ browser }) => {
     ["بطاقة الشخصية", "main .card", ".traits .panel", [...SURFACE, "padding-top", "padding-left"]],
     ["عنوان بطاقة الشخصية", "main .card b.h", ".traits h2", TEXT],
     ["نص بطاقة الشخصية", "main .card p", ".traits p", ["color", "font-size"]],
-    ["لوحة النمط", "aside.motif", ".showcase", ["background-color"]],
-    ["لوح الرمز", "aside.motif > div", ".tile-mark", [...SURFACE, "width", "height"]],
+    ["لوحة النمط", "aside.motif", ".brand-panel", ["background-color"]],
+    ["لوح الرمز", "aside.motif > div", ".brand-panel .card", [...SURFACE, "width", "height"]],
   ]);
   await context.close();
 });

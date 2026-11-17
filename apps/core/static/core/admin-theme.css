@@ -60,5 +60,5 @@ html:root {
 /* عنوان اللوحة بوزن اسم المنصة في شريطها، وزوايا وتركيز مثل عناصر المنصة. */
 #site-name a:link, #site-name a:visited { color: var(--header-branding-color); font-weight: 700; }
 div.breadcrumbs { border-block-end: 1px solid var(--line); }
-.button, input[type="submit"], input[type="button"], a.button { border-radius: 8px; }
+.button, input[type="submit"], input[type="button"], a.button { border-radius: var(--radius); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

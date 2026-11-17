@@ -1,11 +1,11 @@
 /* سِمة: رموز هوية مسك ديزاين (misk): مرجع ألوان العلامة. التسليم يكتب متغيرات الشعار في tokens.css المشروع نفسه. */
 :root {
-  --brand-paper: #F5F3EE;
-  --brand-ink: #17201D;
-  --brand-primary: #1E4D43;
-  --brand-accent: #C4785A;
+  --brand-paper: #F8F2E9;
+  --brand-ink: #35242C;
+  --brand-primary: #68112F;
+  --brand-accent: #D6B68C;
   /* الشعار: حبره لون العلامة على الفاتح و--color-mark-on-dark على الداكن؛ الرمز بلون واحد فلا لون تمييز له */
-  --color-mark-ink: #1E4D43;
-  --color-mark-paper: #F5F3EE;
+  --color-mark-ink: #68112F;
+  --color-mark-paper: #F8F2E9;
   --color-mark-on-dark: #FFFFFF;
 }

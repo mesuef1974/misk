@@ -30,8 +30,8 @@ body { margin: 0; background: var(--line); font-family: var(--font-ui); color: v
   inset-inline-end: 0;
   inline-size: calc(560 / 19.2 * 1cqw);
   background: var(--ink);
-  -webkit-mask: url("../../frontend/src/static/brand/motif.svg") top left / calc(220 / 19.2 * 1cqw) calc(110 / 19.2 * 1cqw) repeat;
-  mask: url("../../frontend/src/static/brand/motif.svg") top left / calc(220 / 19.2 * 1cqw) calc(110 / 19.2 * 1cqw) repeat;
+  -webkit-mask: url("../../frontend/src/static/brand/motif-mono.svg") top left / calc(220 / 19.2 * 1cqw) calc(110 / 19.2 * 1cqw) repeat;
+  mask: url("../../frontend/src/static/brand/motif-mono.svg") top left / calc(220 / 19.2 * 1cqw) calc(110 / 19.2 * 1cqw) repeat;
 }
 .slide-title .text {
   position: absolute;
