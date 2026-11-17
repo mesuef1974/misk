@@ -44,12 +44,12 @@
 [data-palette="oud"] { --day-color: var(--palette-oud); --day-bg: #F8F2E9; --night-bg: #1C0A0E; --night-accent: #D6B68C; }
 
 :root, html[data-theme] {
-  --bg: light-dark(var(--day-bg), var(--night-bg));
-  --surface: light-dark(color-mix(in srgb, #ffffff 60%, var(--day-bg)), color-mix(in srgb, #ffffff 7%, var(--night-bg)));
-  --ink: light-dark(#17201d, #f1f7f4);
-  --muted: light-dark(#59625e, #b5bdb9);
-  --line: light-dark(color-mix(in srgb, #17201d 14%, var(--day-bg)), color-mix(in srgb, #ffffff 24%, var(--night-bg)));
-  --accent: light-dark(var(--day-accent), var(--night-accent));
+  --bg: #f8f2e9;
+  --surface: #fdf2f5;
+  --ink: light-dark(#35242c, #f1f7f4);
+  --muted: light-dark(#6c5c61, #b5bdb9);
+  --line: #ddd0d4;
+  --accent: #68112f;
   --risk: light-dark(#76021a, #ff9a99);
   --font-ui: "Almarai", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
   --font-heading: "Cairo", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
@@ -57,7 +57,7 @@
 
 :root {
   /* الشعار: الشريط وكلمة DESIGN بلون السمة والطيّات شامبانيا على الفاتح، وكله أبيض على الداكن. */
-  --color-mark-ink: light-dark(var(--day-color), #ffffff);
+  --color-mark-ink: light-dark(#68112f, #ffffff);
   --color-mark-fold: light-dark(var(--champagne), #ffffff);
   /* كلمة القفل (BrandLockup.vue المولَّد) تقرأ --color-ink: تُربط بحبر النص ليتبع الوضع الليلي. */
   --color-ink: var(--ink);
