@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { errorMessage } from "@/api/client";
+import BrandIcon from "@/components/BrandIcon.vue";
 import OrderStatusBadge from "@/components/OrderStatusBadge.vue";
 import {
   formatDate,
@@ -159,6 +160,7 @@ async function move(toStatus: OrderStatus): Promise<void> {
         :disabled="busy"
         @click="move(status)"
       >
+        <BrandIcon name="delivery" v-if="status === 'delivered'" />
         {{ status === "cancelled" && confirmingCancel ? "اضغط ثانيةً لتأكيد الإلغاء" : TRANSITION_ACTIONS[status] }}
       </button>
       <button v-if="confirmingCancel" type="button" class="btn" @click="confirmingCancel = false">تراجع</button>

@@ -121,10 +121,14 @@ def test_pages_use_identity_icons_and_pattern():
         text = path.read_text(encoding="utf-8")
         used |= set(re.findall(r'<BrandIcon name="([\w-]+)"', text))
     catalog = (FRONTEND_SRC / "domain" / "catalog.ts").read_text(encoding="utf-8")
-    used |= set(re.findall(r'"([\w-]+)"', catalog.split("KIND_ICONS", 1)[1].split("};", 1)[0]))
-    # كل اسم مستعمل أيقونة موجودة في الهوية، وأيقونات الطلب والخامات والحفر مستعملة فعلًا.
+    for table in ("KIND_ICONS", "GENERATOR_ICONS"):
+        used |= set(
+            re.findall(r': "([\w-]+)"', catalog.split(f"export const {table}", 1)[1].split("};", 1)[0])
+        )
+    # كل اسم مستعمل أيقونة موجودة في الهوية. الأيقونة الوحيدة بلا موضع هي portrait:
+    # لا منتج صور في المنصة بعد، فلا تُحشر (ADOPTION.yaml: icons-used).
     assert used <= names
-    assert {"order", "laser", "leather", "wood", "acrylic", "name"} <= used
+    assert names - used == {"portrait"}
     base = (FRONTEND_SRC / "styles" / "base.css").read_text(encoding="utf-8")
     assert re.search(r'\.empty::before\s*{[^}]*url\("\.\./static/brand/motif\.svg"\)', base)
 
@@ -140,3 +144,16 @@ def test_pages_take_colors_from_tokens_only():
     if raw.search((FRONTEND_SRC / "styles" / "base.css").read_text(encoding="utf-8")):
         offenders.append("base.css")
     assert offenders == []
+
+
+def test_every_guide_screen_is_compared_with_the_pages():
+    # identity/screens: لكل شاشة في الدليل اختبار في frontend/e2e/screens.spec.ts يصيّر الصفحة بمقاسها ويقارنها بها.
+    # الاختبار نفسه يحتاج متصفحًا ويُشغَّل بـ `npm --prefix frontend run test:screens`؛ هنا يُضمن ألا تبقى شاشة بلا مقارنة.
+    screens = sorted(p.stem for p in (IDENTITY / "screens").glob("*.html"))
+    assert screens == ["app-dark", "app-light", "landing", "mobile", "print"]
+    spec = (ROOT / "frontend" / "e2e" / "screens.spec.ts").read_text(encoding="utf-8")
+    assert "brand/misk/identity/screens" in spec
+    compared = set(re.findall(r'(?:openGuide\(\w+, |viewportOf\(|\[)"([a-z-]+)"', spec))
+    assert set(screens) <= compared
+    package = (ROOT / "frontend" / "package.json").read_text(encoding="utf-8")
+    assert '"test:screens": "playwright test"' in package
