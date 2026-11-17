@@ -8,6 +8,7 @@ applied_by_delivery:
 limits:
 - قيم الوضع الليلي يطبّقها التسليم ولا يعيد فحصها هنا؛ فحص color-parity للنهار وحده
 - 'الفحوص الأخرى فحوص وجود لا جودة: وجودها لا يعني أنها مطابقة لتصميم الدليل'
+- 'الأيقونات والنمط يُقاس استعمالهما لا موضعهما، والشاشات يُقاس وجود اختبار مقارنتها لا نتيجته: التسليم لا يصيّر التطبيق'
 sections:
 - id: strategy
   title: المنصة الاستراتيجية (الشخصية والنبرة واتجاه الصورة)
@@ -176,32 +177,39 @@ checks:
   detail: كل المتغيرات اللونية النهارية مطابقة
 - id: font-family
   section: type
-  ok: false
-  detail: عائلة Cairo غير مذكورة في أنماط المشروع
-  action: أضف @font-face أو استيرادًا للخط Cairo من identity/fonts واجعله عائلة العناوين والنص.
+  ok: true
+  detail: عائلة Cairo مذكورة في أنماط المشروع
 - id: motion-included
   section: motion
-  ok: false
-  detail: ظهور الرمز غير مضمَّن في الواجهة
-  action: استورد identity/motion.css وطبّق الصنف sima-mark-intro على الرمز عند أول ظهور.
+  ok: true
+  detail: ظهور الرمز مضمَّن
 - id: slide-templates
   section: applications
-  ok: false
-  detail: قوالب الشرائح غير موجودة في المشروع
-  action: ابنِ قالب شرائح 16:9 من identity/applications/slide-*.svg.
+  ok: true
+  detail: قوالب الشرائح موجودة
 - id: splash-screen
   section: applications
-  ok: false
-  detail: شاشة الافتتاح غير موجودة في المشروع
-  action: ابنِ شاشة افتتاح من identity/applications/app-splash.svg.
+  ok: true
+  detail: شاشة الافتتاح موجودة
 - id: token-parity-test
   section: tokens
+  ok: true
+  detail: اختبار تطابق الرموز مع ADOPTION.yaml موجود
+- id: icons-used
+  section: icons
   ok: false
-  detail: اختبار تطابق الرموز مع ADOPTION.yaml غير موجود
-  action: اكتب اختبارًا يقرأ token_map من ADOPTION.yaml ويطابقه مع tokens.css.
+  detail: '6 من 10 أيقونة مستعملة في الواجهة؛ غير المستعملة: delivery، giveaways، phone-case، portrait'
+  action: استعمل أيقونات identity/icons كما هي حيث تعرض الواجهة معناها؛ ما لا موضع له في التطبيق يُذكر للمالك ولا يُحشر.
+- id: pattern-used
+  section: pattern
+  ok: true
+  detail: النمط مستعمل في frontend/src/styles/base.css
+- id: screens-compared
+  section: applications
+  ok: false
+  detail: اختبار يقارن صفحات المشروع بشاشات الدليل غير موجود
+  action: ابنِ الصفحات على screens/app-dark.html، screens/app-light.html، screens/landing.html، screens/mobile.html، screens/print.html
+    واكتب اختبارًا يصيّرها بمقاس كل شاشة ويقارنها بصورتها (يذكر identity/screens).
 gaps:
-- font-family
-- motion-included
-- slide-templates
-- splash-screen
-- token-parity-test
+- icons-used
+- screens-compared
