@@ -5,6 +5,8 @@ export interface SessionUser {
   id: number;
   username: string;
   is_staff: boolean;
+  /** مسار لوحة Django كما يضبطه الخادم؛ null لغير المشرف. */
+  admin_url: string | null;
 }
 
 export const sessionService = {

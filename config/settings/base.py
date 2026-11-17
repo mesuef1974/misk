@@ -125,7 +125,10 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 _FRONTEND_DIST = BASE_DIR / "frontend_dist"
-STATICFILES_DIRS = [_FRONTEND_DIST] if _FRONTEND_DIST.exists() else []  # يغيب قبل أول npm run build
+STATICFILES_DIRS: list = [_FRONTEND_DIST] if _FRONTEND_DIST.exists() else []  # يغيب قبل أول npm run build
+# ألوان المنصة مصدر واحد في الواجهة؛ لوحة Django تقرؤها من /static/brand/tokens.css (templates/admin/base_site.html).
+# المجلد يحمل البادئة brand/ في بنيته لا في الإعداد: بادئة STATICFILES_DIRS لا يطابقها الباحث على ويندوز.
+STATICFILES_DIRS.append(BASE_DIR / "frontend" / "src" / "static")
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},

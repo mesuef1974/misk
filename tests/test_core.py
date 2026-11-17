@@ -67,7 +67,7 @@ def _login(client, username="staff", password="x" * 12):
 def test_login_opens_staff_session_and_audits(client, staff_user):
     res = _login(client)
     assert res.status_code == 200, res.content
-    assert res.json() == {"id": staff_user.pk, "username": "staff", "is_staff": True}
+    assert res.json() == {"id": staff_user.pk, "username": "staff", "is_staff": True, "admin_url": "/admin/"}
     assert client.get("/api/me").json()["username"] == "staff"
     assert AuditLog.objects.filter(action="auth.login", actor=staff_user).count() == 1
 
@@ -264,3 +264,42 @@ def test_client_address_diagnostics_is_staff_only(client, staff_user, django_use
     }
     bare = client.get(path, REMOTE_ADDR="10.0.0.1").json()
     assert (bare["x_forwarded_for"], bare["x_real_ip"], bare["client_ip"]) == ("", "", "10.0.0.1")
+
+
+@pytest.mark.django_db
+def test_me_reveals_admin_url_to_staff_only(client, staff_user, django_user_model, settings):
+    client.force_login(django_user_model.objects.create_user(username="u", password="x" * 12))
+    assert client.get("/api/me").json()["admin_url"] is None
+    client.force_login(staff_user)
+    assert client.get("/api/me").json()["admin_url"] == "/" + settings.ADMIN_URL
+
+
+@pytest.mark.django_db
+def test_admin_inherits_platform_identity(client, staff_user, settings):
+    from django.contrib.staticfiles import finders
+
+    # صفحة الدخول والصفحة الرئيسية للوحة تحملان ألوان المنصة واسمها.
+    login_page = client.get("/" + settings.ADMIN_URL + "login/").content.decode()
+    client.force_login(staff_user)
+    index = client.get("/" + settings.ADMIN_URL).content.decode()
+    for page in (login_page, index):
+        assert "/static/brand/tokens.css" in page
+        assert "/static/core/admin-theme.css" in page
+        assert (
+            page.index("admin/css/dark_mode.css")
+            < page.index("brand/tokens.css")
+            < page.index("core/admin-theme.css")
+        )
+        assert settings.SITE_TITLE in page
+    # الملفان موجودان فعلًا حيث يجمعهما collectstatic.
+    assert finders.find("brand/tokens.css")
+    assert finders.find("core/admin-theme.css")
+
+
+def test_spa_applies_stored_theme_before_paint(client):
+    from django.contrib.staticfiles import finders
+
+    # سكربت الوضع ملف ثابت يسبق حزم الواجهة في <head>، فيُضبط data-theme قبل الرسم.
+    page = client.get("/").content.decode()
+    assert page.index("/static/core/theme-init.js") < page.index("src/main.ts")
+    assert finders.find("core/theme-init.js")
