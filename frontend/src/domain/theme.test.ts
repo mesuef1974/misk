@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from "pinia";
-import { nextTheme, parseTheme, THEME_KEY } from "@/domain/theme";
+import { nextTheme, PALETTE_KEY, PALETTES, parsePalette, parseTheme, THEME_KEY } from "@/domain/theme";
 import { useThemeStore } from "@/stores/theme";
 
 beforeEach(() => {
@@ -42,5 +42,42 @@ describe("وضع الألوان", () => {
     store.onStorage(new StorageEvent("storage", { key: THEME_KEY, newValue: "dark" }));
     expect(store.theme).toBe("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+});
+
+describe("السمة", () => {
+  beforeEach(() => {
+    delete document.documentElement.dataset.palette;
+  });
+
+  it("عشر سمات والعودي افتراضي لكل قيمة غير معروفة", () => {
+    expect(PALETTES).toHaveLength(10);
+    expect(parsePalette("navy")).toBe("navy");
+    for (const bad of ["green", "", null, undefined, 1]) expect(parsePalette(bad)).toBe("oud");
+  });
+
+  it("الاختيار يُوضع على الصفحة ويُحفظ ولا يمسّ الوضع", () => {
+    const store = useThemeStore();
+    expect(document.documentElement.dataset.palette).toBe("oud");
+    store.setPalette("teal");
+    expect(document.documentElement.dataset.palette).toBe("teal");
+    expect(localStorage.getItem(PALETTE_KEY)).toBe("teal");
+    expect(store.theme).toBe("auto");
+    expect(localStorage.getItem(THEME_KEY)).toBeNull();
+  });
+
+  it("يقرأ المحفوظ عند البدء ويتبع تغيير تبويب آخر", () => {
+    localStorage.setItem(PALETTE_KEY, "rose");
+    const store = useThemeStore();
+    expect(store.palette).toBe("rose");
+    store.onStorage(new StorageEvent("storage", { key: PALETTE_KEY, newValue: "black" }));
+    expect(document.documentElement.dataset.palette).toBe("black");
+  });
+
+  it("الوضع يُضبط مباشرة من المنتقي", () => {
+    const store = useThemeStore();
+    store.setTheme("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(localStorage.getItem(THEME_KEY)).toBe("dark");
   });
 });

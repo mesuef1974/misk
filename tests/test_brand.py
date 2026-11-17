@@ -15,7 +15,9 @@ _ENTRY = re.compile(
     r"- app_var: (?P<var>--[\w-]+)\s+light:.*?value: '(?P<light>#[0-9a-fA-F]{6})'\s+dark:.*?value: '(?P<dark>#[0-9a-fA-F]{6})'",
     re.S,
 )
-_TOKEN = re.compile(r"(--[\w-]+):\s*light-dark\((#[0-9a-fA-F]{6}),\s*(#[0-9a-fA-F]{6})\)")
+# المتغيرات التي لا تتبع السمة: طرفها الليلي لون خام آخر المعامِلين.
+_TOKEN = re.compile(r"(--[\w-]+):\s*light-dark\((.+),\s*(#[0-9a-fA-F]{6})\);")
+_PALETTE_VAR = re.compile(r"--palette-([\w-]+):\s*(#[0-9a-fA-F]{6});")
 
 
 def _token_map() -> dict[str, tuple[str, str]]:
@@ -24,17 +26,165 @@ def _token_map() -> dict[str, tuple[str, str]]:
     return {m["var"]: (m["light"].lower(), m["dark"].lower()) for m in _ENTRY.finditer(block)}
 
 
+def _tokens_text() -> str:
+    return (STATIC_BRAND / "tokens.css").read_text(encoding="utf-8")
+
+
 def _tokens_css() -> dict[str, tuple[str, str]]:
-    text = (STATIC_BRAND / "tokens.css").read_text(encoding="utf-8")
-    return {var: (light.lower(), dark.lower()) for var, light, dark in _TOKEN.findall(text)}
+    return {var: (light.strip().lower(), dark.lower()) for var, light, dark in _TOKEN.findall(_tokens_text())}
 
 
-def test_tokens_match_adoption_token_map():
+def _palettes() -> dict[str, str]:
+    return {name: value.lower() for name, value in _PALETTE_VAR.findall(_tokens_text())}
+
+
+def _luminance(color: str) -> float:
+    def channel(value: int) -> float:
+        c = value / 255
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (int(color[i : i + 2], 16) for i in (1, 3, 5))
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+
+def _contrast(a: str, b: str) -> float:
+    high, low = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+# لكل سمة ليلها (قرار المالك 2026-11-17): الخلفية والسطح والحد والتمييز تتبع السمة في الوضعين.
+# ما لا يتبعها يبقى على قيمة token_map الليلية حرفيًّا؛ وخريطة سِمة تنتظر إعادة توليدها للسمات العشر.
+PALETTE_FREE_NIGHT = {"--ink", "--muted", "--risk"}
+
+
+def test_palette_free_night_tokens_match_adoption_token_map():
     expected = _token_map()
     actual = _tokens_css()
     # الخريطة تُقرأ كاملة: سبعة متغيرات لونية في الإصدار المعتمد، وأقل من ذلك خلل في القراءة لا نجاح.
     assert len(expected) >= 7
-    assert {var: actual.get(var) for var in expected} == expected
+    assert PALETTE_FREE_NIGHT <= set(expected)
+    assert {var: actual[var][1] for var in PALETTE_FREE_NIGHT} == {
+        var: expected[var][1] for var in PALETTE_FREE_NIGHT
+    }
+
+
+PALETTE_ORDER = [
+    "navy",
+    "royal-blue",
+    "teal",
+    "emerald",
+    "olive",
+    "purple",
+    "rose",
+    "chocolate",
+    "black",
+    "oud",
+]
+
+
+def test_ten_day_palettes_are_declared_once_and_named_alike():
+    # عشر سمات نهارية بترتيب جدول الهوية؛ الأسماء واحدة في الألوان والواجهة وسكربت ما قبل الرسم.
+    tokens = _tokens_text()
+    assert list(_palettes()) == PALETTE_ORDER
+    for name in PALETTE_ORDER:
+        assert re.search(
+            rf'\[data-palette="{name}"\]\s*{{\s*--day-color:\s*var\(--palette-{name}\);', tokens
+        ), name
+    domain = (ROOT / "frontend" / "src" / "domain" / "theme.ts").read_text(encoding="utf-8")
+    assert re.findall(r'{ id: "([\w-]+)", label: "[^"]+" }', domain) == PALETTE_ORDER
+    init = (ROOT / "apps" / "core" / "static" / "core" / "theme-init.js").read_text(encoding="utf-8")
+    listed = re.search(r"var palettes = \[([^\]]+)\];", init)
+    assert listed and re.findall(r'"([\w-]+)"', listed.group(1)) == PALETTE_ORDER
+    # العودي افتراضي في المواضع الثلاثة.
+    assert "--day-color: var(--palette-oud);" in tokens.split("[data-palette=", 1)[0]
+    assert 'DEFAULT_PALETTE: Palette = "oud"' in domain
+    assert 'var palette = "oud";' in init
+
+
+def _mix(a: str, share: float, b: str) -> str:
+    """color-mix(in srgb, a share%, b) كما يحسبه المتصفح."""
+    pairs = zip(
+        (int(a[i : i + 2], 16) for i in (1, 3, 5)), (int(b[i : i + 2], 16) for i in (1, 3, 5)), strict=True
+    )
+    return "#" + "".join(f"{round(x * share + y * (1 - share)):02x}" for x, y in pairs)
+
+
+def _palette_values(name: str) -> dict[str, str]:
+    tokens = _tokens_text()
+    rule = re.search(rf'\[data-palette="{name}"\]\s*{{([^}}]*)}}', tokens)
+    assert rule, name
+    return dict(re.findall(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6});", rule.group(1)))
+
+
+@pytest.mark.parametrize("name", PALETTE_ORDER)
+def test_each_palette_reaches_contrast_in_day_and_night(name):
+    # الاشتقاق هنا هو ما في tokens.css حرفيًّا: إن تغيّرت نسبة هناك فشل هذا الاختبار حتى تُحدَّث هنا.
+    tokens = _tokens_text()
+    for derived in (
+        "--surface: light-dark(color-mix(in srgb, #ffffff 60%, var(--day-bg)), color-mix(in srgb, #ffffff 7%, var(--night-bg)));",
+        "--raised: light-dark(color-mix(in srgb, var(--day-color) 6%, var(--day-bg)), color-mix(in srgb, #ffffff 13%, var(--night-bg)));",
+        "--brand-soft: light-dark(color-mix(in srgb, var(--day-color) 10%, var(--day-bg)), color-mix(in srgb, var(--night-accent) 12%, var(--night-bg)));",
+        "--accent: light-dark(var(--day-accent), var(--night-accent));",
+        "--on-accent: light-dark(#ffffff, var(--night-bg));",
+    ):
+        assert derived in tokens
+    fixed = _tokens_css()
+    color = _palettes()[name]
+    values = _palette_values(name)
+    day_bg, night_bg, night_accent = values["--day-bg"], values["--night-bg"], values["--night-accent"]
+    day_accent = values.get("--day-accent", color)
+    # الدرجة الأغمق للوردي وحده؛ بقية السمات نصّها بلونها.
+    assert ("--day-accent" in values) == (name == "rose")
+
+    day_grounds = [
+        day_bg,
+        _mix("#ffffff", 0.60, day_bg),
+        _mix(color, 0.06, day_bg),
+        _mix(color, 0.10, day_bg),
+    ]
+    for ground in day_grounds:
+        assert _contrast(day_accent, ground) >= 4.5
+        assert _contrast(fixed["--muted"][0], ground) >= 4.5
+    assert _contrast("#ffffff", day_accent) >= 4.5
+    # لون الشعار معلوماتي: 3:1 على خلفية سمته.
+    assert _contrast(color, day_bg) >= 3
+
+    night_grounds = [
+        night_bg,
+        _mix("#ffffff", 0.07, night_bg),
+        _mix("#ffffff", 0.13, night_bg),
+        _mix(night_accent, 0.12, night_bg),
+    ]
+    for ground in night_grounds:
+        assert _contrast(night_accent, ground) >= 4.5
+        assert _contrast(fixed["--muted"][1], ground) >= 4.5
+        assert _contrast(fixed["--ink"][1], ground) >= 7
+    assert _contrast(night_bg, night_accent) >= 4.5
+
+
+def test_default_palette_values_are_oud():
+    # بلا data-palette (قبل السكربت أو بتخزين محجوب) الصفحة عودية في الوضعين.
+    root = _tokens_text().split("[data-palette=", 1)[0]
+    oud = _palette_values("oud")
+    assert "--day-bg: var(--ivory);" in root
+    assert f"--night-bg: {oud['--night-bg']};" in root
+    assert "--night-accent: var(--champagne);" in root
+
+
+def test_colored_logo_component_keeps_source_paths():
+    # مكوّن الشعار الملوَّن ينسخ مسارات أصل سِمة حرفيًّا ويأخذ اللون وحده من السمة.
+    source = (ROOT / "brand" / "misk" / "misk-logo-color.svg").read_text(encoding="utf-8")
+    component = (ROOT / "frontend" / "src" / "components" / "BrandLogo.vue").read_text(encoding="utf-8")
+    parts = dict(re.findall(r'<path id="(\w+)"[^>]*? d="([^"]+)"', source))
+    assert list(parts) == ["ribbon", "folds", "design"]
+    fills = {
+        "ribbon": "var(--color-mark-ink)",
+        "folds": "var(--color-mark-fold)",
+        "design": "var(--color-mark-ink)",
+    }
+    for part, d in parts.items():
+        assert f'<path class="logo-{part}" fill="{fills[part]}" fill-rule="nonzero" d="{d}" />' in component
+    assert not re.search(r"#[0-9a-fA-F]{6}", component)
 
 
 @pytest.mark.parametrize(
@@ -74,7 +224,7 @@ def test_mark_intro_motion_is_applied():
     base = (ROOT / "frontend" / "src" / "styles" / "base.css").read_text(encoding="utf-8")
     app = (ROOT / "frontend" / "src" / "App.vue").read_text(encoding="utf-8")
     assert '@import "../static/brand/motion.css"' in base
-    assert re.search(r'<BrandLockup[^>]*class="sima-mark-intro"', app)
+    assert re.search(r'<BrandLogo[^>]*class="sima-mark-intro"', app)
 
 
 def test_spa_shows_splash_until_app_boots(client):
