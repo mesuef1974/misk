@@ -1,6 +1,10 @@
 /* ألوان المنصة، مصدر واحد: تستوردها الواجهة (styles/base.css) وتقرؤها لوحة Django من /static/brand/tokens.css.
    كل لون يُعرَّف مرة بقيمتيه الفاتحة والداكنة؛ الاختيار يتبع color-scheme الذي تضبطه الصفحة.
    html[data-theme] لأجل لوحة Django: لها متغيّر --accent خاص تعرّفه بـ html[data-theme="light"]، و:root وحده لا يغلبه. */
+/* خطّا الهوية (brand/misk/identity/fonts، رخصة OFL بجوارهما): Cairo للعناوين وAlmarai للنص. */
+@font-face { font-family: "Cairo"; src: url("fonts/Cairo-Variable.ttf") format("truetype"); font-display: swap; font-weight: 100 1000; }
+@font-face { font-family: "Almarai"; src: url("fonts/Almarai-Regular.ttf") format("truetype"); font-display: swap; font-weight: 400; }
+
 :root, html[data-theme] {
   --bg: light-dark(#f5f3ee, #141a17);
   --surface: light-dark(#f1f7f4, #242b28);
@@ -9,7 +13,8 @@
   --line: light-dark(#cfd6d3, #4c5551);
   --accent: light-dark(#1e4d43, #84a79e);
   --risk: light-dark(#76021a, #ff9a99);
-  --font-ui: "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+  --font-ui: "Almarai", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+  --font-heading: "Cairo", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
 }
 
 :root {

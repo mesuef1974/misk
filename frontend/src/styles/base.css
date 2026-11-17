@@ -1,5 +1,7 @@
 /* RTL-first: خصائص منطقية فقط (inline/block)، لا left/right. */
 @import "../static/brand/tokens.css";
+/* ظهور الرمز من الهوية: نسخة مطابقة لـ brand/misk/identity/motion.css (يفحصها tests/test_brand.py). */
+@import "../static/brand/motion.css";
 /* الألوان في static/brand/tokens.css بقيمتين؛ الوضع يتبع النظام ما لم يفرضه مفتاح الوضع بـ data-theme. */
 :root { color-scheme: light dark; }
 :root[data-theme="light"] { color-scheme: light; }
@@ -21,6 +23,7 @@ a { color: var(--accent); }
 .topbar nav a { text-decoration: none; color: var(--muted); padding: 14px 12px; border-block-end: 3px solid transparent; }
 .topbar nav a.router-link-active { color: var(--accent); border-block-end-color: var(--accent); }
 .wrap { max-inline-size: 960px; margin-inline: auto; padding-inline: 16px; padding-block: 32px 64px; }
+h1, h2, h3 { font-family: var(--font-heading); }
 h1 { font-size: clamp(26px, 5vw, 36px); line-height: 1.3; }
 .lead { font-size: 19px; color: var(--muted); }
 code { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; }

@@ -1,0 +1,101 @@
+/* قالب شرائح 16:9 من brand/misk/identity/applications/slide-title.svg وslide-content.svg.
+   الألوان والخطوط من ملف المنصة نفسه (tokens.css)؛ المقاسات نِسَب من عرض الشريحة (الأصل 1920×1080)،
+   فالقيمة n في الأصل تُكتب calc(n / 19.2 * 1cqw). الشرائح فاتحة دائمًا كما في الدليل. */
+@import "../../frontend/src/static/brand/tokens.css";
+
+:root {
+  color-scheme: light;
+  /* لون التمييز في الهوية (--misk-accent في identity/tokens/tokens.css): خط شريحة العنوان فقط، لا نص به. */
+  --slide-accent: #c4785a;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--line); font-family: var(--font-ui); color: var(--ink); }
+
+.slide {
+  position: relative;
+  inline-size: 100%;
+  aspect-ratio: 16 / 9;
+  container-type: inline-size;
+  background: var(--bg);
+  overflow: hidden;
+  margin-block-end: 12px;
+}
+.slide h1, .slide h2 { font-family: var(--font-heading); font-weight: 500; margin: 0; line-height: 1.3; }
+.slide p, .slide ul { margin: 0; padding: 0; }
+
+/* شريحة العنوان: شريط النمط بعرض 560 في آخر السطر، والنص عند بدايته بهامش 120. */
+.slide-title .band {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  inline-size: calc(560 / 19.2 * 1cqw);
+  background: var(--ink);
+  -webkit-mask: url("../../frontend/src/static/brand/motif.svg") top left / calc(220 / 19.2 * 1cqw) calc(110 / 19.2 * 1cqw) repeat;
+  mask: url("../../frontend/src/static/brand/motif.svg") top left / calc(220 / 19.2 * 1cqw) calc(110 / 19.2 * 1cqw) repeat;
+}
+.slide-title .text {
+  position: absolute;
+  inset-inline-start: calc(120 / 19.2 * 1cqw);
+  inset-block-start: calc(330 / 19.2 * 1cqw);
+  max-inline-size: calc(1100 / 19.2 * 1cqw);
+}
+.slide-title h1 { font-size: calc(110 / 19.2 * 1cqw); }
+.slide-title .rule {
+  inline-size: calc(240 / 19.2 * 1cqw);
+  block-size: calc(10 / 19.2 * 1cqw);
+  margin-block: calc(30 / 19.2 * 1cqw) calc(60 / 19.2 * 1cqw);
+  background: var(--slide-accent);
+}
+.slide-title .tagline { font-size: calc(48 / 19.2 * 1cqw); color: var(--muted); }
+.slide-title .lockup {
+  position: absolute;
+  inset-inline-start: calc(120 / 19.2 * 1cqw);
+  inset-block-end: calc(70 / 19.2 * 1cqw);
+  block-size: calc(110 / 19.2 * 1cqw);
+}
+
+/* شريحة المحتوى: عنوان وخط بلون العلامة، ثم نقاط بمربعات، والرمز ورقم الشريحة في الأسفل. */
+.slide-content { padding: calc(120 / 19.2 * 1cqw); }
+.slide-content h2 { font-size: calc(72 / 19.2 * 1cqw); }
+.slide-content .rule {
+  inline-size: calc(160 / 19.2 * 1cqw);
+  block-size: calc(8 / 19.2 * 1cqw);
+  margin-block: calc(16 / 19.2 * 1cqw) calc(90 / 19.2 * 1cqw);
+  background: var(--accent);
+}
+.slide-content ul { list-style: none; display: grid; gap: calc(52 / 19.2 * 1cqw); }
+.slide-content li {
+  position: relative;
+  padding-inline-start: calc(48 / 19.2 * 1cqw);
+  font-size: calc(44 / 19.2 * 1cqw);
+  line-height: 1.75;
+}
+.slide-content li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: calc(28 / 19.2 * 1cqw);
+  inline-size: calc(18 / 19.2 * 1cqw);
+  block-size: calc(18 / 19.2 * 1cqw);
+  background: var(--accent);
+}
+.slide-content .mark {
+  position: absolute;
+  inset-inline-end: calc(120 / 19.2 * 1cqw);
+  inset-block-end: calc(60 / 19.2 * 1cqw);
+  block-size: calc(60 / 19.2 * 1cqw);
+}
+.slide-content .page {
+  position: absolute;
+  inset-inline-start: calc(120 / 19.2 * 1cqw);
+  inset-block-end: calc(60 / 19.2 * 1cqw);
+  font-size: calc(32 / 19.2 * 1cqw);
+  color: var(--muted);
+}
+
+/* الطباعة إلى PDF: صفحة 16:9 بلا هوامش، شريحة في كل صفحة. */
+@page { size: 13.333in 7.5in; margin: 0; }
+@media print {
+  body { background: none; }
+  .slide { margin: 0; break-after: page; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}
