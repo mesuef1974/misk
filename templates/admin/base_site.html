@@ -1,0 +1,19 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title }}{% endblock %}
+
+{# هوية المنصة: الألوان من ملف المنصة نفسه، ثم ربط متغيّرات اللوحة بها. ملفان ثابتان لا نمط مضمَّن (CSP). #}
+{% block extrastyle %}{{ block.super }}
+<link rel="stylesheet" href="{% static 'brand/tokens.css' %}">
+<link rel="stylesheet" href="{% static 'core/admin-theme.css' %}">
+{% endblock %}
+
+{% block branding %}
+<div id="site-name"><a href="{% url 'admin:index' %}">{{ site_header }}</a></div>
+{% if user.is_anonymous %}
+  {% include "admin/color_theme_toggle.html" %}
+{% endif %}
+{% endblock %}
+
+{% block nav-global %}{% endblock %}

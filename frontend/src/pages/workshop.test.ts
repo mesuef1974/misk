@@ -141,7 +141,7 @@ beforeEach(() => {
   vi.mocked(productionService.plan).mockReset();
   vi.mocked(productionService.recordRun).mockReset();
   vi.mocked(productionService.scrap).mockReset();
-  vi.mocked(sessionService.me).mockReset().mockResolvedValue({ id: 1, username: "staff", is_staff: true });
+  vi.mocked(sessionService.me).mockReset().mockResolvedValue({ id: 1, username: "staff", is_staff: true, admin_url: "/admin/" });
 });
 
 describe("صفحة المواد", () => {

@@ -1,0 +1,64 @@
+/* لوحة Django ترث هوية المنصة: متغيّرات اللوحة تُشتق من /static/brand/tokens.css ولا لون يُكتب هنا.
+   html:root يساوي html[data-theme="dark"] في النوعية ويأتي بعده، فيغلب قيم اللوحة الأصلية في الوضعين. */
+html:root { color-scheme: light dark; }
+html[data-theme="light"]:root { color-scheme: light; }
+html[data-theme="dark"]:root { color-scheme: dark; }
+
+html:root {
+  --primary: var(--accent);
+  --secondary: var(--accent);
+  --primary-fg: var(--bg);
+
+  --body-fg: var(--ink);
+  --body-bg: var(--bg);
+  --body-quiet-color: var(--muted);
+  --body-medium-color: var(--ink);
+  --body-loud-color: var(--ink);
+
+  --header-color: var(--bg);
+  --header-branding-color: var(--bg);
+  --header-bg: var(--accent);
+  --header-link-color: var(--bg);
+
+  --breadcrumbs-fg: var(--muted);
+  --breadcrumbs-link-fg: var(--accent);
+  --breadcrumbs-bg: var(--surface);
+
+  --link-fg: var(--accent);
+  --link-hover-color: var(--ink);
+  --link-selected-fg: var(--accent);
+
+  --hairline-color: var(--line);
+  --border-color: var(--line);
+
+  --error-fg: var(--risk);
+  --message-success-bg: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  --message-warning-bg: color-mix(in srgb, var(--risk) 8%, var(--surface));
+  --message-error-bg: color-mix(in srgb, var(--risk) 16%, var(--surface));
+
+  --darkened-bg: var(--surface);
+  --selected-bg: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  --selected-row: color-mix(in srgb, var(--accent) 16%, var(--surface));
+
+  --button-fg: var(--bg);
+  --button-bg: var(--accent);
+  --button-hover-bg: color-mix(in srgb, var(--accent) 82%, var(--ink));
+  --default-button-bg: var(--accent);
+  --default-button-hover-bg: color-mix(in srgb, var(--accent) 82%, var(--ink));
+  --close-button-bg: var(--muted);
+  --close-button-hover-bg: var(--ink);
+  --delete-button-bg: var(--risk);
+  --delete-button-hover-bg: color-mix(in srgb, var(--risk) 82%, var(--ink));
+
+  --object-tools-fg: var(--bg);
+  --object-tools-bg: var(--muted);
+  --object-tools-hover-bg: var(--ink);
+
+  --font-family-primary: var(--font-ui);
+}
+
+/* عنوان اللوحة بوزن اسم المنصة في شريطها، وزوايا وتركيز مثل عناصر المنصة. */
+#site-name a:link, #site-name a:visited { color: var(--header-branding-color); font-weight: 700; }
+div.breadcrumbs { border-block-end: 1px solid var(--line); }
+.button, input[type="submit"], input[type="button"], a.button { border-radius: 8px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
