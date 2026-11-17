@@ -6,6 +6,9 @@
   <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{{ SITE_TITLE }}</title>
   <script src="{% static 'core/theme-init.js' %}"></script>
+  {# شاشة الافتتاح تُرسم قبل وصول حزمة الواجهة: ألوانها ونمطها ملفات ثابتة لا نمط مضمَّن (CSP). #}
+  <link rel="stylesheet" href="{% static 'brand/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'brand/splash.css' %}">
   {% vite_hmr_client %}
   {% vite_asset 'src/main.ts' %}
   <link rel="alternate icon" href="{% static 'favicon.ico' %}">
@@ -13,6 +16,12 @@
   <link rel="manifest" href="{% static 'site.webmanifest' %}">
 </head>
 <body>
-  <div id="app" data-site-title="{{ SITE_TITLE }}"></div>
+  {# محتوى #app يستبدله Vue عند الإقلاع، فتختفي شاشة الافتتاح بلا شيفرة إضافية. #}
+  <div id="app" data-site-title="{{ SITE_TITLE }}">
+    <div class="splash" role="status" aria-label="{{ SITE_TITLE }}">
+      <div class="splash-mark"></div>
+      <div class="splash-band"></div>
+    </div>
+  </div>
 </body>
 </html>

@@ -1,0 +1,43 @@
+/* شاشة الافتتاح من brand/misk/identity/applications/app-splash.svg: الرمز في الوسط وشريط النمط أسفل الشاشة.
+   تُعرض داخل #app إلى أن يقلع Vue. الرمز والنمط قناعان فيتبع لونهما الوضع: حبر العلامة للرمز وحبر النص للنمط. */
+html { color-scheme: light dark; }
+html[data-theme="light"] { color-scheme: light; }
+html[data-theme="dark"] { color-scheme: dark; }
+
+.splash {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}
+
+/* نسب الأصل: عرض الرمز 400 من 1080، ونسبة الرمز 100 إلى 65.85. */
+.splash-mark {
+  inline-size: min(37vw, 400px);
+  aspect-ratio: 100 / 65.85071;
+  background: var(--color-mark-ink);
+  -webkit-mask: url("mark.svg") center / contain no-repeat;
+  mask: url("mark.svg") center / contain no-repeat;
+  animation: splash-rise 0.6s cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+/* الشريط سدس ارتفاع الشاشة كما في الأصل (320 من 1920)، وبلاطة النمط 2 إلى 1. */
+.splash-band {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  block-size: 16.667%;
+  background: var(--ink);
+  -webkit-mask: url("motif.svg") top center / 240px 120px repeat;
+  mask: url("motif.svg") top center / 240px 120px repeat;
+}
+
+/* الحركة نفسها التي في motion.css (sima-rise) لأن الرمز هنا قناع لا أجزاء svg. */
+@keyframes splash-rise {
+  from { opacity: 0; transform: translateY(12%) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .splash-mark { animation: none; }
+}

@@ -44,7 +44,7 @@ async function logout(): Promise<void> {
   <header class="topbar">
     <div class="inner">
       <!-- الشعار مسارات بلا نص حي: الاسم المقروء على الرابط نفسه. -->
-      <RouterLink class="brand" to="/" :aria-label="store.siteTitle"><BrandLockup :height="34" /></RouterLink>
+      <RouterLink class="brand" to="/" :aria-label="store.siteTitle"><BrandLockup class="sima-mark-intro" :height="34" /></RouterLink>
       <nav>
         <RouterLink to="/">الرئيسية</RouterLink>
         <RouterLink to="/orders">الطلبات</RouterLink>
