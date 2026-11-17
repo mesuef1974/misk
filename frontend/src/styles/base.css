@@ -161,7 +161,7 @@ a.list-row:hover { border-color: var(--accent); }
   :root, :root[data-theme] {
     color-scheme: light;
     --ink: var(--print-ink); --muted: var(--print-muted); --line: var(--print-ink); --line-strong: var(--print-ink);
-    --accent: var(--print-ink); --color-mark-ink: var(--print-ink);
+    --accent: var(--print-ink); --color-mark-ink: var(--print-ink); --color-mark-fold: var(--print-ink);
   }
   body { background: none; color: var(--print-ink); font-size: 12pt; }
   .side, .btn, .filters, .more { display: none !important; }
