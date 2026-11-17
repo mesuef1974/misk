@@ -1,0 +1,171 @@
+{
+  "materials": [
+    {
+      "name": "جلد نباتي طبيعي",
+      "kind": "leather",
+      "thickness_mm": "2.00",
+      "sheet_width_mm": "600.0",
+      "sheet_height_mm": "305.0",
+      "sheet_cost": "180.00",
+      "supplier": ""
+    },
+    {
+      "name": "خشب زيزفون رقائقي",
+      "kind": "wood",
+      "thickness_mm": "3.00",
+      "sheet_width_mm": "600.0",
+      "sheet_height_mm": "305.0",
+      "sheet_cost": "25.00",
+      "supplier": ""
+    },
+    {
+      "name": "أكريليك شفاف",
+      "kind": "acrylic",
+      "thickness_mm": "3.00",
+      "sheet_width_mm": "600.0",
+      "sheet_height_mm": "305.0",
+      "sheet_cost": "40.00",
+      "supplier": ""
+    },
+    {
+      "name": "ورق مقوّى أبيض",
+      "kind": "paper",
+      "thickness_mm": "0.30",
+      "sheet_width_mm": "600.0",
+      "sheet_height_mm": "305.0",
+      "sheet_cost": "6.00",
+      "supplier": ""
+    }
+  ],
+  "templates": [
+    {
+      "slug": "arched-card",
+      "name": "بطاقة مقوّسة",
+      "generator": "arched_card",
+      "width_mm": "90.0",
+      "height_mm": "130.0",
+      "safe_margin_mm": "3.0",
+      "base_price": "25.00",
+      "param_schema": [
+        {
+          "name": "الاسم",
+          "type": "text",
+          "max_length": 30
+        },
+        {
+          "name": "العبارة",
+          "type": "text",
+          "max_length": 60,
+          "required": false
+        },
+        {
+          "name": "الخط",
+          "type": "choice",
+          "choices": [
+            "ثلث",
+            "نسخ"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "letter-keychain",
+      "name": "ميدالية حرف",
+      "generator": "letter_keychain",
+      "width_mm": "45.0",
+      "height_mm": "60.0",
+      "safe_margin_mm": "3.0",
+      "base_price": "15.00",
+      "param_schema": [
+        {
+          "name": "الحرف",
+          "type": "text",
+          "max_length": 1
+        },
+        {
+          "name": "حلقة معدنية",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "slug": "jar-lid",
+      "name": "غطاء برطمان",
+      "generator": "jar_lid",
+      "width_mm": "70.0",
+      "height_mm": "70.0",
+      "safe_margin_mm": "3.0",
+      "base_price": "20.00",
+      "param_schema": [
+        {
+          "name": "الاسم",
+          "type": "text",
+          "max_length": 24
+        },
+        {
+          "name": "القطر مم",
+          "type": "int",
+          "min": 50,
+          "max": 100
+        },
+        {
+          "name": "الخط",
+          "type": "choice",
+          "choices": [
+            "ثلث",
+            "نسخ"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "case-iphone-17",
+      "name": "كفر جلد آيفون 17",
+      "generator": "case_name",
+      "width_mm": "72.0",
+      "height_mm": "150.0",
+      "safe_margin_mm": "3.0",
+      "base_price": "85.00",
+      "param_schema": [
+        {
+          "name": "النمط",
+          "type": "choice",
+          "choices": [
+            "اسم",
+            "حرفان"
+          ]
+        },
+        {
+          "name": "النص",
+          "type": "text",
+          "max_length": 20
+        }
+      ]
+    },
+    {
+      "slug": "case-galaxy-s25",
+      "name": "كفر جلد جالكسي S25",
+      "generator": "case_name",
+      "width_mm": "71.0",
+      "height_mm": "147.0",
+      "safe_margin_mm": "3.0",
+      "base_price": "85.00",
+      "param_schema": [
+        {
+          "name": "النمط",
+          "type": "choice",
+          "choices": [
+            "اسم",
+            "حرفان"
+          ]
+        },
+        {
+          "name": "النص",
+          "type": "text",
+          "max_length": 20
+        }
+      ]
+    }
+  ]
+}
