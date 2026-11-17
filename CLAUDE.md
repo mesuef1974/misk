@@ -17,7 +17,10 @@ PostgreSQL + Redis + Celery (`config/celery.py`). النشر على Railway (`ra
 - قبل أي دفع: `python scripts/prepush_check.py`.
 
 ## ما لا تفعله
-- لا `git push` ولا `gh pr merge` ولا `railway` من الجلسة؛ المشغّل والبوابات يفعلان ذلك (`.claude/hooks/guard_git.py` يحجب).
+- لا `gh pr merge` المباشر ولا `railway` من الجلسة (`.claude/settings.json` يحجبهما). الدفع إلى فرع الطلب بأمر المالك.
+- الدمج من الجلسة بطريق واحد (قرار المالك 2026-11-17): `python scripts/merge_gate.py <رقم> --repo <owner/name> --merge`.
+  يدمج بالضغط إن اعتمد المالك رأس الطلب واخضرّت الفحوص وكان خارج نافذة النشر، ويرفض ما يمسّ المال
+  أو المسارات الحسّاسة (`security/sensitive_paths.json`) أو البوابات نفسها: تلك تبقى بزر المالك. لا تلتفّ على رفضه.
 - لا تعديل على `.github/`، `scripts/*gate*`, `security/`, lockfiles, `Dockerfile`, `railway.toml` داخل بطاقة عادية.
 
 ## أوامر

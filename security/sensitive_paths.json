@@ -10,8 +10,22 @@
     "**/crypto*",
     "**/*upload*",
     "**/*export*",
-    "docker-compose*.yml"
+    "docker-compose*.yml",
+    "**/*payment*",
+    "**/*billing*",
+    "**/*invoice*",
+    "**/*pricing*",
+    "**/*refund*"
   ],
+  "forbidden_for_auto_merge_content": {
+    "money": {
+      "paths": ["apps/*", "frontend/src/*"],
+      "patterns": [
+        "(?i)(price|amount|subtotal|total|discount|tax|vat|payment|invoice|refund|currency|deposit|balance)",
+        "سعر|أسعار|مبلغ|إجمالي|خصم|ضريبة|دفعة|فاتورة|عربون|رصيد|ريال"
+      ]
+    }
+  },
   "mandatory_review_when_diff_touches": {
     "authorization_identity": ["**/permissions*", "**/rbac*", "**/auth*", "config/settings/*"],
     "data_and_privacy": ["**/crypto*", "**/*export*", "**/*import*", "**/*upload*"],
