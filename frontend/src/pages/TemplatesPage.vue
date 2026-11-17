@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { errorMessage } from "@/api/client";
+import BrandIcon from "@/components/BrandIcon.vue";
 import {
   buildTemplateDraft,
   describeField,
@@ -9,6 +10,7 @@ import {
   FIELD_TYPES,
   newSchemaField,
   templateFormFrom,
+  templateIcon,
   type Errors,
   type TemplateForm,
 } from "@/domain/catalog";
@@ -175,6 +177,7 @@ async function submit(): Promise<void> {
 
   <ul v-else class="cards">
     <li v-for="template in catalog.templates" :key="template.id" class="panel template">
+      <BrandIcon :name="templateIcon(template.generator)" />
       <div class="what">
         <strong>{{ template.name }}</strong>
         <span class="muted">

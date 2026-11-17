@@ -23,6 +23,8 @@ staticfiles/
 media/
 frontend_dist/
 frontend/node_modules/
+frontend/test-results/
+frontend/playwright-report/
 .worktrees/
 automation/.lock
 automation/ledger/*.jsonl

@@ -32,6 +32,13 @@ export const FIELD_TYPE_LABELS: Record<ParamField["type"], string> = {
 /** أيقونة الهوية لنوع المادة (brand/misk/identity/icons)؛ ما لا أيقونة له في الهوية يبقى بلا أيقونة. */
 export const KIND_ICONS: Record<string, string> = { leather: "leather", wood: "wood", acrylic: "acrylic" };
 
+/** أيقونة الهوية لمولّد القالب: الكفرات والتوزيعات لها أيقونتاهما، وما عداهما قطعة اسم. */
+export const GENERATOR_ICONS: Record<string, string> = { case_name: "phone-case", arched_card: "giveaways", jar_lid: "giveaways" };
+
+export function templateIcon(generator: string): string {
+  return GENERATOR_ICONS[generator] ?? "name";
+}
+
 export function kindLabel(kind: string): string {
   return KIND_LABELS[kind] ?? kind;
 }

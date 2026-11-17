@@ -53,7 +53,7 @@ code { background: var(--surface); border: 1px solid var(--line); border-radius:
 @media (max-width: 860px) {
   .shell { display: block; }
   .side { position: static; block-size: auto; overflow: visible; padding: 16px 20px 0; background: none; border: 0; }
-  .side .brand { margin: 0 0 4px; }
+  .side .brand { block-size: 30px; margin: 0 0 4px; }
   .side nav.main {
     position: fixed; inset-inline: 0; inset-block-end: 0; z-index: 2; flex-direction: row; gap: 0;
     background: var(--surface); border-block-start: 1px solid var(--line); padding-block-end: env(safe-area-inset-bottom);
@@ -62,7 +62,7 @@ code { background: var(--surface); border: 1px solid var(--line); border-radius:
     flex: 1; flex-direction: column; justify-content: center; gap: 4px; min-block-size: 76px; padding: 10px 4px;
     border-radius: 0; font-size: 13px; text-align: center;
   }
-  .side nav.main .nav-item.router-link-active { background: none; }
+  .side nav.main .nav-item.router-link-active { background: none; color: var(--accent); }
   .side .aux { margin-block-start: 0; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0 4px; }
   .side .aux .nav-item { padding-inline: 8px; }
   .side .user { padding: 0; margin-inline-start: auto; }
@@ -97,7 +97,7 @@ code { background: var(--surface); border: 1px solid var(--line); border-radius:
 }
 .empty p { margin: 0; color: var(--muted); }
 .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-block-size: 44px; padding: 11px 22px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-block-size: 44px; padding: 12px 22px;
   border: 1px solid var(--line-strong); border-radius: var(--radius); background: transparent; color: var(--ink);
   font: 600 16px/1.2 var(--font-ui); text-decoration: none; cursor: pointer;
 }
@@ -168,8 +168,8 @@ a.list-row:hover { border-color: var(--accent); }
   .shell { display: block; }
   .wrap { padding: 0; gap: 12pt; }
   .print-only { display: flex; }
-  .print-head { align-items: center; justify-content: space-between; padding-block-end: 10pt; border-block-end: 2pt solid var(--print-ink); }
-  .print-foot { justify-content: space-between; margin-block-start: 24pt; padding-block-start: 6pt; border-block-start: 0.5pt solid var(--print-ink); font-size: 9pt; }
+  .print-head { align-items: center; justify-content: space-between; padding-block-end: 16px; border-block-end: 3px solid var(--print-ink); }
+  .print-foot { justify-content: space-between; margin-block-start: 24pt; padding-block-start: 10px; border-block-start: 1.5px solid var(--print-ink); font-size: 12px; }
   .panel, .list-row, .empty { background: none; border-color: var(--print-ink); break-inside: avoid; }
   .pill, .notice { background: none; border: 0.5pt solid var(--print-ink); color: var(--print-ink); }
 }

@@ -59,7 +59,8 @@ onMounted(() => store.load());
   <ul v-if="!store.loadError && store.orders.length > 0" class="orders" :aria-busy="store.loading">
     <li v-for="order in store.orders" :key="order.id">
       <RouterLink class="list-row order" :to="{ name: 'order-detail', params: { id: order.id } }">
-        <BrandIcon name="order" />
+        <BrandIcon name="delivery" v-if="order.status === 'delivered'" />
+        <BrandIcon name="order" v-else />
         <span class="who">
           <strong>{{ order.customer_name }}</strong>
           <span class="muted">طلب {{ order.id }} · {{ order.items.length }} بند</span>

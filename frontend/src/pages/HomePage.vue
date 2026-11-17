@@ -122,7 +122,7 @@ h2 { font-size: 20px; margin-block: 0 12px; }
 .traits h2 { margin-block-end: 6px; color: var(--accent); }
 .traits p { margin: 0; color: var(--muted); font-size: 15px; }
 .showcase { display: grid; place-items: center; min-block-size: 320px; border-radius: calc(var(--radius) * 2); background: var(--brand-soft); }
-.tile-mark { display: grid; place-items: center; inline-size: min(60%, 260px); aspect-ratio: 1; border-radius: 28px; background: var(--bg); }
+.tile-mark { display: grid; place-items: center; inline-size: min(60%, 260px); aspect-ratio: 1; border: 1px solid var(--line); border-radius: calc(var(--radius) * 4); background: var(--bg); }
 .tile-mark .mark {
   inline-size: 72%; aspect-ratio: 100 / 65.85071; background: var(--color-mark-ink);
   -webkit-mask: url("../static/brand/mark.svg") center / contain no-repeat;
@@ -133,9 +133,10 @@ h2 { font-size: 20px; margin-block: 0 12px; }
   .landing { grid-template-columns: 1fr; }
   .showcase { display: none; }
   /* الجوال في الدليل: العنوان والزر داخل بطاقة بلون العلامة. */
-  .pitch { padding: 28px 24px; border-radius: 28px; background: var(--accent); color: var(--on-accent); }
+  .pitch { padding: 28px 22px; border-radius: calc(var(--radius) * 3); background: var(--accent); color: var(--on-accent); }
+  .pitch h1 { font-size: 28px; }
   .pitch .slogan, .pitch .lead, .pitch .traits { display: none; }
-  .pitch .btn { border-color: transparent; background: var(--bg); color: var(--ink); }
+  .pitch .btn { border-color: transparent; background: var(--bg); color: var(--accent); }
   .pitch .btn + .btn { background: transparent; border-color: var(--on-accent); color: var(--on-accent); }
 }
 </style>

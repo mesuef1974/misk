@@ -72,7 +72,7 @@ async function logout(): Promise<void> {
     </aside>
     <main class="wrap">
       <!-- رأس الورقة المطبوعة وتذييلها كما في شاشة الطباعة من الدليل؛ لا يظهران على الشاشة. -->
-      <div class="print-only print-head" aria-hidden="true"><BrandLockup :height="44" /></div>
+      <div class="print-only print-head" aria-hidden="true"><BrandLockup :height="48" /></div>
       <RouterView />
       <div class="print-only print-foot" aria-hidden="true"><span>يُرسم اسمك ثم يُحفر</span></div>
     </main>
