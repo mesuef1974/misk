@@ -55,8 +55,8 @@ def _contrast(a: str, b: str) -> float:
 
 # لكل سمة ليلها ونهارها (قرار المالك 2026-11-17): الخلفية والسطح والحد والتمييز تتبع السمة في الوضعين.
 # ما لا يتبعها ليلًا (الحبر والخافت والخطر) يبقى على قيمة token_map الليلية حرفيًّا.
-NIGHT_INK = "#f1f7f4"
-NIGHT_MUTED = "#b5bdb9"
+NIGHT_INK = "#fdf2f5"
+NIGHT_MUTED = "#c4b6ba"
 
 
 def test_palette_free_night_tokens_match_adoption_token_map():
@@ -145,13 +145,17 @@ def test_generic_day_derivation_is_the_one_computed_here():
         "--day-line: color-mix(in srgb, #17201d 14%, var(--day-bg));",
         "--day-soft: color-mix(in srgb, var(--day-color) 10%, var(--day-bg));",
         "--bg: light-dark(var(--day-bg), var(--night-bg));",
-        "--surface: light-dark(var(--day-surface), color-mix(in srgb, #ffffff 7%, var(--night-bg)));",
-        "--ink: light-dark(var(--day-ink), #f1f7f4);",
-        "--muted: light-dark(var(--day-muted), #b5bdb9);",
-        "--line: light-dark(var(--day-line), color-mix(in srgb, #ffffff 24%, var(--night-bg)));",
+        "--night-surface: color-mix(in srgb, #ffffff 7%, var(--night-bg));",
+        "--night-raised: color-mix(in srgb, #ffffff 13%, var(--night-bg));",
+        "--night-line: color-mix(in srgb, #ffffff 24%, var(--night-bg));",
+        "--night-soft: color-mix(in srgb, var(--night-accent) 12%, var(--night-bg));",
+        "--surface: light-dark(var(--day-surface), var(--night-surface));",
+        f"--ink: light-dark(var(--day-ink), {NIGHT_INK});",
+        f"--muted: light-dark(var(--day-muted), {NIGHT_MUTED});",
+        "--line: light-dark(var(--day-line), var(--night-line));",
         "--accent: light-dark(var(--day-accent), var(--night-accent));",
-        "--raised: light-dark(var(--day-raised), color-mix(in srgb, #ffffff 13%, var(--night-bg)));",
-        "--brand-soft: light-dark(var(--day-soft), color-mix(in srgb, var(--night-accent) 12%, var(--night-bg)));",
+        "--raised: light-dark(var(--day-raised), var(--night-raised));",
+        "--brand-soft: light-dark(var(--day-soft), var(--night-soft));",
         "--on-accent: light-dark(#ffffff, var(--night-bg));",
     ):
         assert line in tokens, line
@@ -175,12 +179,14 @@ def test_each_palette_reaches_contrast_in_day_and_night(name):
     # لون الشعار معلوماتي: 3:1 على خلفية سمته.
     assert _contrast(day["--day-color"], day["--day-bg"]) >= 3
 
+    # ما لم تذكره قاعدة السمة من سطوح الليل فمن الاشتقاق العام؛ العودي يذكرها كلها (ليل الدليل).
     night_grounds = [
         night_bg,
-        _mix("#ffffff", 0.07, night_bg),
-        _mix("#ffffff", 0.13, night_bg),
-        _mix(night_accent, 0.12, night_bg),
+        night.get("--night-surface", _mix("#ffffff", 0.07, night_bg)),
+        night.get("--night-raised", _mix("#ffffff", 0.13, night_bg)),
+        night.get("--night-soft", _mix(night_accent, 0.12, night_bg)),
     ]
+    assert ("--night-surface" in night) == (name == "oud")
     for ground in night_grounds:
         assert _contrast(night_accent, ground) >= 4.5
         assert _contrast(NIGHT_MUTED, ground) >= 4.5
@@ -204,6 +210,25 @@ def test_oud_day_is_the_guide_token_map():
     assert actual == expected
 
 
+def test_oud_night_is_the_guide_token_map():
+    # ليل العودي قيم دليل الهوية حرفيًّا (قرار المالك 2026-11-17): token_map لما فيه، وشاشة app-dark للسطح المرفوع والناعم.
+    expected = {var: dark for var, (_, dark) in _token_map().items()}
+    oud = _rule_values('[data-palette="oud"]')
+    actual = {
+        "--bg": oud["--night-bg"],
+        "--surface": oud["--night-surface"],
+        "--ink": NIGHT_INK,
+        "--muted": NIGHT_MUTED,
+        "--line": oud["--night-line"],
+        "--accent": oud["--night-accent"],
+        "--risk": _tokens_css()["--risk"][1],
+    }
+    assert actual == expected
+    guide = (IDENTITY / "screens" / "app-dark.html").read_text(encoding="utf-8").lower()
+    assert f"--raised:{oud['--night-raised']}" in guide
+    assert f"--brand-soft:{oud['--night-soft']}" in guide
+
+
 def test_default_palette_values_are_oud():
     # بلا data-palette (قبل السكربت أو بتخزين محجوب) الصفحة عودية في الوضعين.
     tokens = _tokens_text()
@@ -213,11 +238,14 @@ def test_default_palette_values_are_oud():
     assert ivory and champagne
     oud = _rule_values('[data-palette="oud"]')
     assert oud["--day-bg"] == ivory.group(1).lower()
-    assert oud["--night-accent"] == champagne.group(1).lower()
     assert "--day-bg: var(--ivory);" in root
-    assert "--night-accent: var(--champagne);" in root
     for var in (
         "--night-bg",
+        "--night-accent",
+        "--night-surface",
+        "--night-raised",
+        "--night-line",
+        "--night-soft",
         "--day-ink",
         "--day-muted",
         "--day-surface",
