@@ -2,12 +2,17 @@
    كل لون يُعرَّف مرة بقيمتيه الفاتحة والداكنة؛ الاختيار يتبع color-scheme الذي تضبطه الصفحة.
    html[data-theme] لأجل لوحة Django: لها متغيّر --accent خاص تعرّفه بـ html[data-theme="light"]، و:root وحده لا يغلبه. */
 :root, html[data-theme] {
-  --bg: light-dark(#f6f4ef, #14181a);
-  --surface: light-dark(#ffffff, #1d2326);
-  --ink: light-dark(#1d2327, #eceff0);
-  --muted: light-dark(#5b656c, #a3adb2);
-  --line: light-dark(#e0dcd2, #333b3f);
-  --accent: light-dark(#0f6b5c, #5cc7b2);
-  --risk: light-dark(#a23a2e, #ee9c90);
+  --bg: light-dark(#f5f3ee, #141a17);
+  --surface: light-dark(#f1f7f4, #242b28);
+  --ink: light-dark(#17201d, #f1f7f4);
+  --muted: light-dark(#5e6763, #b5bdb9);
+  --line: light-dark(#cfd6d3, #4c5551);
+  --accent: light-dark(#1e4d43, #84a79e);
+  --risk: light-dark(#76021a, #ff9a99);
   --font-ui: "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+}
+
+:root {
+  /* الشعار: حبره لون العلامة على الفاتح وأبيض على الداكن؛ الرمز بلون واحد (مولَّد بأداة سِمة) */
+  --color-mark-ink: light-dark(#1e4d43, #ffffff);
 }

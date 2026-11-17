@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60" fill="#D5DAD4">
+  <path d="M10 15 C40 5 80 5 110 15 C80 23 40 23 10 15 Z" />
+  <path data-tone="accent" d="M0 37.5 C17.5 37.5 35 40 50 45 C35 49 17.5 51 0 51 Z" />
+  <path data-tone="accent" d="M120 37.5 C102.5 37.5 85 40 70 45 C85 49 102.5 51 120 51 Z" />
+</svg>

@@ -8,6 +8,9 @@
   <script src="{% static 'core/theme-init.js' %}"></script>
   {% vite_hmr_client %}
   {% vite_asset 'src/main.ts' %}
+  <link rel="alternate icon" href="{% static 'favicon.ico' %}">
+  <link rel="apple-touch-icon" href="{% static 'apple-touch-icon.png' %}">
+  <link rel="manifest" href="{% static 'site.webmanifest' %}">
 </head>
 <body>
   <div id="app" data-site-title="{{ SITE_TITLE }}"></div>

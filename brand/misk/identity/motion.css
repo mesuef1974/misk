@@ -1,0 +1,5 @@
+/* ظهور الرمز من هوية سِمة: ضع الصنف sima-mark-intro على عنصر svg يضم أجزاء الرمز، وأعطِ كل جزء --i (0 فصاعدًا).
+   600ms وتتابع 90ms لكل جزء، وتُلغى الحركة عند prefers-reduced-motion. مولَّد؛ لا يُعدَّل يدويًا. */
+.sima-mark-intro>*{animation:sima-rise .6s cubic-bezier(.2,0,0,1) both;animation-delay:calc(var(--i,0) * 90ms);transform-box:fill-box;transform-origin:50% 100%}
+@keyframes sima-rise{from{opacity:0;transform:translateY(12%) scale(.96)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.sima-mark-intro>*{animation:none}}
