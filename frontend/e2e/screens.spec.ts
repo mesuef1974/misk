@@ -125,7 +125,15 @@ async function tracks(page: Page, selector: string): Promise<number[]> {
 //   وحدّه جهة المحتوى؛ فيُقارن عرضا العمودين وحدّ الشريط أيًّا كانت جهته، وارتفاع الزر يُقارن في landing.
 // - زر app-dark بلون brand الداكن، و--accent الليلي في token_map (ADOPTION.yaml) هو brand-strong:
 //   الصفحة تتبع token_map الذي يفرضه tests/test_brand.py.
-const KNOWN: Record<string, string[]> = { "app-dark": ["الزر الأساسي — background-color"] };
+// - بند التنقل النشط نهارًا: الخلفية الناعمة العودية في الصفحة #ebdad6 أفتح من درجة الدليل #e5d1cc، لأن النص
+//   الخافت على درجة الدليل 4.29 دون حدّ النص 4.5 (tokens.css وtests/test_brand.py).
+// - لوح الهوية في صفحة الزائر (BrandPanel، قرار المالك 2026-11-17): لوح بلون السمة عليه النقش وبطاقة عاجية
+//   بشعار الشريط، بدل لوحة الدليل الناعمة ولوح الرمز المربع 260: لونه وحدّ بطاقته ومقاسها من تصميمه لا من الدليل.
+const KNOWN: Record<string, string[]> = {
+  "app-light": ["بند التنقل النشط — background-color"],
+  "app-dark": ["الزر الأساسي — background-color"],
+  landing: ["لوحة النمط — background-color", "لوح الرمز — border-top-color", "لوح الرمز — width", "لوح الرمز — height"],
+};
 
 async function openGuide(page: Page, screen: string): Promise<void> {
   await page.goto(pathToFileURL(path.join(SCREENS, `${screen}.html`)).href);
@@ -242,7 +250,7 @@ test("landing: صفحة الزائر", async ({ browser }) => {
     ["نص بطاقة الشخصية", "main .card p", ".traits p", ["color", "font-size"]],
     ["لوحة النمط", "aside.motif", ".brand-panel", ["background-color"]],
     ["لوح الرمز", "aside.motif > div", ".brand-panel .card", [...SURFACE, "width", "height"]],
-  ]);
+  ], KNOWN.landing);
   await context.close();
 });
 

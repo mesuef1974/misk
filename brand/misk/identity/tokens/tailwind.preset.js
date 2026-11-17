@@ -122,12 +122,12 @@ module.exports = {
       },
       "fontFamily": {
         "heading": [
-          "IBM Plex Sans Arabic",
+          "Cairo",
           "Tahoma",
           "sans-serif"
         ],
         "body": [
-          "IBM Plex Sans Arabic",
+          "Almarai",
           "Tahoma",
           "sans-serif"
         ]

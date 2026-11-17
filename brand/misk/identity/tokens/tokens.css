@@ -1,6 +1,6 @@
 /* tokens هوية misk — مولّدة من سِمة؛ لا تُعدَّل يدويًا. الأدوار فقط في الواجهة، والتدرجات للحالات الخاصة. */
-@font-face{font-family:"IBM Plex Sans Arabic";src:url("../fonts/IBMPlexSansArabic-Medium.ttf") format("truetype");font-display:swap;font-weight:500}
-@font-face{font-family:"IBM Plex Sans Arabic";src:url("../fonts/IBMPlexSansArabic-Regular.ttf") format("truetype");font-display:swap;font-weight:400}
+@font-face{font-family:"Almarai";src:url("../fonts/Almarai-Regular.ttf") format("truetype");font-display:swap;font-weight:100 1000}
+@font-face{font-family:"Cairo";src:url("../fonts/Cairo[slnt,wght].ttf") format("truetype");font-display:swap;font-weight:100 1000}
 :root{
   color-scheme:light;
   --misk-bg:#F8F2E9;
@@ -103,9 +103,9 @@
   --misk-info-800:#0B4161;
   --misk-info-900:#002C45;
   --misk-info-950:#001A2C;
-  --misk-font-heading:"IBM Plex Sans Arabic",Tahoma,sans-serif;
-  --misk-font-body:"IBM Plex Sans Arabic",Tahoma,sans-serif;
-  --misk-weight-heading:500;
+  --misk-font-heading:"Cairo",Tahoma,sans-serif;
+  --misk-font-body:"Almarai",Tahoma,sans-serif;
+  --misk-weight-heading:600;
   --misk-weight-body:400;
   --misk-numerals:decimal;
   --misk-text-caption:0.75rem;  --misk-leading-caption:1.7;
@@ -126,56 +126,56 @@
   --misk-space-6:32px;
   --misk-space-7:48px;
   --misk-space-8:64px;
-  --misk-radius:4px;
+  --misk-radius:2px;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   color-scheme:dark;
-  --misk-bg:#141A17;
-  --misk-surface:#242B28;
-  --misk-raised:#383F3C;
-  --misk-border:#4C5551;
-  --misk-border-strong:#7D8682;
-  --misk-text:#F1F7F4;
-  --misk-text-muted:#B5BDB9;
-  --misk-brand:#668D83;
-  --misk-accent:#C4785A;
+  --misk-bg:#1F1518;
+  --misk-surface:#312529;
+  --misk-raised:#46393D;
+  --misk-border:#5D4E53;
+  --misk-border-strong:#8E7E83;
+  --misk-text:#FDF2F5;
+  --misk-text-muted:#C4B6BA;
+  --misk-brand:#CC8896;
+  --misk-accent:#D6B68C;
   --misk-focus:#5889AC;
-  --misk-brand-soft:#18201D;
-  --misk-accent-text:#C4785A;
-  --misk-accent-soft:#27241F;
-  --misk-brand-strong:#84A79E;
-  --misk-on-brand:#141A17;
-  --misk-success:#589456;
+  --misk-brand-soft:#402B30;
+  --misk-accent-text:#D6B68C;
+  --misk-accent-soft:#453731;
+  --misk-brand-strong:#E4A8B3;
+  --misk-on-brand:#1F1518;
+  --misk-success:#658E79;
   --misk-warning:#A8783D;
   --misk-error:#FF9A99;
   --misk-info:#5889AC;
-  --misk-success-soft:#002001;
+  --misk-success-soft:#001F12;
   --misk-warning-soft:#251400;
   --misk-error-soft:#53000F;
   --misk-info-soft:#001A2C;
 }}
 :root[data-theme="dark"]{
   color-scheme:dark;
-  --misk-bg:#141A17;
-  --misk-surface:#242B28;
-  --misk-raised:#383F3C;
-  --misk-border:#4C5551;
-  --misk-border-strong:#7D8682;
-  --misk-text:#F1F7F4;
-  --misk-text-muted:#B5BDB9;
-  --misk-brand:#668D83;
-  --misk-accent:#C4785A;
+  --misk-bg:#1F1518;
+  --misk-surface:#312529;
+  --misk-raised:#46393D;
+  --misk-border:#5D4E53;
+  --misk-border-strong:#8E7E83;
+  --misk-text:#FDF2F5;
+  --misk-text-muted:#C4B6BA;
+  --misk-brand:#CC8896;
+  --misk-accent:#D6B68C;
   --misk-focus:#5889AC;
-  --misk-brand-soft:#18201D;
-  --misk-accent-text:#C4785A;
-  --misk-accent-soft:#27241F;
-  --misk-brand-strong:#84A79E;
-  --misk-on-brand:#141A17;
-  --misk-success:#589456;
+  --misk-brand-soft:#402B30;
+  --misk-accent-text:#D6B68C;
+  --misk-accent-soft:#453731;
+  --misk-brand-strong:#E4A8B3;
+  --misk-on-brand:#1F1518;
+  --misk-success:#658E79;
   --misk-warning:#A8783D;
   --misk-error:#FF9A99;
   --misk-info:#5889AC;
-  --misk-success-soft:#002001;
+  --misk-success-soft:#001F12;
   --misk-warning-soft:#251400;
   --misk-error-soft:#53000F;
   --misk-info-soft:#001A2C;

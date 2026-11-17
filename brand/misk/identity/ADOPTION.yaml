@@ -1,4 +1,4 @@
-release: misk/v6
+release: misk/v7
 concept: a1
 purpose: ما في دليل الهوية، وما طُبّق منه آليًا في هذا المشروع، وما تبقّى على جلسة المشروع. مولَّد من سِمة؛ لا يُعدَّل يدويًا.
 applied_by_delivery:
@@ -24,9 +24,10 @@ sections:
   title: الخط
   status: provided
   files:
-  - fonts/IBMPlexSansArabic-Medium.ttf
-  - fonts/IBMPlexSansArabic-Regular.ttf
-  - fonts/OFL-IBMPlexSansArabic.txt
+  - fonts/Almarai-Regular.ttf
+  - fonts/Cairo[slnt,wght].ttf
+  - fonts/OFL-Almarai.txt
+  - fonts/OFL-Cairo.txt
 - id: pattern
   title: النمط
   status: provided
@@ -114,7 +115,7 @@ token_map:
   dark:
     role: bg
     var: --misk-bg
-    value: '#141a17'
+    value: '#1f1518'
 - app_var: --surface
   light:
     role: surface
@@ -123,7 +124,7 @@ token_map:
   dark:
     role: surface
     var: --misk-surface
-    value: '#242b28'
+    value: '#312529'
 - app_var: --ink
   light:
     role: text
@@ -132,7 +133,7 @@ token_map:
   dark:
     role: text
     var: --misk-text
-    value: '#f1f7f4'
+    value: '#fdf2f5'
 - app_var: --muted
   light:
     role: text-muted
@@ -141,7 +142,7 @@ token_map:
   dark:
     role: text-muted
     var: --misk-text-muted
-    value: '#b5bdb9'
+    value: '#c4b6ba'
 - app_var: --line
   light:
     role: border
@@ -150,7 +151,7 @@ token_map:
   dark:
     role: border
     var: --misk-border
-    value: '#4c5551'
+    value: '#5d4e53'
 - app_var: --accent
   light:
     role: brand
@@ -159,7 +160,7 @@ token_map:
   dark:
     role: brand-strong
     var: --misk-brand-strong
-    value: '#84a79e'
+    value: '#e4a8b3'
 - app_var: --risk
   light:
     role: error
@@ -176,9 +177,8 @@ checks:
   detail: كل المتغيرات اللونية النهارية مطابقة
 - id: font-family
   section: type
-  ok: false
-  detail: عائلة IBM Plex Sans Arabic غير مذكورة في أنماط المشروع
-  action: أضف @font-face أو استيرادًا للخط IBM Plex Sans Arabic من identity/fonts واجعله عائلة العناوين والنص.
+  ok: true
+  detail: عائلة Cairo مذكورة في أنماط المشروع
 - id: motion-included
   section: motion
   ok: true
@@ -202,14 +202,11 @@ checks:
   action: استعمل أيقونات identity/icons كما هي حيث تعرض الواجهة معناها؛ ما لا موضع له في التطبيق يُذكر للمالك ولا يُحشر.
 - id: pattern-used
   section: pattern
-  ok: false
-  detail: النمط غير مستعمل في الواجهة
-  action: ضع identity/patterns/motif-*.svg في الصفحات حيث تضعه شاشات identity/screens.
+  ok: true
+  detail: النمط مستعمل في frontend/src/components/BrandPanel.vue، frontend/src/styles/base.css
 - id: screens-compared
   section: applications
   ok: true
   detail: اختبار يقارن صفحات المشروع بشاشات الدليل موجود
 gaps:
-- font-family
 - icons-used
-- pattern-used

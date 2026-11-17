@@ -9,7 +9,8 @@
 /* السمات العشر (قرار المالك 2026-11-17): لون الشريط وكلمة DESIGN في الشعار هو لون السمة والطيّات شامبانيا.
    لكل سمة نهارها وليلها: --day-bg خلفية نهارية بصبغة السمة (العودي على العاجي)، و--night-bg خلفية ليلية عميقة
    بصبغتها، و--night-accent لون التمييز الليلي. بقية السطوح والحدود تُشتق منها أدناه. العودي افتراضي،
-   ونهاره قيم دليل الهوية v6 حرفيًّا (token_map في brand/misk/identity/ADOPTION.yaml) لا اشتقاقًا.
+   ونهاره وليله قيم دليل الهوية v7 حرفيًّا (token_map في brand/misk/identity/ADOPTION.yaml وشاشة app-dark) لا اشتقاقًا:
+   ليل العودي ليل الدليل بقرار المالك 2026-11-17، وبقية السمات تشتق ليلها من --night-bg و--night-accent.
    الأسماء نفسها في frontend/src/domain/theme.ts وapps/core/static/core/theme-init.js (tests/test_brand.py يطابقها
    ويفحص تباين كل سمة في الوضعين). */
 :root {
@@ -35,8 +36,12 @@
   --day-raised: #f0e4e8;
   --day-line: #ddd0d4;
   --day-soft: #ebdad6;
-  --night-bg: #1C0A0E;
-  --night-accent: var(--champagne);
+  --night-bg: #1f1518;
+  --night-accent: #e4a8b3;
+  --night-surface: #312529;
+  --night-raised: #46393d;
+  --night-line: #5d4e53;
+  --night-soft: #402b30;
 }
 /* بلا html في المحدِّد: المنتقي يضع data-palette على عيّنة كل سمة فتأخذ لونها من القاعدة نفسها. */
 /* الخلفية الناعمة العودية #ebdad6 أفتح من درجة الدليل #e5d1cc: النص الخافت عليها 4.29 في الدليل، دون حدّ النص. */
@@ -48,6 +53,10 @@
   --day-raised: color-mix(in srgb, var(--day-color) 6%, var(--day-bg));
   --day-line: color-mix(in srgb, #17201d 14%, var(--day-bg));
   --day-soft: color-mix(in srgb, var(--day-color) 10%, var(--day-bg));
+  --night-surface: color-mix(in srgb, #ffffff 7%, var(--night-bg));
+  --night-raised: color-mix(in srgb, #ffffff 13%, var(--night-bg));
+  --night-line: color-mix(in srgb, #ffffff 24%, var(--night-bg));
+  --night-soft: color-mix(in srgb, var(--night-accent) 12%, var(--night-bg));
 }
 [data-palette="navy"] { --day-color: var(--palette-navy); --day-bg: #EEF3FC; --night-bg: #09101D; --night-accent: #A5BEED; }
 [data-palette="royal-blue"] { --day-color: var(--palette-royal-blue); --day-bg: #EDF3FC; --night-bg: #08101E; --night-accent: #9BBFFB; }
@@ -59,15 +68,16 @@
 [data-palette="rose"] { --day-color: var(--palette-rose); --day-accent: #9C4B5F; --day-bg: #FCEFF1; --night-bg: #1C0A0E; --night-accent: #F2A5B4; }
 [data-palette="chocolate"] { --day-color: var(--palette-chocolate); --day-bg: #F7F1EE; --night-bg: #170E09; --night-accent: #D7B6A5; }
 [data-palette="black"] { --day-color: var(--palette-black); --day-bg: #F2F2F3; --night-bg: #101011; --night-accent: #D0D0D6; }
-[data-palette="oud"] { --day-color: var(--palette-oud); --day-bg: #F8F2E9; --night-bg: #1C0A0E; --night-accent: #D6B68C;
-  --day-ink: #35242c; --day-muted: #6c5c61; --day-surface: #fdf2f5; --day-raised: #f0e4e8; --day-line: #ddd0d4; --day-soft: #ebdad6; }
+[data-palette="oud"] { --day-color: var(--palette-oud); --day-bg: #F8F2E9; --night-bg: #1f1518; --night-accent: #e4a8b3;
+  --day-ink: #35242c; --day-muted: #6c5c61; --day-surface: #fdf2f5; --day-raised: #f0e4e8; --day-line: #ddd0d4; --day-soft: #ebdad6;
+  --night-surface: #312529; --night-raised: #46393d; --night-line: #5d4e53; --night-soft: #402b30; }
 
 :root, html[data-theme] {
   --bg: light-dark(var(--day-bg), var(--night-bg));
-  --surface: light-dark(var(--day-surface), color-mix(in srgb, #ffffff 7%, var(--night-bg)));
-  --ink: light-dark(var(--day-ink), #f1f7f4);
-  --muted: light-dark(var(--day-muted), #b5bdb9);
-  --line: light-dark(var(--day-line), color-mix(in srgb, #ffffff 24%, var(--night-bg)));
+  --surface: light-dark(var(--day-surface), var(--night-surface));
+  --ink: light-dark(var(--day-ink), #fdf2f5);
+  --muted: light-dark(var(--day-muted), #c4b6ba);
+  --line: light-dark(var(--day-line), var(--night-line));
   --accent: light-dark(var(--day-accent), var(--night-accent));
   --risk: light-dark(#76021a, #ff9a99);
   --font-ui: "Almarai", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
@@ -82,20 +92,20 @@
   --color-ink: var(--ink);
 }
 
-/* بقية ألوان الهوية v5 كما في شاشات الدليل (brand/misk/identity/screens/app-light.html وapp-dark.html):
+/* بقية ألوان الهوية v7 كما في شاشات الدليل (brand/misk/identity/screens/app-light.html وapp-dark.html):
    سطوح وحدود وتركيز وحالات. الصفحات تقرأ هذه المتغيرات وحدها، بلا لون خام.
    السطح المرفوع والخلفية الناعمة مشتقّان من لون السمة على خلفيتها في الوضعين. */
 :root, html[data-theme] {
-  --raised: light-dark(var(--day-raised), color-mix(in srgb, #ffffff 13%, var(--night-bg)));
-  --line-strong: light-dark(#8e7e83, #7d8682);
+  --raised: light-dark(var(--day-raised), var(--night-raised));
+  --line-strong: light-dark(#8e7e83, #8e7e83);
   --focus: light-dark(#3a6f93, #5889ac);
   --on-accent: light-dark(#ffffff, var(--night-bg));
-  --brand-soft: light-dark(var(--day-soft), color-mix(in srgb, var(--night-accent) 12%, var(--night-bg)));
-  --warm: light-dark(#c4785a, #c4785a);
-  --warm-soft: light-dark(#efe1d8, #27241f);
+  --brand-soft: light-dark(var(--day-soft), var(--night-soft));
+  --warm: light-dark(#d6b68c, #d6b68c);
+  --warm-soft: light-dark(#f2e7d8, #453731);
   --risk-soft: light-dark(#fff1f1, #53000f);
-  --ok: light-dark(#3e6954, #589456);
-  --ok-soft: light-dark(#e3fcef, #002001);
+  --ok: light-dark(#3e6954, #658e79);
+  --ok-soft: light-dark(#e3fcef, #001f12);
   --warn: light-dark(#8a5a14, #a8783d);
   --warn-soft: light-dark(#fff3e6, #251400);
   --info: light-dark(#2d6387, #5889ac);
@@ -103,6 +113,6 @@
   /* الورق المطبوع حبر أسود في الوضعين (screens/print.html). */
   --print-ink: #000000;
   --print-muted: #333333;
-  /* الزوايا 2 بقرار المالك 2026-11-17 (الدليل v6 يقترح 4، وv5 كان 10). */
+  /* الزوايا 2 بقرار المالك 2026-11-17 (والدليل v7 عليها). */
   --radius: 2px;
 }
