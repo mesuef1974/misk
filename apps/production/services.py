@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
 from apps.catalog.models import Calibration, Material
+from apps.core.columns import column_length
 from apps.core.services import record_audit
 from apps.orders import services as order_services
 from apps.orders.models import Order, OrderItem
@@ -18,7 +19,7 @@ from .models import Placement, RunLog, Sheet
 MARGIN_MM = Decimal("5")
 GAP_MM = Decimal("3")
 MAX_DURATION_S = 7 * 24 * 60 * 60
-REQUEST_ID_LENGTH = RunLog._meta.get_field("request_id").max_length
+REQUEST_ID_LENGTH = column_length(RunLog, "request_id")
 PLANNABLE = {Order.Status.CONFIRMED, Order.Status.IN_PRODUCTION}
 
 

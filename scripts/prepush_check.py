@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """الفحوص السريعة نفسها التي يشغّلها CI، محليًا قبل الدفع، فيُكتشف الخطأ في ثوانٍ لا بعد دورة CI.
 
-الفحوص: ruff check، ruff format --check، makemigrations --check، تصادم أرقام الهجرات (إن وُجد gh)،
-detect-secrets على ما تغيّر، pytest سريع (-x -q)، وبناء الواجهة اختياريًا (--frontend).
+الفحوص: ruff check، ruff format --check، mypy، makemigrations --check، تصادم أرقام الهجرات (إن وُجد gh)،
+detect-secrets على ما تغيّر، pytest سريع (-x -q)، وفحص الواجهة اختياريًا (--frontend: eslint وtypecheck وvitest).
 
 الاستعمال:  python scripts/prepush_check.py [--base origin/main] [--frontend] [--allow-missing]
 الخروج:     0 كل ما قيس نجح، 1 فحص فشل، 3 أداة غائبة بلا --allow-missing (لا نجاح صامت).
@@ -73,6 +73,13 @@ def check_format() -> tuple[str, str]:
     return status(run([sys.executable, "-m", "ruff", "format", "--check", "."]))
 
 
+def check_types() -> tuple[str, str]:
+    proc = run([sys.executable, "-m", "mypy", "."], env=TEST_ENV)
+    if "No module named" in (proc.stderr or ""):
+        return MISSING, "mypy غير مثبَّت"
+    return status(proc)
+
+
 def check_migrations() -> tuple[str, str]:
     return status(run([sys.executable, "manage.py", "makemigrations", "--check", "--dry-run"], env=TEST_ENV))
 
@@ -116,11 +123,11 @@ def check_frontend() -> tuple[str, str]:
     if not (fe / "node_modules").exists():
         return MISSING, "frontend/node_modules غائب (npm ci)"
     npm = shutil.which("npm") or "npm"
-    for script in ("typecheck", "test"):
+    for script in ("lint", "typecheck", "test"):
         proc = run([npm, "run", script, "--silent"], cwd=fe)
         if proc.returncode != 0:
             return FAIL, f"npm run {script}:\n{tail(proc)}"
-    return OK, "typecheck + vitest"
+    return OK, "eslint + typecheck + vitest"
 
 
 def write_receipt(results: dict[str, tuple[str, str]]) -> None:
@@ -146,6 +153,7 @@ def main(argv: list[str] | None = None) -> int:
     checks = {
         "ruff": check_ruff,
         "format": check_format,
+        "mypy": check_types,
         "migrations": check_migrations,
         "collisions": lambda: check_collisions(args.base),
         "secrets": lambda: check_secrets(changed_files(args.base)),
