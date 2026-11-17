@@ -31,6 +31,7 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
       - run: ruff format --check .
+      - run: mypy .
       - name: detect-secrets على ما تغيّر
         run: |
           base="${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}"
@@ -65,6 +66,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "22", cache: npm, cache-dependency-path: frontend/package-lock.json }
       - run: npm ci
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

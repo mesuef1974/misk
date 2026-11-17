@@ -11,6 +11,7 @@ prepush_check.py، والدمج بوابة CI وطابور الدمج. حارس 
 from __future__ import annotations
 
 import argparse
+import io
 import os
 import shutil
 import subprocess
@@ -146,7 +147,8 @@ def push_and_open_pr(path: Path, branch: str, card: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    sys.stdout.reconfigure(encoding="utf-8")
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true", default=True)
     ap.add_argument("--dry-run", action="store_true")

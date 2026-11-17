@@ -13,6 +13,7 @@ from django.db import IntegrityError, transaction
 from apps.catalog import domain as catalog_domain
 from apps.catalog import selectors as catalog_selectors
 from apps.catalog.models import Material, ProductTemplate
+from apps.core.columns import column_length
 from apps.core.services import record_audit
 
 from . import signals
@@ -33,7 +34,7 @@ TRANSITIONS: dict[str, set[str]] = {
 MAX_ITEMS = 100
 MAX_QUANTITY = 1000  # كل نسخة قطعة في تخطيط الألواح
 MAX_NOTES_LENGTH = 2000
-NAME_LENGTH = Customer._meta.get_field("name").max_length
+NAME_LENGTH = column_length(Customer, "name")
 _PRICE = OrderItem._meta.get_field("unit_price")
 PRICE_DIGITS, PRICE_DECIMALS = _PRICE.max_digits, _PRICE.decimal_places
 MAX_PRICE = Decimal(10) ** (PRICE_DIGITS - PRICE_DECIMALS)
