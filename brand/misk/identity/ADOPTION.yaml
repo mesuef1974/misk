@@ -1,0 +1,207 @@
+release: misk/v5
+concept: a1
+purpose: ما في دليل الهوية، وما طُبّق منه آليًا في هذا المشروع، وما تبقّى على جلسة المشروع. مولَّد من سِمة؛ لا يُعدَّل يدويًا.
+applied_by_delivery:
+- الرمز والقفل والأيقونات العامة وmanifest
+- رموز التطبيق اللونية والأبعاد حسب token_map، نهارًا وليلًا
+- الورقة المطبوعة (apply_paper) حيث رُسمت خريطتها
+limits:
+- قيم الوضع الليلي يطبّقها التسليم ولا يعيد فحصها هنا؛ فحص color-parity للنهار وحده
+- 'الفحوص الأخرى فحوص وجود لا جودة: وجودها لا يعني أنها مطابقة لتصميم الدليل'
+sections:
+- id: strategy
+  title: المنصة الاستراتيجية (الشخصية والنبرة واتجاه الصورة)
+  status: provided
+  files:
+  - STRATEGY.md
+- id: color
+  title: الألوان والأدوار في الوضعين
+  status: applied
+  files:
+  - tokens/tokens.css
+- id: type
+  title: الخط
+  status: provided
+  files:
+  - fonts/Almarai-Regular.ttf
+  - fonts/Cairo[slnt,wght].ttf
+  - fonts/OFL-Almarai.txt
+  - fonts/OFL-Cairo.txt
+- id: pattern
+  title: النمط
+  status: provided
+  files:
+  - patterns/motif-mono.svg
+  - patterns/motif-soft.svg
+  - patterns/motif-strong.svg
+- id: icons
+  title: مجموعة الأيقونات
+  status: provided
+  files:
+  - icons/acrylic.svg
+  - icons/delivery.svg
+  - icons/giveaways.svg
+  - icons/laser.svg
+  - icons/leather.svg
+  - icons/name.svg
+  - icons/order.svg
+  - icons/phone-case.svg
+  - icons/portrait.svg
+  - icons/wood.svg
+- id: applications
+  title: 'الهوية في الاستعمال: التطبيقات والشاشات'
+  status: provided
+  files:
+  - applications/app-splash.png
+  - applications/app-splash.svg
+  - applications/card-back.png
+  - applications/card-back.svg
+  - applications/card-front.png
+  - applications/card-front.svg
+  - applications/email-mark.png
+  - applications/email-signature.html
+  - applications/letterhead.png
+  - applications/letterhead.svg
+  - applications/print-header.png
+  - applications/print-header.svg
+  - applications/slide-content.png
+  - applications/slide-content.svg
+  - applications/slide-title.png
+  - applications/slide-title.svg
+  - applications/social-avatar.png
+  - applications/social-avatar.svg
+  - applications/social-cover.png
+  - applications/social-cover.svg
+  - applications/social-post.png
+  - applications/social-post.svg
+  - screens/app-dark.html
+  - screens/app-dark.png
+  - screens/app-light.html
+  - screens/app-light.png
+  - screens/landing.html
+  - screens/landing.png
+  - screens/mobile.html
+  - screens/mobile.png
+  - screens/print.html
+  - screens/print.png
+- id: motion
+  title: 'الحركة: ظهور الرمز'
+  status: provided
+  files:
+  - motion.css
+  - motion/mark-intro.html
+- id: tokens
+  title: tokens بصيغها
+  status: provided
+  files:
+  - tokens/_tokens.scss
+  - tokens/tailwind.preset.js
+  - tokens/tokens.css
+- id: book
+  title: دليل الهوية وعرض الكشف
+  status: provided
+  files:
+  - brand-book.html
+  - brand-book.pdf
+  - reveal.html
+  - reveal.pdf
+token_map:
+- app_var: --bg
+  light:
+    role: bg
+    var: --misk-bg
+    value: '#f5f3ee'
+  dark:
+    role: bg
+    var: --misk-bg
+    value: '#141a17'
+- app_var: --surface
+  light:
+    role: surface
+    var: --misk-surface
+    value: '#f1f7f4'
+  dark:
+    role: surface
+    var: --misk-surface
+    value: '#242b28'
+- app_var: --ink
+  light:
+    role: text
+    var: --misk-text
+    value: '#17201d'
+  dark:
+    role: text
+    var: --misk-text
+    value: '#f1f7f4'
+- app_var: --muted
+  light:
+    role: text-muted
+    var: --misk-text-muted
+    value: '#5e6763'
+  dark:
+    role: text-muted
+    var: --misk-text-muted
+    value: '#b5bdb9'
+- app_var: --line
+  light:
+    role: border
+    var: --misk-border
+    value: '#cfd6d3'
+  dark:
+    role: border
+    var: --misk-border
+    value: '#4c5551'
+- app_var: --accent
+  light:
+    role: brand
+    var: --misk-brand
+    value: '#1e4d43'
+  dark:
+    role: brand-strong
+    var: --misk-brand-strong
+    value: '#84a79e'
+- app_var: --risk
+  light:
+    role: error
+    var: --misk-error
+    value: '#76021a'
+  dark:
+    role: error
+    var: --misk-error
+    value: '#ff9a99'
+checks:
+- id: color-parity
+  section: color
+  ok: true
+  detail: كل المتغيرات اللونية النهارية مطابقة
+- id: font-family
+  section: type
+  ok: false
+  detail: عائلة Cairo غير مذكورة في أنماط المشروع
+  action: أضف @font-face أو استيرادًا للخط Cairo من identity/fonts واجعله عائلة العناوين والنص.
+- id: motion-included
+  section: motion
+  ok: false
+  detail: ظهور الرمز غير مضمَّن في الواجهة
+  action: استورد identity/motion.css وطبّق الصنف sima-mark-intro على الرمز عند أول ظهور.
+- id: slide-templates
+  section: applications
+  ok: false
+  detail: قوالب الشرائح غير موجودة في المشروع
+  action: ابنِ قالب شرائح 16:9 من identity/applications/slide-*.svg.
+- id: splash-screen
+  section: applications
+  ok: false
+  detail: شاشة الافتتاح غير موجودة في المشروع
+  action: ابنِ شاشة افتتاح من identity/applications/app-splash.svg.
+- id: token-parity-test
+  section: tokens
+  ok: false
+  detail: اختبار تطابق الرموز مع ADOPTION.yaml غير موجود
+  action: اكتب اختبارًا يقرأ token_map من ADOPTION.yaml ويطابقه مع tokens.css.
+gaps:
+- font-family
+- motion-included
+- slide-templates
+- splash-screen
+- token-parity-test
