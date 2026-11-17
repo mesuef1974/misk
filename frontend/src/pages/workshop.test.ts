@@ -380,6 +380,15 @@ describe("اللوحة الرئيسية", () => {
     expect(tiles).toContain("1مواد");
   });
 
+  it("تعرض الاسم شعارًا بلون السمة لا نصًّا", async () => {
+    const page = await show(HomePage, "/");
+    const heading = page.get("h1");
+    expect(heading.text()).toBe("");
+    expect(heading.attributes("aria-label")).toBeDefined();
+    // العودي السمة الافتراضية: ملف PNG لها، ولكل سمة ملفها.
+    expect(heading.get("img").attributes("src")).toContain("misk-oud.png");
+  });
+
   it("تدعو غير المشرف إلى الدخول ولا تطلب بيانات", async () => {
     vi.mocked(sessionService.me).mockResolvedValue(null);
     const page = await show(HomePage, "/");

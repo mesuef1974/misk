@@ -50,6 +50,33 @@ code { background: var(--surface); border: 1px solid var(--line); border-radius:
 .wrap { display: flex; flex-direction: column; gap: 24px; padding: 40px 48px 64px; min-inline-size: 0; }
 .wrap > * { margin-block: 0; }
 
+/* خلفية الهوية بلون السمة (قرار المالك 2026-11-17):
+   1) ضوء السمة: تدرّج ناعم يشعّ من أعلى المحتوى ويذوب في الخلفية؛ لا شكل فيه يُقرأ.
+   2) شريط الرأس: عنوان كل صفحة (.page-head أو h1 مباشر) على حزام بلون السمة الناعم وعليه نقش الهوية،
+      ممتد إلى حواف المحتوى؛ ما تحته سطوح معتمة هادئة للعمل.
+   صفحتا الزائر والدخول مقسومتان بلوح الهوية (components/BrandPanel.vue) ولا شريط رأس لهما.
+   الشدة ليلًا أقل: لون التمييز الليلي فاتح على خلفية عميقة فيبرز أكثر. */
+.wrap { position: relative; isolation: isolate; --wrap-pad-block: 40px; --wrap-pad-inline: 48px; }
+.wrap::before {
+  content: ""; position: absolute; inset-block-start: 0; inset-inline: 0; block-size: 620px; z-index: -1; pointer-events: none;
+  background: radial-gradient(90% 100% at 50% 0%, light-dark(color-mix(in srgb, var(--accent) 13%, transparent), color-mix(in srgb, var(--accent) 9%, transparent)), transparent 72%);
+}
+.wrap > .page-head, .wrap > h1 {
+  position: relative; isolation: isolate; overflow: hidden;
+  margin-block-start: calc(var(--wrap-pad-block) * -1); margin-inline: calc(var(--wrap-pad-inline) * -1);
+  padding: calc(var(--wrap-pad-block) * 0.75) var(--wrap-pad-inline) calc(var(--wrap-pad-block) * 0.65);
+  background: var(--brand-soft); border-block-end: 1px solid var(--line);
+}
+.wrap > .page-head::before, .wrap > h1::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: light-dark(color-mix(in srgb, var(--accent) 11%, transparent), color-mix(in srgb, var(--accent) 7%, transparent));
+  -webkit-mask: url("../static/brand/motif-mono.svg") top center / 130px auto repeat;
+  mask: url("../static/brand/motif-mono.svg") top center / 130px auto repeat;
+}
+/* شعار الرئيسية (PNG بلون السمة النهاري) يُفتَّح ليلًا كي لا تغيب كلمة DESIGN في الخلفية العميقة. */
+:root[data-theme="dark"] .home-logo img { filter: brightness(1.7); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .home-logo img { filter: brightness(1.7); } }
+
 @media (max-width: 860px) {
   .shell { display: block; }
   .side { position: static; block-size: auto; overflow: visible; padding: 16px 20px 0; background: none; border: 0; }
@@ -67,7 +94,7 @@ code { background: var(--surface); border: 1px solid var(--line); border-radius:
   .side .aux .nav-item { padding-inline: 8px; }
   .side .user { padding: 0; margin-inline-start: auto; }
   .side .user .who { display: none; }
-  .wrap { gap: 16px; padding: 16px 20px 108px; }
+  .wrap { gap: 16px; padding: 16px 20px 108px; --wrap-pad-block: 16px; --wrap-pad-inline: 20px; }
 }
 
 /* عناصر مشتركة بين الصفحات: رأس الصفحة، البطاقات، الأزرار، الحقول، التنبيهات. */
@@ -167,6 +194,8 @@ a.list-row:hover { border-color: var(--accent); }
   .side, .btn, .filters, .more { display: none !important; }
   .shell { display: block; }
   .wrap { padding: 0; gap: 12pt; }
+  .wrap::before, .wrap > .page-head::before, .wrap > h1::before { display: none; }
+  .wrap > .page-head, .wrap > h1 { margin: 0; padding: 0; background: none; border: 0; }
   .print-only { display: flex; }
   .print-head { align-items: center; justify-content: space-between; padding-block-end: 16px; border-block-end: 3px solid var(--print-ink); }
   .print-foot { justify-content: space-between; margin-block-start: 24pt; padding-block-start: 10px; border-block-start: 1.5px solid var(--print-ink); font-size: 12px; }

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
 import BrandIcon from "@/components/BrandIcon.vue";
+import BrandPanel from "@/components/BrandPanel.vue";
+import BrandRibbonLogo from "@/components/BrandRibbonLogo.vue";
 import StatusCard from "@/components/StatusCard.vue";
 import { ORDER_STATUSES, STATUS_LABELS } from "@/domain/orders";
 import { useAppStore } from "@/stores/app";
@@ -44,7 +46,8 @@ watch(
 <template>
   <template v-if="session.isStaff">
     <div class="page-head">
-      <h1>{{ store.siteTitle }}</h1>
+      <!-- الاسم شعارَ الشريط (PNG) بلون السمة المختارة لا نصًّا؛ الاسم المقروء في aria-label. -->
+      <h1 class="home-logo" :aria-label="store.siteTitle"><BrandRibbonLogo :height="104" /></h1>
       <RouterLink class="btn primary" :to="{ name: 'order-new' }">طلب جديد</RouterLink>
     </div>
 
@@ -98,7 +101,7 @@ watch(
         <div class="panel"><h2>أنيقة</h2><p>نختار للاسم خطًّا واحدًا يليق به ونترك حوله فراغًا، ونقول ما يلزم بجملة قصيرة.</p></div>
       </div>
     </div>
-    <div class="showcase" aria-hidden="true"><div class="tile-mark"><div class="mark"></div></div></div>
+    <BrandPanel />
   </div>
 
   <StatusCard class="status" :ok="store.backendOk" />
@@ -112,26 +115,18 @@ h2 { font-size: 20px; margin-block: 0 12px; }
 .tile .muted { font-size: 13px; }
 .retry { margin-inline-start: 12px; }
 
-.landing { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 32px; align-items: stretch; }
+.landing { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 32px; align-items: stretch; }
 .pitch { display: flex; flex-direction: column; gap: 20px; padding-block: 24px; }
 .pitch > * { margin: 0; }
-.slogan { padding: 2px 10px; border-radius: 999px; background: var(--warm-soft); font-size: 13px; }
+.slogan { align-self: flex-start; padding: 2px 10px; border-radius: 999px; background: var(--warm-soft); font-size: 13px; }
 .pitch h1 { font-size: clamp(34px, 5vw, 56px); }
 .cta { display: flex; flex-wrap: wrap; gap: 12px; }
 .traits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-block-start: 12px; }
 .traits h2 { margin-block-end: 6px; color: var(--accent); }
 .traits p { margin: 0; color: var(--muted); font-size: 15px; }
-.showcase { display: grid; place-items: center; min-block-size: 320px; border-radius: calc(var(--radius) * 2); background: var(--brand-soft); }
-.tile-mark { display: grid; place-items: center; inline-size: min(60%, 260px); aspect-ratio: 1; border: 1px solid var(--line); border-radius: calc(var(--radius) * 4); background: var(--bg); }
-.tile-mark .mark {
-  inline-size: 72%; aspect-ratio: 100 / 65.85071; background: var(--color-mark-ink);
-  -webkit-mask: url("../static/brand/mark.svg") center / contain no-repeat;
-  mask: url("../static/brand/mark.svg") center / contain no-repeat;
-}
 @media (max-width: 1180px) { .traits { grid-template-columns: 1fr; } }
 @media (max-width: 860px) {
   .landing { grid-template-columns: 1fr; }
-  .showcase { display: none; }
   /* الجوال في الدليل: العنوان والزر داخل بطاقة بلون العلامة. */
   .pitch { padding: 28px 22px; border-radius: calc(var(--radius) * 3); background: var(--accent); color: var(--on-accent); }
   .pitch h1 { font-size: 28px; }
