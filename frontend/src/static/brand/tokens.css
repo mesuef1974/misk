@@ -1,13 +1,15 @@
 /* ألوان المنصة، مصدر واحد: تستوردها الواجهة (styles/base.css) وتقرؤها لوحة Django من /static/brand/tokens.css.
    كل لون يُعرَّف مرة بقيمتيه الفاتحة والداكنة (ومنها ما يتبع السمة المختارة)؛ الاختيار يتبع color-scheme الذي تضبطه الصفحة.
    html[data-theme] لأجل لوحة Django: لها متغيّر --accent خاص تعرّفه بـ html[data-theme="light"]، و:root وحده لا يغلبه. */
-/* خطّا الهوية (brand/misk/identity/fonts، رخصة OFL بجوارهما): Cairo للعناوين وAlmarai للنص. */
-@font-face { font-family: "Cairo"; src: url("fonts/Cairo-Variable.ttf") format("truetype"); font-display: swap; font-weight: 100 1000; }
-@font-face { font-family: "Almarai"; src: url("fonts/Almarai-Regular.ttf") format("truetype"); font-display: swap; font-weight: 400; }
+/* خط الهوية v6 (brand/misk/identity/fonts، رخصة OFL بجواره): IBM Plex Sans Arabic، 500 للعناوين و400 للنص.
+   الوزن المتوسط يغطي 500 إلى 900: الدليل لا يحمل وزنًا أثقل، فالمطلوب 600 و700 يُرسم به بلا تثخين مصطنع. */
+@font-face { font-family: "IBM Plex Sans Arabic"; src: url("fonts/IBMPlexSansArabic-Medium.ttf") format("truetype"); font-display: swap; font-weight: 500 900; }
+@font-face { font-family: "IBM Plex Sans Arabic"; src: url("fonts/IBMPlexSansArabic-Regular.ttf") format("truetype"); font-display: swap; font-weight: 400; }
 
 /* السمات العشر (قرار المالك 2026-11-17): لون الشريط وكلمة DESIGN في الشعار هو لون السمة والطيّات شامبانيا.
    لكل سمة نهارها وليلها: --day-bg خلفية نهارية بصبغة السمة (العودي على العاجي)، و--night-bg خلفية ليلية عميقة
-   بصبغتها، و--night-accent لون التمييز الليلي. بقية السطوح والحدود تُشتق منها أدناه. العودي افتراضي.
+   بصبغتها، و--night-accent لون التمييز الليلي. بقية السطوح والحدود تُشتق منها أدناه. العودي افتراضي،
+   ونهاره قيم دليل الهوية v6 حرفيًّا (token_map في brand/misk/identity/ADOPTION.yaml) لا اشتقاقًا.
    الأسماء نفسها في frontend/src/domain/theme.ts وapps/core/static/core/theme-init.js (tests/test_brand.py يطابقها
    ويفحص تباين كل سمة في الوضعين). */
 :root {
@@ -27,10 +29,26 @@
   --day-color: var(--palette-oud);
   --day-accent: var(--day-color);
   --day-bg: var(--ivory);
+  --day-ink: #35242c;
+  --day-muted: #6c5c61;
+  --day-surface: #fdf2f5;
+  --day-raised: #f0e4e8;
+  --day-line: #ddd0d4;
+  --day-soft: #ebdad6;
   --night-bg: #1C0A0E;
   --night-accent: var(--champagne);
 }
 /* بلا html في المحدِّد: المنتقي يضع data-palette على عيّنة كل سمة فتأخذ لونها من القاعدة نفسها. */
+/* الخلفية الناعمة العودية #ebdad6 أفتح من درجة الدليل #e5d1cc: النص الخافت عليها 4.29 في الدليل، دون حدّ النص. */
+/* الاشتقاق العام لنهار كل سمة من لونها وخلفيتها؛ قاعدة العودي بعده تعيد قيم الدليل. */
+[data-palette] {
+  --day-ink: #17201d;
+  --day-muted: #59625e;
+  --day-surface: color-mix(in srgb, #ffffff 60%, var(--day-bg));
+  --day-raised: color-mix(in srgb, var(--day-color) 6%, var(--day-bg));
+  --day-line: color-mix(in srgb, #17201d 14%, var(--day-bg));
+  --day-soft: color-mix(in srgb, var(--day-color) 10%, var(--day-bg));
+}
 [data-palette="navy"] { --day-color: var(--palette-navy); --day-bg: #EEF3FC; --night-bg: #09101D; --night-accent: #A5BEED; }
 [data-palette="royal-blue"] { --day-color: var(--palette-royal-blue); --day-bg: #EDF3FC; --night-bg: #08101E; --night-accent: #9BBFFB; }
 [data-palette="teal"] { --day-color: var(--palette-teal); --day-bg: #EBF4F6; --night-bg: #051316; --night-accent: #95C8D2; }
@@ -41,23 +59,24 @@
 [data-palette="rose"] { --day-color: var(--palette-rose); --day-accent: #9C4B5F; --day-bg: #FCEFF1; --night-bg: #1C0A0E; --night-accent: #F2A5B4; }
 [data-palette="chocolate"] { --day-color: var(--palette-chocolate); --day-bg: #F7F1EE; --night-bg: #170E09; --night-accent: #D7B6A5; }
 [data-palette="black"] { --day-color: var(--palette-black); --day-bg: #F2F2F3; --night-bg: #101011; --night-accent: #D0D0D6; }
-[data-palette="oud"] { --day-color: var(--palette-oud); --day-bg: #F8F2E9; --night-bg: #1C0A0E; --night-accent: #D6B68C; }
+[data-palette="oud"] { --day-color: var(--palette-oud); --day-bg: #F8F2E9; --night-bg: #1C0A0E; --night-accent: #D6B68C;
+  --day-ink: #35242c; --day-muted: #6c5c61; --day-surface: #fdf2f5; --day-raised: #f0e4e8; --day-line: #ddd0d4; --day-soft: #ebdad6; }
 
 :root, html[data-theme] {
-  --bg: #f8f2e9;
-  --surface: #fdf2f5;
-  --ink: light-dark(#35242c, #f1f7f4);
-  --muted: light-dark(#6c5c61, #b5bdb9);
-  --line: #ddd0d4;
-  --accent: #68112f;
+  --bg: light-dark(var(--day-bg), var(--night-bg));
+  --surface: light-dark(var(--day-surface), color-mix(in srgb, #ffffff 7%, var(--night-bg)));
+  --ink: light-dark(var(--day-ink), #f1f7f4);
+  --muted: light-dark(var(--day-muted), #b5bdb9);
+  --line: light-dark(var(--day-line), color-mix(in srgb, #ffffff 24%, var(--night-bg)));
+  --accent: light-dark(var(--day-accent), var(--night-accent));
   --risk: light-dark(#76021a, #ff9a99);
-  --font-ui: "Almarai", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
-  --font-heading: "Cairo", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+  --font-ui: "IBM Plex Sans Arabic", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+  --font-heading: "IBM Plex Sans Arabic", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
 }
 
 :root {
   /* الشعار: الشريط وكلمة DESIGN بلون السمة والطيّات شامبانيا على الفاتح، وكله أبيض على الداكن. */
-  --color-mark-ink: light-dark(#68112f, #ffffff);
+  --color-mark-ink: light-dark(var(--day-color), #ffffff);
   --color-mark-fold: light-dark(var(--champagne), #ffffff);
   /* كلمة القفل (BrandLockup.vue المولَّد) تقرأ --color-ink: تُربط بحبر النص ليتبع الوضع الليلي. */
   --color-ink: var(--ink);
@@ -67,16 +86,16 @@
    سطوح وحدود وتركيز وحالات. الصفحات تقرأ هذه المتغيرات وحدها، بلا لون خام.
    السطح المرفوع والخلفية الناعمة مشتقّان من لون السمة على خلفيتها في الوضعين. */
 :root, html[data-theme] {
-  --raised: light-dark(color-mix(in srgb, var(--day-color) 6%, var(--day-bg)), color-mix(in srgb, #ffffff 13%, var(--night-bg)));
-  --line-strong: light-dark(#7d8682, #7d8682);
+  --raised: light-dark(var(--day-raised), color-mix(in srgb, #ffffff 13%, var(--night-bg)));
+  --line-strong: light-dark(#8e7e83, #7d8682);
   --focus: light-dark(#3a6f93, #5889ac);
   --on-accent: light-dark(#ffffff, var(--night-bg));
-  --brand-soft: light-dark(color-mix(in srgb, var(--day-color) 10%, var(--day-bg)), color-mix(in srgb, var(--night-accent) 12%, var(--night-bg)));
+  --brand-soft: light-dark(var(--day-soft), color-mix(in srgb, var(--night-accent) 12%, var(--night-bg)));
   --warm: light-dark(#c4785a, #c4785a);
   --warm-soft: light-dark(#efe1d8, #27241f);
   --risk-soft: light-dark(#fff1f1, #53000f);
-  --ok: light-dark(#3b7a3a, #589456);
-  --ok-soft: light-dark(#e1ffdf, #002001);
+  --ok: light-dark(#3e6954, #589456);
+  --ok-soft: light-dark(#e3fcef, #002001);
   --warn: light-dark(#8a5a14, #a8783d);
   --warn-soft: light-dark(#fff3e6, #251400);
   --info: light-dark(#2d6387, #5889ac);
@@ -84,5 +103,6 @@
   /* الورق المطبوع حبر أسود في الوضعين (screens/print.html). */
   --print-ink: #000000;
   --print-muted: #333333;
-  --radius: 10px;
+  /* الزوايا 2 بقرار المالك 2026-11-17 (الدليل v6 يقترح 4، وv5 كان 10). */
+  --radius: 2px;
 }

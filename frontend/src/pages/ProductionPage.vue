@@ -244,7 +244,7 @@ async function scrap(sheetId: number): Promise<void> {
 .legend li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .tag {
   display: inline-flex; align-items: center; justify-content: center; min-inline-size: 26px; block-size: 26px;
-  border: 1px solid var(--accent); border-radius: 6px; color: var(--accent); font-weight: 600;
+  border: 1px solid var(--accent); border-radius: var(--radius); color: var(--accent); font-weight: 600;
 }
 .sheet-card .notice { margin-block-start: 12px; }
 .runs { margin-block-start: 12px; }

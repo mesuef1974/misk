@@ -52,20 +52,22 @@ def _contrast(a: str, b: str) -> float:
     return (high + 0.05) / (low + 0.05)
 
 
-# لكل سمة ليلها (قرار المالك 2026-11-17): الخلفية والسطح والحد والتمييز تتبع السمة في الوضعين.
-# ما لا يتبعها يبقى على قيمة token_map الليلية حرفيًّا؛ وخريطة سِمة تنتظر إعادة توليدها للسمات العشر.
-PALETTE_FREE_NIGHT = {"--ink", "--muted", "--risk"}
+# لكل سمة ليلها ونهارها (قرار المالك 2026-11-17): الخلفية والسطح والحد والتمييز تتبع السمة في الوضعين.
+# ما لا يتبعها ليلًا (الحبر والخافت والخطر) يبقى على قيمة token_map الليلية حرفيًّا.
+NIGHT_INK = "#f1f7f4"
+NIGHT_MUTED = "#b5bdb9"
 
 
 def test_palette_free_night_tokens_match_adoption_token_map():
     expected = _token_map()
-    actual = _tokens_css()
+    tokens = _tokens_text()
     # الخريطة تُقرأ كاملة: سبعة متغيرات لونية في الإصدار المعتمد، وأقل من ذلك خلل في القراءة لا نجاح.
     assert len(expected) >= 7
-    assert PALETTE_FREE_NIGHT <= set(expected)
-    assert {var: actual[var][1] for var in PALETTE_FREE_NIGHT} == {
-        var: expected[var][1] for var in PALETTE_FREE_NIGHT
-    }
+    assert expected["--ink"][1] == NIGHT_INK
+    assert expected["--muted"][1] == NIGHT_MUTED
+    assert f"--ink: light-dark(var(--day-ink), {NIGHT_INK});" in tokens
+    assert f"--muted: light-dark(var(--day-muted), {NIGHT_MUTED});" in tokens
+    assert _tokens_css()["--risk"][1] == expected["--risk"][1]
 
 
 PALETTE_ORDER = [
@@ -109,45 +111,68 @@ def _mix(a: str, share: float, b: str) -> str:
     return "#" + "".join(f"{round(x * share + y * (1 - share)):02x}" for x, y in pairs)
 
 
-def _palette_values(name: str) -> dict[str, str]:
+def _rule_values(selector: str) -> dict[str, str]:
+    """القيم الخام (#rrggbb) في قاعدة واحدة من tokens.css."""
+    rule = re.search(rf"(?m)^{re.escape(selector)}\s*{{([^}}]*)}}", _tokens_text())
+    assert rule, selector
+    return {
+        var: value.lower() for var, value in re.findall(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6});", rule.group(1))
+    }
+
+
+def _day(name: str) -> dict[str, str]:
+    """ألوان نهار السمة كما يحسبها المتصفح: قاعدة السمة، وما لم تذكره فمن الاشتقاق العام [data-palette]."""
+    color = _palettes()[name]
+    own = _rule_values(f'[data-palette="{name}"]')
+    generic = _rule_values("[data-palette]")
+    bg = own["--day-bg"]
+    derived = {
+        "--day-surface": _mix("#ffffff", 0.60, bg),
+        "--day-raised": _mix(color, 0.06, bg),
+        "--day-line": _mix(generic["--day-ink"], 0.14, bg),
+        "--day-soft": _mix(color, 0.10, bg),
+    }
+    return {"--day-color": color, "--day-accent": color, **generic, **derived, **own}
+
+
+def test_generic_day_derivation_is_the_one_computed_here():
+    # الاشتقاق في _day هو ما في tokens.css حرفيًّا: إن تغيّرت نسبة هناك فشل هذا الاختبار حتى تُحدَّث هنا.
     tokens = _tokens_text()
-    rule = re.search(rf'\[data-palette="{name}"\]\s*{{([^}}]*)}}', tokens)
-    assert rule, name
-    return dict(re.findall(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6});", rule.group(1)))
+    for line in (
+        "--day-surface: color-mix(in srgb, #ffffff 60%, var(--day-bg));",
+        "--day-raised: color-mix(in srgb, var(--day-color) 6%, var(--day-bg));",
+        "--day-line: color-mix(in srgb, #17201d 14%, var(--day-bg));",
+        "--day-soft: color-mix(in srgb, var(--day-color) 10%, var(--day-bg));",
+        "--bg: light-dark(var(--day-bg), var(--night-bg));",
+        "--surface: light-dark(var(--day-surface), color-mix(in srgb, #ffffff 7%, var(--night-bg)));",
+        "--ink: light-dark(var(--day-ink), #f1f7f4);",
+        "--muted: light-dark(var(--day-muted), #b5bdb9);",
+        "--line: light-dark(var(--day-line), color-mix(in srgb, #ffffff 24%, var(--night-bg)));",
+        "--accent: light-dark(var(--day-accent), var(--night-accent));",
+        "--raised: light-dark(var(--day-raised), color-mix(in srgb, #ffffff 13%, var(--night-bg)));",
+        "--brand-soft: light-dark(var(--day-soft), color-mix(in srgb, var(--night-accent) 12%, var(--night-bg)));",
+        "--on-accent: light-dark(#ffffff, var(--night-bg));",
+    ):
+        assert line in tokens, line
+    # القاعدة العامة تسبق قواعد السمات: التخصيص نفسه، فالأخيرة تغلب.
+    assert tokens.index("[data-palette] {") < tokens.index('[data-palette="navy"]')
 
 
 @pytest.mark.parametrize("name", PALETTE_ORDER)
 def test_each_palette_reaches_contrast_in_day_and_night(name):
-    # الاشتقاق هنا هو ما في tokens.css حرفيًّا: إن تغيّرت نسبة هناك فشل هذا الاختبار حتى تُحدَّث هنا.
-    tokens = _tokens_text()
-    for derived in (
-        "--surface: light-dark(color-mix(in srgb, #ffffff 60%, var(--day-bg)), color-mix(in srgb, #ffffff 7%, var(--night-bg)));",
-        "--raised: light-dark(color-mix(in srgb, var(--day-color) 6%, var(--day-bg)), color-mix(in srgb, #ffffff 13%, var(--night-bg)));",
-        "--brand-soft: light-dark(color-mix(in srgb, var(--day-color) 10%, var(--day-bg)), color-mix(in srgb, var(--night-accent) 12%, var(--night-bg)));",
-        "--accent: light-dark(var(--day-accent), var(--night-accent));",
-        "--on-accent: light-dark(#ffffff, var(--night-bg));",
-    ):
-        assert derived in tokens
-    fixed = _tokens_css()
-    color = _palettes()[name]
-    values = _palette_values(name)
-    day_bg, night_bg, night_accent = values["--day-bg"], values["--night-bg"], values["--night-accent"]
-    day_accent = values.get("--day-accent", color)
+    day = _day(name)
+    night = _rule_values(f'[data-palette="{name}"]')
+    night_bg, night_accent = night["--night-bg"], night["--night-accent"]
     # الدرجة الأغمق للوردي وحده؛ بقية السمات نصّها بلونها.
-    assert ("--day-accent" in values) == (name == "rose")
+    assert (day["--day-accent"] != day["--day-color"]) == (name == "rose")
 
-    day_grounds = [
-        day_bg,
-        _mix("#ffffff", 0.60, day_bg),
-        _mix(color, 0.06, day_bg),
-        _mix(color, 0.10, day_bg),
-    ]
-    for ground in day_grounds:
-        assert _contrast(day_accent, ground) >= 4.5
-        assert _contrast(fixed["--muted"][0], ground) >= 4.5
-    assert _contrast("#ffffff", day_accent) >= 4.5
+    for ground in (day["--day-bg"], day["--day-surface"], day["--day-raised"], day["--day-soft"]):
+        assert _contrast(day["--day-accent"], ground) >= 4.5
+        assert _contrast(day["--day-muted"], ground) >= 4.5
+        assert _contrast(day["--day-ink"], ground) >= 7
+    assert _contrast("#ffffff", day["--day-accent"]) >= 4.5
     # لون الشعار معلوماتي: 3:1 على خلفية سمته.
-    assert _contrast(color, day_bg) >= 3
+    assert _contrast(day["--day-color"], day["--day-bg"]) >= 3
 
     night_grounds = [
         night_bg,
@@ -157,18 +182,49 @@ def test_each_palette_reaches_contrast_in_day_and_night(name):
     ]
     for ground in night_grounds:
         assert _contrast(night_accent, ground) >= 4.5
-        assert _contrast(fixed["--muted"][1], ground) >= 4.5
-        assert _contrast(fixed["--ink"][1], ground) >= 7
+        assert _contrast(NIGHT_MUTED, ground) >= 4.5
+        assert _contrast(NIGHT_INK, ground) >= 7
     assert _contrast(night_bg, night_accent) >= 4.5
+
+
+def test_oud_day_is_the_guide_token_map():
+    # نهار العودي قيم دليل الهوية حرفيًّا (token_map)، لا اشتقاقًا. بقية السمات تشتق من ألوانها.
+    expected = {var: light for var, (light, _) in _token_map().items()}
+    oud = _day("oud")
+    actual = {
+        "--bg": oud["--day-bg"],
+        "--surface": oud["--day-surface"],
+        "--ink": oud["--day-ink"],
+        "--muted": oud["--day-muted"],
+        "--line": oud["--day-line"],
+        "--accent": oud["--day-accent"],
+        "--risk": _tokens_css()["--risk"][0],
+    }
+    assert actual == expected
 
 
 def test_default_palette_values_are_oud():
     # بلا data-palette (قبل السكربت أو بتخزين محجوب) الصفحة عودية في الوضعين.
-    root = _tokens_text().split("[data-palette=", 1)[0]
-    oud = _palette_values("oud")
+    tokens = _tokens_text()
+    root = tokens.split("[data-palette", 1)[0]
+    ivory = re.search(r"--ivory:\s*(#[0-9a-fA-F]{6});", tokens)
+    champagne = re.search(r"--champagne:\s*(#[0-9a-fA-F]{6});", tokens)
+    assert ivory and champagne
+    oud = _rule_values('[data-palette="oud"]')
+    assert oud["--day-bg"] == ivory.group(1).lower()
+    assert oud["--night-accent"] == champagne.group(1).lower()
     assert "--day-bg: var(--ivory);" in root
-    assert f"--night-bg: {oud['--night-bg']};" in root
     assert "--night-accent: var(--champagne);" in root
+    for var in (
+        "--night-bg",
+        "--day-ink",
+        "--day-muted",
+        "--day-surface",
+        "--day-raised",
+        "--day-line",
+        "--day-soft",
+    ):
+        assert re.search(rf"{var}:\s*{oud[var]};", root, re.I), var
 
 
 def test_colored_logo_component_keeps_source_paths():
@@ -191,12 +247,11 @@ def test_colored_logo_component_keeps_source_paths():
     ("copy", "source"),
     [
         ("motion.css", IDENTITY / "motion.css"),
-        ("motif.svg", IDENTITY / "patterns" / "motif-mono.svg"),
+        ("motif-mono.svg", IDENTITY / "patterns" / "motif-mono.svg"),
         ("mark.svg", ROOT / "brand" / "misk" / "misk-mark.svg"),
-        ("fonts/Cairo-Variable.ttf", IDENTITY / "fonts" / "Cairo[slnt,wght].ttf"),
-        ("fonts/Almarai-Regular.ttf", IDENTITY / "fonts" / "Almarai-Regular.ttf"),
-        ("fonts/OFL-Cairo.txt", IDENTITY / "fonts" / "OFL-Cairo.txt"),
-        ("fonts/OFL-Almarai.txt", IDENTITY / "fonts" / "OFL-Almarai.txt"),
+        ("fonts/IBMPlexSansArabic-Medium.ttf", IDENTITY / "fonts" / "IBMPlexSansArabic-Medium.ttf"),
+        ("fonts/IBMPlexSansArabic-Regular.ttf", IDENTITY / "fonts" / "IBMPlexSansArabic-Regular.ttf"),
+        ("fonts/OFL-IBMPlexSansArabic.txt", IDENTITY / "fonts" / "OFL-IBMPlexSansArabic.txt"),
     ],
 )
 def test_frontend_copies_match_identity_source(copy, source):
@@ -210,12 +265,19 @@ def test_frontend_copies_match_identity_source(copy, source):
 def test_identity_fonts_are_declared_and_used():
     tokens = (STATIC_BRAND / "tokens.css").read_text(encoding="utf-8")
     base = (ROOT / "frontend" / "src" / "styles" / "base.css").read_text(encoding="utf-8")
-    for family, file in (("Cairo", "fonts/Cairo-Variable.ttf"), ("Almarai", "fonts/Almarai-Regular.ttf")):
+    for file in ("fonts/IBMPlexSansArabic-Medium.ttf", "fonts/IBMPlexSansArabic-Regular.ttf"):
         assert re.search(
-            rf'@font-face\s*{{[^}}]*font-family:\s*"{family}"[^}}]*url\("{re.escape(file)}"\)', tokens
+            rf'@font-face\s*{{[^}}]*font-family:\s*"IBM Plex Sans Arabic"[^}}]*url\("{re.escape(file)}"\)',
+            tokens,
         )
-    assert re.search(r'--font-heading:\s*"Cairo"', tokens)
-    assert re.search(r'--font-ui:\s*"Almarai"', tokens)
+    assert re.search(r'--font-heading:\s*"IBM Plex Sans Arabic"', tokens)
+    assert re.search(r'--font-ui:\s*"IBM Plex Sans Arabic"', tokens)
+    # خطّا v5 لا يبقيان في الواجهة بعد أن غادرا الدليل.
+    assert sorted(p.name for p in (STATIC_BRAND / "fonts").iterdir()) == [
+        "IBMPlexSansArabic-Medium.ttf",
+        "IBMPlexSansArabic-Regular.ttf",
+        "OFL-IBMPlexSansArabic.txt",
+    ]
     assert "font-family: var(--font-heading)" in base
     assert "font-family: var(--font-ui)" in base
 
@@ -235,7 +297,12 @@ def test_spa_shows_splash_until_app_boots(client):
     app = page.index('<div id="app"')
     assert app < page.index('class="splash"') < page.index("</div>\n  </div>", app)
     assert page.index("/static/brand/splash.css") < page.index("src/main.ts")
-    for name in ("brand/splash.css", "brand/mark.svg", "brand/motif.svg", "brand/fonts/Cairo-Variable.ttf"):
+    for name in (
+        "brand/splash.css",
+        "brand/mark.svg",
+        "brand/motif-mono.svg",
+        "brand/fonts/IBMPlexSansArabic-Medium.ttf",
+    ):
         assert finders.find(name)
 
 
@@ -280,7 +347,7 @@ def test_pages_use_identity_icons_and_pattern():
     assert used <= names
     assert names - used == {"portrait"}
     base = (FRONTEND_SRC / "styles" / "base.css").read_text(encoding="utf-8")
-    assert re.search(r'\.empty::before\s*{[^}]*url\("\.\./static/brand/motif\.svg"\)', base)
+    assert re.search(r'\.empty::before\s*{[^}]*url\("\.\./static/brand/motif-mono\.svg"\)', base)
 
 
 def test_pages_take_colors_from_tokens_only():

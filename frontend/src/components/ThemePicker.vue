@@ -111,7 +111,7 @@ legend { padding: 0; margin-block-end: 10px; font-family: var(--font-heading); f
   align-items: center;
   gap: 6px;
   padding: 6px 2px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   cursor: pointer;
   font-size: 12px;
   color: var(--muted);
@@ -122,7 +122,7 @@ legend { padding: 0; margin-block-end: 10px; font-family: var(--font-heading); f
 .swatch:has(input:checked) .tint { outline: 2px solid var(--ink); outline-offset: 2px; }
 .swatch:has(input:focus-visible), .mode:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 1px; }
 
-.modes { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+.modes { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; }
 .mode { position: relative; display: grid; place-items: center; min-block-size: 40px; cursor: pointer; font-size: 14px; }
 .mode + .mode { border-inline-start: 1px solid var(--line-strong); }
 .mode:has(input:checked) { background: var(--accent); color: var(--on-accent); font-weight: 700; }
