@@ -45,6 +45,8 @@ async function logout(): Promise<void> {
         <RouterLink to="/materials">المواد</RouterLink>
         <RouterLink to="/templates">القوالب</RouterLink>
         <RouterLink to="/about">عن المنصة</RouterLink>
+        <!-- لوحة Django صفحة يخدمها الخادم لا مسار في الواجهة: رابط عادي بتحميل كامل. -->
+        <a v-if="session.user?.admin_url" :href="session.user.admin_url">لوحة الإدارة</a>
         <template v-if="session.user">
           <span class="who">{{ session.user.username }}</span>
           <button type="button" class="btn" :disabled="leaving" @click="logout">خروج</button>

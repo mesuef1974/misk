@@ -1,6 +1,12 @@
+from django.conf import settings
 from django.contrib import admin
 
 from .models import AuditLog
+
+# اللوحة تحمل اسم المنصة لا اسم Django؛ ألوانها في templates/admin/base_site.html.
+admin.site.site_header = settings.SITE_TITLE
+admin.site.site_title = settings.SITE_TITLE
+admin.site.index_title = "لوحة الإدارة"
 
 
 @admin.register(AuditLog)
