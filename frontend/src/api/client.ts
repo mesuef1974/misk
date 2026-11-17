@@ -19,6 +19,16 @@ const FALLBACK: Record<number, string> = {
   429: "محاولات كثيرة؛ حاول بعد قليل",
 };
 
+/** مسارات الجلسة نفسها: 401 فيها جواب متوقَّع (لا جلسة، كلمة مرور خاطئة) لا جلسة انتهت أثناء العمل. */
+const SESSION_URLS = ["/api/me", "/api/auth/"];
+
+let onUnauthorized: (() => void) | null = null;
+
+/** يُستدعى حين يرد الخادم 401 على طلب عمل: الجلسة انتهت. يسجّله الموجِّه ليعيد إلى صفحة الدخول. */
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
+
 /** الكوكي أولًا: Django يبدّل الرمز عند تسجيل الدخول، فقيمة <meta> التي حُمّلت مع الصفحة تبطل بعده. */
 function csrfToken(): string {
   const cookie = document.cookie.split("; ").find((part) => part.startsWith("csrftoken="));
@@ -70,6 +80,7 @@ async function request<T>(
     throw new ApiError(0, FALLBACK[0]);
   }
   if (!res.ok) {
+    if (res.status === 401 && !SESSION_URLS.some((prefix) => url.startsWith(prefix))) onUnauthorized?.();
     // 401 من Ninja نصّه «Unauthorized»؛ رسالتنا العربية أوضح. رسالة رفض تسجيل الدخول عربية فتُنقل.
     const raw = await serverDetail(res);
     const detail = raw === "Unauthorized" ? "" : raw;

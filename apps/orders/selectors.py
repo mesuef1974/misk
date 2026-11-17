@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from django.db.models import DecimalField, ExpressionWrapper, F, QuerySet, Sum
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, QuerySet, Sum
 from django.db.models.functions import Coalesce
 
 from .models import Order
@@ -19,10 +19,15 @@ def orders(status: str | None = None) -> QuerySet[Order]:
         Order.objects.select_related("customer")
         .prefetch_related("items__template", "items__material")
         .annotate(total=Coalesce(Sum(_LINE_TOTAL), Decimal("0")))
+        .order_by("-created_at", "-id")  # ترتيب تامّ: الصفحات لا تكرّر صفًّا ولا تُسقطه
     )
     if status:
         queryset = queryset.filter(status=status)
     return queryset
+
+
+def status_counts() -> dict[str, int]:
+    return dict(Order.objects.order_by().values_list("status").annotate(Count("id")))
 
 
 def order(order_id: int) -> Order:

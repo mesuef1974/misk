@@ -1,8 +1,12 @@
 // نداءات الشبكة للإنتاج: الألواح، وتخطيطها، وسجل التشغيل.
 import { api } from "@/api/client";
+import { pageQuery, type Page, type PageQuery } from "@/api/paging";
 
 export interface Placement {
   order_item_id: number;
+  order_id: number;
+  customer_name: string;
+  template_slug: string;
   copy_index: number;
   x_mm: string;
   y_mm: string;
@@ -17,6 +21,8 @@ export interface Sheet {
   height_mm: string;
   status: string;
   placements: Placement[];
+  /** سجل تشغيل اللوح، الأحدث أولًا. */
+  runs: Run[];
 }
 
 export interface RunDraft {
@@ -32,12 +38,16 @@ export interface Run {
   outcome: string;
   duration_s: number;
   material_cost: string;
+  notes: string;
+  created_at: string;
 }
 
 export const productionService = {
-  sheets: () => api.get<Sheet[]>("/api/production/sheets"),
+  sheets: (query?: PageQuery) => api.get<Page<Sheet>>(`/api/production/sheets${pageQuery(query)}`),
   plan: (materialId: number) => api.post<Sheet[]>("/api/production/sheets/plan", { material_id: materialId }),
   /** `requestId` مفتاح idempotency: إعادة الإرسال به تعيد السجل نفسه ولا تسجّل تشغيلًا ثانيًا. */
   recordRun: (sheetId: number, draft: RunDraft, requestId: string) =>
     api.post<Run>(`/api/production/sheets/${sheetId}/runs`, draft, { "X-Request-ID": requestId }),
+  /** idempotent في الخادم: إتلاف لوح تالف يعيده كما هو. */
+  scrap: (sheetId: number) => api.post<Sheet>(`/api/production/sheets/${sheetId}/scrap`, {}),
 };

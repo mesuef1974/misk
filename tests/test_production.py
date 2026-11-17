@@ -192,7 +192,15 @@ def test_production_api(client, staff_user, material, name_tag, calibration):
     assert res.status_code == 200, res.content
     again = client.post(url, body, content_type="application/json", headers={"X-Request-ID": "run-1"})
     assert again.json()["id"] == res.json()["id"]
-    assert client.get("/api/production/sheets?status=done").json()[0]["id"] == sheet["id"]
+    done = client.get("/api/production/sheets?status=done").json()
+    assert (done["count"], done["counts"]) == (1, {"done": 1})
+    (listed,) = done["items"]
+    assert listed["id"] == sheet["id"]
+    assert [(run["id"], run["outcome"]) for run in listed["runs"]] == [(res.json()["id"], "ok")]
+    piece = listed["placements"][0]
+    assert (piece["customer_name"], piece["template_slug"]) == ("زبون تجريبي", "name-tag")
+    assert client.get(f"/api/orders/{piece['order_id']}").json()["status"] == "in_production"
+    assert client.get("/api/production/sheets?limit=0").status_code == 422
 
 
 @pytest.mark.django_db
@@ -324,3 +332,70 @@ def test_runs_api_rejects_bad_input_with_422(client, staff_user, material, name_
     assert post({**ok, "notes": "م" * 2001}) == 422
     assert not RunLog.objects.exists()
     assert post(ok, request_id="r" * 64) == 200
+
+
+@pytest.mark.django_db
+def test_first_run_moves_confirmed_orders_into_production(material, name_tag, calibration):
+    """أي تشغيل، ولو فشل، يبدأ العمل على طلبات اللوح. «جاهز» لا يُضبط آليًّا."""
+    from apps.core.models import AuditLog
+
+    order = _confirmed_order(material, 1)
+    (sheet,) = services.plan_sheets(material_id=material.pk)
+    services.record_run(sheet_id=sheet.pk, request_id="r1", duration_s=60, outcome="failed")
+    order.refresh_from_db()
+    assert order.status == "in_production"
+    services.record_run(sheet_id=sheet.pk, request_id="r2", duration_s=60, outcome="ok")
+    order.refresh_from_db()
+    assert order.status == "in_production"
+    assert AuditLog.objects.filter(action="orders.transition", target=f"order:{order.pk}").count() == 2
+
+
+@pytest.mark.django_db
+def test_scrap_sheet_frees_pieces_for_replanning(material, name_tag, calibration):
+    from apps.core.models import AuditLog
+
+    _confirmed_order(material, 3)
+    (sheet,) = services.plan_sheets(material_id=material.pk)
+    services.record_run(sheet_id=sheet.pk, request_id="r1", duration_s=60, outcome="failed")
+    scrapped = services.scrap_sheet(sheet_id=sheet.pk)
+    assert scrapped.status == "scrapped"
+    assert not Placement.objects.filter(sheet=sheet).exists()
+    assert RunLog.objects.filter(sheet=sheet).count() == 1  # سجل التشغيل الفاشل يبقى
+    assert services.scrap_sheet(sheet_id=sheet.pk).status == "scrapped"  # idempotent
+    assert AuditLog.objects.filter(action="production.scrap").count() == 1
+
+    (again,) = services.plan_sheets(material_id=material.pk)  # القطع عادت تنتظر لوحًا
+    assert again.pk != sheet.pk and again.placements.count() == 3
+    with pytest.raises(services.ProductionError):
+        services.record_run(sheet_id=sheet.pk, request_id="r2", duration_s=60, outcome="ok")
+
+
+@pytest.mark.django_db
+def test_scrap_api_refuses_done_sheet(client, staff_user, material, name_tag, calibration):
+    _confirmed_order(material, 1)
+    (sheet,) = services.plan_sheets(material_id=material.pk)
+    url = f"/api/production/sheets/{sheet.pk}/scrap"
+    assert client.post(url).status_code == 401
+    client.force_login(staff_user)
+    assert client.post("/api/production/sheets/999999/scrap").status_code == 404
+    services.record_run(sheet_id=sheet.pk, request_id="r1", duration_s=60, outcome="ok")
+    assert client.post(url).status_code == 409
+    _confirmed_order(material, 1)
+    (second,) = services.plan_sheets(material_id=material.pk)
+    res = client.post(f"/api/production/sheets/{second.pk}/scrap")
+    assert res.status_code == 200, res.content
+    assert (res.json()["status"], res.json()["placements"]) == ("scrapped", [])
+
+
+@pytest.mark.django_db
+def test_sheet_list_query_count_is_constant(material, name_tag, calibration, django_assert_max_num_queries):
+    from apps.production import selectors
+
+    for _ in range(4):
+        _confirmed_order(material, 2)
+        services.plan_sheets(material_id=material.pk)
+    with django_assert_max_num_queries(8):
+        for sheet in selectors.sheets():
+            assert [p.order_item.order.customer.name for p in sheet.placements.all()]
+            assert [p.order_item.template.slug for p in sheet.placements.all()]
+            assert list(sheet.runs.all()) == []

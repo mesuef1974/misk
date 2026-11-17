@@ -1,5 +1,6 @@
 // نداءات الشبكة للطلبات. الصفحات والمخازن لا تستدعي fetch مباشرة.
 import { api } from "@/api/client";
+import { pageQuery, type Page, type PageQuery } from "@/api/paging";
 import type { ParamValues } from "@/domain/params";
 
 export interface OrderItem {
@@ -41,7 +42,7 @@ export interface OrderDraft {
 }
 
 export const ordersService = {
-  list: () => api.get<Order[]>("/api/orders"),
+  list: (query?: PageQuery) => api.get<Page<Order>>(`/api/orders${pageQuery(query)}`),
   get: (orderId: number) => api.get<Order>(`/api/orders/${orderId}`),
   create: (draft: OrderDraft) => api.post<Order>("/api/orders", draft),
   transition: (orderId: number, toStatus: string) =>

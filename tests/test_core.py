@@ -86,8 +86,11 @@ def test_login_rejects_bad_credentials_with_one_message(client, staff_user, djan
 
 @pytest.mark.django_db
 def test_login_refuses_non_staff_and_opens_no_session(client, django_user_model):
+    """الرد نفسه لكلمة المرور الخاطئة: لا يُعرف منه أن كلمة مرور حساب غير مشرف صحيحة."""
     django_user_model.objects.create_user(username="u", password="x" * 12)
-    assert _login(client, username="u").status_code == 403
+    right, wrong = _login(client, username="u"), _login(client, username="u", password="y" * 12)
+    assert right.status_code == wrong.status_code == 401
+    assert right.json() == wrong.json()
     assert client.get("/api/me").status_code == 401
 
 
@@ -264,6 +267,58 @@ def test_client_address_diagnostics_is_staff_only(client, staff_user, django_use
     }
     bare = client.get(path, REMOTE_ADDR="10.0.0.1").json()
     assert (bare["x_forwarded_for"], bare["x_real_ip"], bare["client_ip"]) == ("", "", "10.0.0.1")
+
+
+@pytest.mark.django_db
+def test_audit_survives_concurrent_duplicate(monkeypatch):
+    """طلب متزامن بالمفتاح نفسه سبق بعد الفحص: قيد التفرّد يرفض الإدراج فيُعاد صف الأول."""
+    first = services.record_audit(action="x", target="t", request_id="r1")
+    real_filter = AuditLog.objects.filter
+    calls = []
+
+    def racing_filter(*args, **kwargs):
+        calls.append(1)
+        return AuditLog.objects.none() if len(calls) == 1 else real_filter(*args, **kwargs)
+
+    monkeypatch.setattr(AuditLog.objects, "filter", racing_filter)
+    assert services.record_audit(action="x", target="t", request_id="r1").pk == first.pk
+    assert AuditLog.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_audit_without_request_id_is_never_deduplicated():
+    services.record_audit(action="x", target="t")
+    services.record_audit(action="x", target="t")
+    assert AuditLog.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_audit_keeps_actor_name_after_user_is_deleted(staff_user):
+    row = services.record_audit(action="x", actor=staff_user)
+    staff_user.delete()
+    row.refresh_from_db()
+    assert row.actor is None
+    assert row.actor_name == "staff"
+
+
+@pytest.mark.django_db
+def test_audit_truncates_oversized_request_id(client, staff_user):
+    client.force_login(staff_user)
+    assert client.get("/api/audit", headers={"X-Request-ID": "r" * 500}).status_code == 200
+    assert AuditLog.objects.get(action="audit.view").request_id == "r" * 64
+
+
+@pytest.mark.django_db
+def test_content_security_policy_header(client, staff_user, settings):
+    policy = client.get("/")["Content-Security-Policy"]
+    assert "script-src 'self'" in policy and "frame-ancestors 'none'" in policy
+    assert "unsafe-inline" not in policy.split("script-src")[1].split(";")[0]
+    assert "unsafe-eval" not in policy
+    assert "Content-Security-Policy" in client.get("/api/ping")
+    client.force_login(staff_user)
+    assert "Content-Security-Policy" not in client.get("/api/docs/")  # Swagger من CDN، للمشرفين فقط
+    settings.CONTENT_SECURITY_POLICY = ""
+    assert "Content-Security-Policy" not in client.get("/")
 
 
 @pytest.mark.django_db
