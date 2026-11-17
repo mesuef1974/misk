@@ -8,6 +8,7 @@ from django.conf import settings
 
 ROOT = Path(settings.BASE_DIR)
 IDENTITY = ROOT / "brand" / "misk" / "identity"
+PLATFORM_FONTS = ROOT / "brand" / "misk" / "fonts"
 STATIC_BRAND = ROOT / "frontend" / "src" / "static" / "brand"
 
 # ADOPTION.yaml مولَّد ببنية ثابتة؛ يُقرأ token_map بنمط نصي حتى لا يحتاج الاختبار مكتبة YAML.
@@ -249,9 +250,11 @@ def test_colored_logo_component_keeps_source_paths():
         ("motion.css", IDENTITY / "motion.css"),
         ("motif-mono.svg", IDENTITY / "patterns" / "motif-mono.svg"),
         ("mark.svg", ROOT / "brand" / "misk" / "misk-mark.svg"),
-        ("fonts/IBMPlexSansArabic-Medium.ttf", IDENTITY / "fonts" / "IBMPlexSansArabic-Medium.ttf"),
-        ("fonts/IBMPlexSansArabic-Regular.ttf", IDENTITY / "fonts" / "IBMPlexSansArabic-Regular.ttf"),
-        ("fonts/OFL-IBMPlexSansArabic.txt", IDENTITY / "fonts" / "OFL-IBMPlexSansArabic.txt"),
+        # خطّا المنصة بقرار المالك 2026-11-17 يخالفان دليل v6، فأصلهما brand/misk/fonts لا مجلد الدليل.
+        ("fonts/Cairo-Variable.ttf", PLATFORM_FONTS / "Cairo[slnt,wght].ttf"),
+        ("fonts/Almarai-Regular.ttf", PLATFORM_FONTS / "Almarai-Regular.ttf"),
+        ("fonts/OFL-Cairo.txt", PLATFORM_FONTS / "OFL-Cairo.txt"),
+        ("fonts/OFL-Almarai.txt", PLATFORM_FONTS / "OFL-Almarai.txt"),
     ],
 )
 def test_frontend_copies_match_identity_source(copy, source):
@@ -265,18 +268,18 @@ def test_frontend_copies_match_identity_source(copy, source):
 def test_identity_fonts_are_declared_and_used():
     tokens = (STATIC_BRAND / "tokens.css").read_text(encoding="utf-8")
     base = (ROOT / "frontend" / "src" / "styles" / "base.css").read_text(encoding="utf-8")
-    for file in ("fonts/IBMPlexSansArabic-Medium.ttf", "fonts/IBMPlexSansArabic-Regular.ttf"):
+    for family, file in (("Cairo", "fonts/Cairo-Variable.ttf"), ("Almarai", "fonts/Almarai-Regular.ttf")):
         assert re.search(
-            rf'@font-face\s*{{[^}}]*font-family:\s*"IBM Plex Sans Arabic"[^}}]*url\("{re.escape(file)}"\)',
-            tokens,
+            rf'@font-face\s*{{[^}}]*font-family:\s*"{family}"[^}}]*url\("{re.escape(file)}"\)', tokens
         )
-    assert re.search(r'--font-heading:\s*"IBM Plex Sans Arabic"', tokens)
-    assert re.search(r'--font-ui:\s*"IBM Plex Sans Arabic"', tokens)
-    # خطّا v5 لا يبقيان في الواجهة بعد أن غادرا الدليل.
+    assert re.search(r'--font-heading:\s*"Cairo"', tokens)
+    assert re.search(r'--font-ui:\s*"Almarai"', tokens)
+    # خط الدليل v6 لا يُنسخ إلى الواجهة ما دامت لا تستعمله.
     assert sorted(p.name for p in (STATIC_BRAND / "fonts").iterdir()) == [
-        "IBMPlexSansArabic-Medium.ttf",
-        "IBMPlexSansArabic-Regular.ttf",
-        "OFL-IBMPlexSansArabic.txt",
+        "Almarai-Regular.ttf",
+        "Cairo-Variable.ttf",
+        "OFL-Almarai.txt",
+        "OFL-Cairo.txt",
     ]
     assert "font-family: var(--font-heading)" in base
     assert "font-family: var(--font-ui)" in base
@@ -301,7 +304,7 @@ def test_spa_shows_splash_until_app_boots(client):
         "brand/splash.css",
         "brand/mark.svg",
         "brand/motif-mono.svg",
-        "brand/fonts/IBMPlexSansArabic-Medium.ttf",
+        "brand/fonts/Cairo-Variable.ttf",
     ):
         assert finders.find(name)
 

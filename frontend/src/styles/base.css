@@ -181,7 +181,7 @@ a.list-row:hover { border-color: var(--accent); }
 .print-only { display: none; }
 @page {
   size: A4; margin: 15mm 15mm 18mm;
-  @bottom-left { content: counter(page) " / " counter(pages); font: 9pt "IBM Plex Sans Arabic", Tahoma, sans-serif; }
+  @bottom-left { content: counter(page) " / " counter(pages); font: 9pt "Almarai", Tahoma, sans-serif; }
 }
 @media print {
   /* :root[data-theme] ليغلب مفتاح الوضع الليلي: الورق فاتح دائمًا، والحبر والحدود والشعار بالأسود. */

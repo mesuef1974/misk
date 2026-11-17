@@ -1,10 +1,10 @@
 /* ألوان المنصة، مصدر واحد: تستوردها الواجهة (styles/base.css) وتقرؤها لوحة Django من /static/brand/tokens.css.
    كل لون يُعرَّف مرة بقيمتيه الفاتحة والداكنة (ومنها ما يتبع السمة المختارة)؛ الاختيار يتبع color-scheme الذي تضبطه الصفحة.
    html[data-theme] لأجل لوحة Django: لها متغيّر --accent خاص تعرّفه بـ html[data-theme="light"]، و:root وحده لا يغلبه. */
-/* خط الهوية v6 (brand/misk/identity/fonts، رخصة OFL بجواره): IBM Plex Sans Arabic، 500 للعناوين و400 للنص.
-   الوزن المتوسط يغطي 500 إلى 900: الدليل لا يحمل وزنًا أثقل، فالمطلوب 600 و700 يُرسم به بلا تثخين مصطنع. */
-@font-face { font-family: "IBM Plex Sans Arabic"; src: url("fonts/IBMPlexSansArabic-Medium.ttf") format("truetype"); font-display: swap; font-weight: 500 900; }
-@font-face { font-family: "IBM Plex Sans Arabic"; src: url("fonts/IBMPlexSansArabic-Regular.ttf") format("truetype"); font-display: swap; font-weight: 400; }
+/* خطّا المنصة بقرار المالك 2026-11-17 (brand/misk/fonts، رخصة OFL بجوارهما): Cairo للعناوين وAlmarai للنص.
+   دليل v6 ينص على IBM Plex Sans Arabic؛ المنصة تخالفه في الخط وحده وتتبعه في سائر الهوية. */
+@font-face { font-family: "Cairo"; src: url("fonts/Cairo-Variable.ttf") format("truetype"); font-display: swap; font-weight: 100 1000; }
+@font-face { font-family: "Almarai"; src: url("fonts/Almarai-Regular.ttf") format("truetype"); font-display: swap; font-weight: 400; }
 
 /* السمات العشر (قرار المالك 2026-11-17): لون الشريط وكلمة DESIGN في الشعار هو لون السمة والطيّات شامبانيا.
    لكل سمة نهارها وليلها: --day-bg خلفية نهارية بصبغة السمة (العودي على العاجي)، و--night-bg خلفية ليلية عميقة
@@ -70,8 +70,8 @@
   --line: light-dark(var(--day-line), color-mix(in srgb, #ffffff 24%, var(--night-bg)));
   --accent: light-dark(var(--day-accent), var(--night-accent));
   --risk: light-dark(#76021a, #ff9a99);
-  --font-ui: "IBM Plex Sans Arabic", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
-  --font-heading: "IBM Plex Sans Arabic", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+  --font-ui: "Almarai", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+  --font-heading: "Cairo", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
 }
 
 :root {
