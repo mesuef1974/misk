@@ -29,6 +29,9 @@ export const FIELD_TYPE_LABELS: Record<ParamField["type"], string> = {
   choice: "اختيار من قائمة",
 };
 
+/** أيقونة الهوية لنوع المادة (brand/misk/identity/icons)؛ ما لا أيقونة له في الهوية يبقى بلا أيقونة. */
+export const KIND_ICONS: Record<string, string> = { leather: "leather", wood: "wood", acrylic: "acrylic" };
+
 export function kindLabel(kind: string): string {
   return KIND_LABELS[kind] ?? kind;
 }

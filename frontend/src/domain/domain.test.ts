@@ -100,7 +100,7 @@ describe("نموذج الطلب الجديد", () => {
       templates,
     );
     expect(draft).toBeNull();
-    expect(errors.customerName).toBe("اسم الزبون مطلوب");
+    expect(errors.customerName).toBe("اسم العميل مطلوب");
     expect(errors.items[4]).toEqual({
       template: "اختر القالب",
       material: "اختر المادة",

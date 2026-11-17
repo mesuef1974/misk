@@ -215,7 +215,7 @@ describe("طلب جديد", () => {
     const page = await show(OrderNewPage, "/orders/new");
     await page.get("form").trigger("submit");
     expect(ordersService.create).not.toHaveBeenCalled();
-    expect(page.text()).toContain("اسم الزبون مطلوب");
+    expect(page.text()).toContain("اسم العميل مطلوب");
     expect(page.text()).toContain("اختر القالب");
   });
 

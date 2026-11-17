@@ -28,7 +28,7 @@ export const TRANSITION_ACTIONS: Record<OrderStatus, string> = {
   confirmed: "تأكيد الطلب",
   in_production: "بدء التنفيذ",
   ready: "جاهز للتسليم",
-  delivered: "تسليم للزبون",
+  delivered: "تسليم للعميل",
   cancelled: "إلغاء الطلب",
 };
 

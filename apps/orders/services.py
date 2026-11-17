@@ -80,9 +80,9 @@ def create_order(
         raise OrderError(f"الطلب لا يزيد على {MAX_ITEMS} بند")
     name = " ".join(customer_name.split())
     if not name:
-        raise OrderError("اسم الزبون مطلوب")
+        raise OrderError("اسم العميل مطلوب")
     if len(name) > NAME_LENGTH:
-        raise OrderError(f"اسم الزبون أطول من {NAME_LENGTH} حرفًا")
+        raise OrderError(f"اسم العميل أطول من {NAME_LENGTH} حرفًا")
     if len(notes) > MAX_NOTES_LENGTH:
         raise OrderError(f"الملاحظات أطول من {MAX_NOTES_LENGTH} حرف")
 

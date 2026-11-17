@@ -178,7 +178,7 @@ function chooseParam(name: string, choices: ParamValue[], event: Event): void {
 </template>
 
 <style scoped>
-.item { border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 0; min-inline-size: 0; background: var(--surface); }
+.item { border: 1px solid var(--line); border-radius: calc(var(--radius) * 2); padding: 20px; margin: 0; min-inline-size: 0; background: var(--surface); }
 legend { padding-inline: 8px; font-weight: 600; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 16px; }
 .params { margin-block-start: 12px; padding-block-start: 12px; border-block-start: 1px dashed var(--line); }

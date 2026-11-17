@@ -7,15 +7,12 @@ const label = computed(() => statusLabel(props.status));
 </script>
 
 <template>
-  <span class="badge" :class="`is-${status}`">{{ label }}</span>
+  <span class="pill badge" :class="`is-${status}`">{{ label }}</span>
 </template>
 
 <style scoped>
-.badge {
-  display: inline-block; padding-inline: 10px; border: 1px solid var(--line); border-radius: 999px;
-  font-size: 14px; line-height: 1.9; white-space: nowrap; color: var(--muted); background: var(--bg);
-}
-.is-confirmed, .is-in_production, .is-ready { border-color: var(--accent); color: var(--accent); }
-.is-delivered { background: var(--accent); border-color: var(--accent); color: var(--bg); }
-.is-cancelled { border-color: var(--risk); color: var(--risk); }
+/* الشكل من .pill في base.css (حبّة الدليل)؛ الحالات المنتهية تتميّز بخلفيتها الناعمة. */
+.is-delivered { background: var(--ok-soft); }
+.is-cancelled { background: var(--risk-soft); color: var(--risk); }
+.is-draft { background: var(--raised); }
 </style>

@@ -58,6 +58,6 @@ async function submit(): Promise<void> {
 </template>
 
 <style scoped>
-.login { display: grid; gap: 16px; max-inline-size: 420px; }
+.login { display: grid; gap: 16px; inline-size: 100%; max-inline-size: 420px; }
 .login .btn { justify-self: start; }
 </style>

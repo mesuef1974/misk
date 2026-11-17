@@ -99,3 +99,44 @@ def test_slide_template_follows_identity():
     assert '@import "../../frontend/src/static/brand/tokens.css"' in css
     for ref in re.findall(r'(?:src|href)="([^"]+)"', html) + re.findall(r'url\("([^"]+)"\)', css):
         assert (ROOT / "docs" / "slides" / ref).resolve().is_file(), ref
+
+
+FRONTEND_SRC = ROOT / "frontend" / "src"
+IDENTITY_ICONS = sorted((IDENTITY / "icons").glob("*.svg"))
+
+
+def test_identity_icons_are_copied_unchanged():
+    # الأيقونات تُستعمل كما هي: نسخة الواجهة تطابق أصل الهوية ملفًّا بملف، بلا زيادة ولا نقص.
+    assert len(IDENTITY_ICONS) >= 10
+    copies = sorted((STATIC_BRAND / "icons").glob("*.svg"))
+    assert [p.name for p in copies] == [p.name for p in IDENTITY_ICONS]
+    for source, copy in zip(IDENTITY_ICONS, copies, strict=True):
+        assert copy.read_bytes().replace(b"\r\n", b"\n") == source.read_bytes().replace(b"\r\n", b"\n")
+
+
+def test_pages_use_identity_icons_and_pattern():
+    names = {p.stem for p in IDENTITY_ICONS}
+    used = set()
+    for path in FRONTEND_SRC.rglob("*.vue"):
+        text = path.read_text(encoding="utf-8")
+        used |= set(re.findall(r'<BrandIcon name="([\w-]+)"', text))
+    catalog = (FRONTEND_SRC / "domain" / "catalog.ts").read_text(encoding="utf-8")
+    used |= set(re.findall(r'"([\w-]+)"', catalog.split("KIND_ICONS", 1)[1].split("};", 1)[0]))
+    # كل اسم مستعمل أيقونة موجودة في الهوية، وأيقونات الطلب والخامات والحفر مستعملة فعلًا.
+    assert used <= names
+    assert {"order", "laser", "leather", "wood", "acrylic", "name"} <= used
+    base = (FRONTEND_SRC / "styles" / "base.css").read_text(encoding="utf-8")
+    assert re.search(r'\.empty::before\s*{[^}]*url\("\.\./static/brand/motif\.svg"\)', base)
+
+
+def test_pages_take_colors_from_tokens_only():
+    # الألوان من متغيرات tokens.css وحدها: لا لون خام في أنماط الصفحات والمكوّنات.
+    raw = re.compile(r"#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(")
+    offenders = []
+    for path in FRONTEND_SRC.rglob("*.vue"):
+        for block in re.findall(r"<style[^>]*>(.*?)</style>", path.read_text(encoding="utf-8"), re.S):
+            if raw.search(block):
+                offenders.append(path.name)
+    if raw.search((FRONTEND_SRC / "styles" / "base.css").read_text(encoding="utf-8")):
+        offenders.append("base.css")
+    assert offenders == []

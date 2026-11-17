@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import BrandIcon from "@/components/BrandIcon.vue";
 import OrderStatusBadge from "@/components/OrderStatusBadge.vue";
 import { formatDate, formatMoney, ORDER_STATUSES, STATUS_LABELS } from "@/domain/orders";
 import { useOrdersStore } from "@/stores/orders";
@@ -50,12 +51,15 @@ onMounted(() => store.load());
     <button type="button" class="btn retry" @click="store.load(filter)">إعادة المحاولة</button>
   </div>
   <p v-else-if="store.loading && !store.loaded" class="muted" role="status">يحمّل الطلبات…</p>
-  <p v-else-if="store.totalAll === 0" class="panel muted">لا طلبات بعد. ابدأ بـ«طلب جديد».</p>
+  <div v-else-if="store.totalAll === 0" class="empty">
+    <div class="inner"><div class="mark" aria-hidden="true"></div><p>لا طلبات بعد. ابدأ باسم تريد أن تراه محفورًا.</p></div>
+  </div>
   <p v-else-if="store.orders.length === 0" class="panel muted">لا طلبات بهذه الحالة.</p>
 
   <ul v-if="!store.loadError && store.orders.length > 0" class="orders" :aria-busy="store.loading">
     <li v-for="order in store.orders" :key="order.id">
-      <RouterLink class="order" :to="{ name: 'order-detail', params: { id: order.id } }">
+      <RouterLink class="list-row order" :to="{ name: 'order-detail', params: { id: order.id } }">
+        <BrandIcon name="order" />
         <span class="who">
           <strong>{{ order.customer_name }}</strong>
           <span class="muted">طلب {{ order.id }} · {{ order.items.length }} بند</span>
@@ -76,14 +80,8 @@ onMounted(() => store.load());
 
 <style scoped>
 .retry { margin-inline-start: 12px; }
-.orders { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.order {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 16px;
-  border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
-  color: var(--ink); text-decoration: none;
-}
-.order:hover { border-color: var(--accent); }
+.orders { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .who { display: flex; flex-direction: column; flex: 1 1 220px; min-inline-size: 0; line-height: 1.5; }
-.who .muted { font-size: 14px; }
+.who .muted { font-size: 13px; }
 .total { font-weight: 600; font-variant-numeric: tabular-nums; min-inline-size: 110px; text-align: end; }
 </style>
