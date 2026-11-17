@@ -74,7 +74,7 @@ async function submit(): Promise<void> {
   <form v-else novalidate @submit.prevent="submit">
     <section class="panel customer">
       <label class="field">
-        <span>اسم الزبون</span>
+        <span>اسم العميل</span>
         <input
           v-model="form.customerName"
           type="text"

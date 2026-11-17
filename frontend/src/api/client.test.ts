@@ -69,11 +69,11 @@ describe("عميل API", () => {
 
   it("يتحمّل جسمًا غير JSON وانقطاع الشبكة", async () => {
     respond(500, "<html>");
-    expect((await failure(api.get("/api/x"))).message).toBe("تعذّر تنفيذ الطلب (500)");
+    expect((await failure(api.get("/api/x"))).message).toBe("تعذّر إتمام العملية (500)");
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
     const offline = await failure(api.get("/api/x"));
     expect(offline.status).toBe(0);
-    expect(errorMessage(offline)).toBe("تعذّر الاتصال بالخادم");
+    expect(errorMessage(offline)).toBe("تعذّر الاتصال. تحقّق من الشبكة ثم أعد المحاولة");
     expect(errorMessage(new Error("x"))).toBe("حدث خطأ غير متوقع");
   });
 });

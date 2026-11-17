@@ -169,7 +169,9 @@ async function submit(): Promise<void> {
     <button type="button" class="btn retry" @click="catalog.load()">إعادة المحاولة</button>
   </div>
   <p v-else-if="!catalog.loaded" class="muted" role="status">يحمّل القوالب…</p>
-  <p v-else-if="catalog.templates.length === 0" class="panel muted">لا قوالب بعد. ابدأ بـ«قالب جديد».</p>
+  <div v-else-if="catalog.templates.length === 0" class="empty">
+    <div class="inner"><div class="mark" aria-hidden="true"></div><p>لا قوالب بعد. ابدأ بـ«قالب جديد».</p></div>
+  </div>
 
   <ul v-else class="cards">
     <li v-for="template in catalog.templates" :key="template.id" class="panel template">
@@ -190,10 +192,9 @@ async function submit(): Promise<void> {
 </template>
 
 <style scoped>
-.editor { margin-block-end: 20px; }
 h2 { font-size: 20px; margin-block: 0 12px; }
 h3 { font-size: 18px; margin-block: 20px 8px; }
-.schema-field { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin: 0 0 12px; min-inline-size: 0; }
+.schema-field { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; margin: 0 0 12px; min-inline-size: 0; }
 .schema-field legend { padding-inline: 8px; font-weight: 600; }
 .schema-field .check { align-self: end; }
 .schema-field .error { display: block; margin-block-start: 8px; font-size: 14px; color: var(--risk); }

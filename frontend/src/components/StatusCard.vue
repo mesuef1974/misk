@@ -11,7 +11,7 @@ defineProps<{ ok: boolean | null }>();
 </template>
 
 <style scoped>
-.card { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; background: var(--surface); }
-.card.ok { border-inline-start: 4px solid var(--accent); }
+.card { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 18px; background: var(--surface); }
+.card.ok { border-inline-start: 4px solid var(--ok); }
 .card.bad { border-inline-start: 4px solid var(--risk); }
 </style>

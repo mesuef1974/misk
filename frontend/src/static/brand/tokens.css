@@ -23,3 +23,26 @@
   /* كلمة القفل (BrandLockup.vue المولَّد) تقرأ --color-ink: تُربط بحبر النص ليتبع الوضع الليلي. */
   --color-ink: var(--ink);
 }
+
+/* بقية ألوان الهوية v5 كما في شاشات الدليل (brand/misk/identity/screens/app-light.html وapp-dark.html):
+   سطوح وحدود وتركيز وحالات. الصفحات تقرأ هذه المتغيرات وحدها، بلا لون خام. */
+:root, html[data-theme] {
+  --raised: light-dark(#e3eae7, #383f3c);
+  --line-strong: light-dark(#7d8682, #7d8682);
+  --focus: light-dark(#3a6f93, #5889ac);
+  --on-accent: light-dark(#ffffff, #141a17);
+  --brand-soft: light-dark(#d5dad4, #18201d);
+  --warm: light-dark(#c4785a, #c4785a);
+  --warm-soft: light-dark(#efe1d8, #27241f);
+  --risk-soft: light-dark(#fff1f1, #53000f);
+  --ok: light-dark(#3b7a3a, #589456);
+  --ok-soft: light-dark(#e1ffdf, #002001);
+  --warn: light-dark(#8a5a14, #a8783d);
+  --warn-soft: light-dark(#fff3e6, #251400);
+  --info: light-dark(#2d6387, #5889ac);
+  --info-soft: light-dark(#ecf7ff, #001a2c);
+  /* الورق المطبوع حبر أسود في الوضعين (screens/print.html). */
+  --print-ink: #000000;
+  --print-muted: #333333;
+  --radius: 10px;
+}

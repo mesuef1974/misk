@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import BrandIcon from "@/components/BrandIcon.vue";
 import BrandLockup from "@/components/BrandLockup.vue";
 import { useAppStore } from "@/stores/app";
 import { useCatalogStore } from "@/stores/catalog";
@@ -41,38 +42,39 @@ async function logout(): Promise<void> {
 </script>
 
 <template>
-  <header class="topbar">
-    <div class="inner">
-      <!-- الشعار مسارات بلا نص حي: الاسم المقروء على الرابط نفسه. -->
-      <RouterLink class="brand" to="/" :aria-label="store.siteTitle"><BrandLockup class="sima-mark-intro" :height="34" /></RouterLink>
-      <nav>
-        <RouterLink to="/">الرئيسية</RouterLink>
-        <RouterLink to="/orders">الطلبات</RouterLink>
-        <RouterLink to="/production">الإنتاج</RouterLink>
-        <RouterLink to="/materials">المواد</RouterLink>
-        <RouterLink to="/templates">القوالب</RouterLink>
-        <RouterLink to="/about">عن المنصة</RouterLink>
+  <div class="shell">
+    <aside class="side">
+      <!-- الشعار مسارات بلا نص حي: الاسم المقروء على الرابط نفسه. وهو رابط الرئيسية. -->
+      <RouterLink class="brand" to="/" :aria-label="store.siteTitle"><BrandLockup class="sima-mark-intro" :height="36" /></RouterLink>
+      <nav class="main" aria-label="أقسام المنصة">
+        <RouterLink class="nav-item" to="/orders"><BrandIcon name="order" /><span>الطلبات</span></RouterLink>
+        <RouterLink class="nav-item" to="/production"><BrandIcon name="laser" /><span>الإنتاج</span></RouterLink>
+        <RouterLink class="nav-item" to="/materials"><BrandIcon name="leather" /><span>المواد</span></RouterLink>
+        <RouterLink class="nav-item" to="/templates"><BrandIcon name="name" /><span>القوالب</span></RouterLink>
+      </nav>
+      <nav class="aux" aria-label="الحساب والإعدادات">
+        <RouterLink class="nav-item" to="/about">عن المنصة</RouterLink>
         <!-- المفتاح نفسه يحكم لوحة Django: الاختيار محفوظ في المتصفح بالمفتاح الذي تقرؤه اللوحة. -->
-        <button type="button" class="btn theme-switch" :aria-label="`وضع الألوان: ${THEME_LABELS[theme.theme]}. اضغط للتبديل`" @click="theme.cycle">
+        <button type="button" class="nav-item theme-switch" :aria-label="`وضع الألوان: ${THEME_LABELS[theme.theme]}. اضغط للتبديل`" @click="theme.cycle">
           الوضع: {{ THEME_LABELS[theme.theme] }}
         </button>
         <!-- لوحة Django صفحة يخدمها الخادم لا مسار في الواجهة: رابط عادي بتحميل كامل. -->
-        <a v-if="session.user?.admin_url" :href="session.user.admin_url">لوحة الإدارة</a>
+        <a v-if="session.user?.admin_url" class="nav-item" :href="session.user.admin_url">لوحة الإدارة</a>
         <template v-if="session.user">
-          <span class="who">{{ session.user.username }}</span>
-          <button type="button" class="btn" :disabled="leaving" @click="logout">خروج</button>
+          <button type="button" class="nav-item" :disabled="leaving" @click="logout">خروج</button>
+          <div class="user">
+            <span class="avatar" aria-hidden="true"></span>
+            <div class="who"><b>{{ session.user.username }}</b><span class="muted">{{ store.siteTitle }}</span></div>
+          </div>
         </template>
-        <RouterLink v-else-if="session.checked" to="/login">دخول</RouterLink>
+        <RouterLink v-else-if="session.checked" class="nav-item" to="/login">دخول</RouterLink>
       </nav>
-    </div>
-  </header>
-  <main class="wrap">
-    <RouterView />
-  </main>
+    </aside>
+    <main class="wrap">
+      <!-- رأس الورقة المطبوعة وتذييلها كما في شاشة الطباعة من الدليل؛ لا يظهران على الشاشة. -->
+      <div class="print-only print-head" aria-hidden="true"><BrandLockup :height="44" /></div>
+      <RouterView />
+      <div class="print-only print-foot" aria-hidden="true"><span>يُرسم اسمك ثم يُحفر</span></div>
+    </main>
+  </div>
 </template>
-
-<style scoped>
-.brand { display: flex; align-items: center; padding-block: 8px; }
-.who { color: var(--muted); font-size: 15px; }
-.theme-switch { padding-inline: 12px; font-size: 15px; color: var(--muted); }
-</style>

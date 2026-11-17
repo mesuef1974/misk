@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
+import BrandIcon from "@/components/BrandIcon.vue";
 import StatusCard from "@/components/StatusCard.vue";
 import { ORDER_STATUSES, STATUS_LABELS } from "@/domain/orders";
 import { useAppStore } from "@/stores/app";
@@ -41,68 +42,100 @@ watch(
 </script>
 
 <template>
-  <h1>{{ store.siteTitle }}</h1>
-
   <template v-if="session.isStaff">
+    <div class="page-head">
+      <h1>{{ store.siteTitle }}</h1>
+      <RouterLink class="btn primary" :to="{ name: 'order-new' }">طلب جديد</RouterLink>
+    </div>
+
     <div v-if="loadError" class="notice" role="alert">
       {{ loadError }}
       <button type="button" class="btn retry" @click="loadAll()">إعادة المحاولة</button>
     </div>
 
     <section aria-labelledby="home-orders">
-      <div class="section-head">
-        <h2 id="home-orders">الطلبات المفتوحة</h2>
-        <RouterLink class="btn primary" :to="{ name: 'order-new' }">طلب جديد</RouterLink>
-      </div>
+      <h2 id="home-orders">الطلبات المفتوحة</h2>
       <div class="tiles">
-        <RouterLink v-for="tile in orderTiles" :key="tile.status" class="tile" :to="{ name: 'orders' }">
-          <span class="count num">{{ orders.loaded ? tile.count : "—" }}</span>
-          <span class="muted">{{ tile.label }}</span>
+        <RouterLink v-for="tile in orderTiles" :key="tile.status" class="list-row tile" :to="{ name: 'orders' }">
+          <BrandIcon name="order" />
+          <span class="what"><b class="num">{{ orders.loaded ? tile.count : "—" }}</b><span class="muted">{{ tile.label }}</span></span>
         </RouterLink>
       </div>
     </section>
 
     <section aria-labelledby="home-work">
-      <div class="section-head">
-        <h2 id="home-work">الورشة</h2>
-      </div>
+      <h2 id="home-work">الورشة</h2>
       <div class="tiles">
-        <RouterLink class="tile" :to="{ name: 'production' }">
-          <span class="count num">{{ production.loaded ? plannedSheets : "—" }}</span>
-          <span class="muted">ألواح تنتظر التشغيل</span>
+        <RouterLink class="list-row tile" :to="{ name: 'production' }">
+          <BrandIcon name="laser" />
+          <span class="what"><b class="num">{{ production.loaded ? plannedSheets : "—" }}</b><span class="muted">ألواح تنتظر التشغيل</span></span>
         </RouterLink>
-        <RouterLink class="tile" :to="{ name: 'materials' }">
-          <span class="count num">{{ catalog.loaded ? catalog.materials.length : "—" }}</span>
-          <span class="muted">مواد</span>
+        <RouterLink class="list-row tile" :to="{ name: 'materials' }">
+          <BrandIcon name="leather" />
+          <span class="what"><b class="num">{{ catalog.loaded ? catalog.materials.length : "—" }}</b><span class="muted">مواد</span></span>
         </RouterLink>
-        <RouterLink class="tile" :to="{ name: 'templates' }">
-          <span class="count num">{{ catalog.loaded ? catalog.templates.length : "—" }}</span>
-          <span class="muted">قوالب</span>
+        <RouterLink class="list-row tile" :to="{ name: 'templates' }">
+          <BrandIcon name="name" />
+          <span class="what"><b class="num">{{ catalog.loaded ? catalog.templates.length : "—" }}</b><span class="muted">قوالب</span></span>
         </RouterLink>
       </div>
     </section>
   </template>
 
-  <template v-else-if="session.checked">
-    <p class="lead">إدارة طلبات ورشة الليزر: الكتالوج، الطلبات، وتخطيط الألواح وتشغيلها.</p>
-    <RouterLink class="btn primary" :to="{ name: 'login' }">دخول المشرف</RouterLink>
-  </template>
+  <!-- صفحة الزائر على شاشة landing من الدليل: الشعار اللفظي، العنوان، الزران، بطاقات الشخصية، ولوح الرمز. -->
+  <div v-else-if="session.checked" class="landing">
+    <div class="pitch">
+      <p class="slogan">يُرسم اسمك ثم يُحفر</p>
+      <h1>اسمك، مرسومًا ثم محفورًا.</h1>
+      <p class="lead">إدارة طلبات ورشة الليزر: الكتالوج، الطلبات، وتخطيط الألواح وتشغيلها.</p>
+      <div class="cta">
+        <RouterLink class="btn primary" :to="{ name: 'login' }">دخول المشرف</RouterLink>
+        <RouterLink class="btn" :to="{ name: 'about' }">عن المنصة</RouterLink>
+      </div>
+      <div class="traits">
+        <div class="panel"><h2>دقيقة</h2><p>نراجع إملاء كل اسم مع صاحبه قبل الحفر، ونذكر المقاس والخامة والعدد وموعد الاستلام بأرقامها.</p></div>
+        <div class="panel"><h2>دافئة</h2><p>نسأل عن المناسبة وصاحبها قبل أن نقترح، ونترك الخامة الطبيعية تظهر بلونها وملمسها.</p></div>
+        <div class="panel"><h2>أنيقة</h2><p>نختار للاسم خطًّا واحدًا يليق به ونترك حوله فراغًا، ونقول ما يلزم بجملة قصيرة.</p></div>
+      </div>
+    </div>
+    <div class="showcase" aria-hidden="true"><div class="tile-mark"><div class="mark"></div></div></div>
+  </div>
 
   <StatusCard class="status" :ok="store.backendOk" />
 </template>
 
 <style scoped>
-.section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-block: 24px 12px; }
-h2 { font-size: 20px; margin: 0; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
-.tile {
-  display: flex; flex-direction: column; padding: 12px 16px; border: 1px solid var(--line); border-radius: 10px;
-  background: var(--surface); color: var(--ink); text-decoration: none; line-height: 1.5;
-}
-.tile:hover { border-color: var(--accent); }
-.tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.count { font-size: 28px; font-weight: 700; }
-.tile .muted { font-size: 15px; }
-.status { margin-block-start: 32px; }
+h2 { font-size: 20px; margin-block: 0 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.tile .what { display: flex; flex-direction: column; line-height: 1.4; }
+.tile b { font-family: var(--font-heading); font-size: 26px; font-weight: 600; }
+.tile .muted { font-size: 13px; }
 .retry { margin-inline-start: 12px; }
+
+.landing { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 32px; align-items: stretch; }
+.pitch { display: flex; flex-direction: column; gap: 20px; padding-block: 24px; }
+.pitch > * { margin: 0; }
+.slogan { padding: 2px 10px; border-radius: 999px; background: var(--warm-soft); font-size: 13px; }
+.pitch h1 { font-size: clamp(34px, 5vw, 56px); }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; }
+.traits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-block-start: 12px; }
+.traits h2 { margin-block-end: 6px; color: var(--accent); }
+.traits p { margin: 0; color: var(--muted); font-size: 15px; }
+.showcase { display: grid; place-items: center; min-block-size: 320px; border-radius: calc(var(--radius) * 2); background: var(--brand-soft); }
+.tile-mark { display: grid; place-items: center; inline-size: min(60%, 260px); aspect-ratio: 1; border-radius: 28px; background: var(--bg); }
+.tile-mark .mark {
+  inline-size: 72%; aspect-ratio: 100 / 65.85071; background: var(--color-mark-ink);
+  -webkit-mask: url("../static/brand/mark.svg") center / contain no-repeat;
+  mask: url("../static/brand/mark.svg") center / contain no-repeat;
+}
+@media (max-width: 1180px) { .traits { grid-template-columns: 1fr; } }
+@media (max-width: 860px) {
+  .landing { grid-template-columns: 1fr; }
+  .showcase { display: none; }
+  /* الجوال في الدليل: العنوان والزر داخل بطاقة بلون العلامة. */
+  .pitch { padding: 28px 24px; border-radius: 28px; background: var(--accent); color: var(--on-accent); }
+  .pitch .slogan, .pitch .lead, .pitch .traits { display: none; }
+  .pitch .btn { border-color: transparent; background: var(--bg); color: var(--ink); }
+  .pitch .btn + .btn { background: transparent; border-color: var(--on-accent); color: var(--on-accent); }
+}
 </style>

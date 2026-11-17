@@ -160,9 +160,9 @@ async function scrap(sheetId: number): Promise<void> {
     <button type="button" class="btn retry" @click="production.load(filter)">إعادة المحاولة</button>
   </div>
   <p v-else-if="production.loading && !production.loaded" class="muted" role="status">يحمّل الألواح…</p>
-  <p v-else-if="production.totalAll === 0" class="panel muted">
-    لا ألواح بعد. أكِّد طلبًا ثم خطِّط ألواح مادته من الأعلى.
-  </p>
+  <div v-else-if="production.totalAll === 0" class="empty">
+    <div class="inner"><div class="mark" aria-hidden="true"></div><p>لا ألواح بعد. أكِّد طلبًا ثم خطِّط ألواح مادته من الأعلى.</p></div>
+  </div>
   <p v-else-if="cards.length === 0" class="panel muted">لا ألواح بهذه الحالة.</p>
 
   <ul v-if="!production.loadError && cards.length > 0" class="cards" :aria-busy="production.loading">
@@ -236,13 +236,10 @@ async function scrap(sheetId: number): Promise<void> {
 @media (max-width: 520px) { .plan { grid-template-columns: 1fr; } }
 .head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-block-end: 12px; }
 .used { margin-inline-start: auto; font-size: 15px; }
-.state {
-  padding-inline: 10px; border: 1px solid var(--line); border-radius: 999px;
-  font-size: 14px; line-height: 1.9; white-space: nowrap; color: var(--muted); background: var(--bg);
-}
-.state.is-planned { border-color: var(--accent); color: var(--accent); }
-.state.is-done { background: var(--accent); border-color: var(--accent); color: var(--bg); }
-.state.is-scrapped { border-color: var(--risk); color: var(--risk); }
+/* حبّة الحالة كما في الدليل: خلفية ناعمة ونص بحبر النص. */
+.state { padding: 2px 10px; border-radius: 999px; font-size: 13px; white-space: nowrap; background: var(--warm-soft); color: var(--ink); }
+.state.is-done { background: var(--ok-soft); }
+.state.is-scrapped { background: var(--risk-soft); color: var(--risk); }
 .legend { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 4px; font-size: 15px; }
 .legend li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .tag {

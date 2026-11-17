@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { errorMessage } from "@/api/client";
+import BrandIcon from "@/components/BrandIcon.vue";
 import MaterialCalibrations from "@/components/MaterialCalibrations.vue";
 import {
   buildMaterialDraft,
   emptyMaterialForm,
+  KIND_ICONS,
   kindLabel,
   MATERIAL_KINDS,
   materialFormFrom,
@@ -118,11 +120,14 @@ async function submit(): Promise<void> {
     <button type="button" class="btn retry" @click="catalog.load()">إعادة المحاولة</button>
   </div>
   <p v-else-if="!catalog.loaded" class="muted" role="status">يحمّل المواد…</p>
-  <p v-else-if="catalog.materials.length === 0" class="panel muted">لا مواد بعد. ابدأ بـ«مادة جديدة».</p>
+  <div v-else-if="catalog.materials.length === 0" class="empty">
+    <div class="inner"><div class="mark" aria-hidden="true"></div><p>لا مواد بعد. ابدأ بـ«مادة جديدة».</p></div>
+  </div>
 
   <ul v-else class="cards">
     <li v-for="material in catalog.materials" :key="material.id" class="panel material">
       <div class="row">
+        <BrandIcon v-if="KIND_ICONS[material.kind]" :name="KIND_ICONS[material.kind]" />
         <div class="what">
           <strong>{{ material.name }} <span class="num">({{ material.thickness_mm }} مم)</span></strong>
           <span class="muted">
@@ -151,7 +156,6 @@ async function submit(): Promise<void> {
 </template>
 
 <style scoped>
-.editor { margin-block-end: 20px; }
 h2 { font-size: 20px; margin-block: 0 12px; }
 .editor .notice { margin-block-start: 12px; }
 .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
