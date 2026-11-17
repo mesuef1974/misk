@@ -1,3 +1,5 @@
+import importlib
+
 import pytest
 
 from apps.core import services
@@ -9,6 +11,19 @@ def test_health_ok(client):
     res = client.get("/health/")
     assert res.status_code == 200
     assert res.json()["db"] == "ok"
+
+
+@pytest.mark.django_db
+def test_health_is_exempt_from_https_redirect(client, settings, monkeypatch):
+    # فاحص Railway يسأل بـ HTTP: مسار الصحة يجيب 200 وكل ما عداه يُحوَّل إلى HTTPS.
+    monkeypatch.setenv("ALLOWED_HOSTS", "example.test")
+    monkeypatch.setenv("DATABASE_URL", "sqlite://:memory:")
+    production = importlib.import_module("config.settings.production")
+    settings.SECURE_SSL_REDIRECT = True
+    settings.SECURE_REDIRECT_EXEMPT = production.SECURE_REDIRECT_EXEMPT
+    assert client.get("/health/").status_code == 200
+    assert client.get("/api/ping").status_code == 301
+    assert client.get("/health/x").status_code == 301
 
 
 @pytest.mark.django_db
