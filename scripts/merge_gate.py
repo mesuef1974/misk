@@ -40,7 +40,10 @@ ALWAYS_FORBIDDEN = (
     "frontend/package-lock.json",
     "requirements*.txt",
     "Dockerfile",
+    ".railway/*",
+    ".railway/**",
     "railway.toml",
+    "railway.json",
 )
 FAILING = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"}
 PENDING = {"PENDING", "IN_PROGRESS", "QUEUED", "EXPECTED", "REQUESTED", "WAITING"}
