@@ -17,6 +17,8 @@ import sys
 
 MIGRATION_RE = re.compile(r"^(?P<app>[\w./-]+?)/migrations/(?P<num>\d{4})_[\w]+\.py$")
 OK, COLLISION, MISSING = 0, 1, 3
+# واجهة GitHub تسمّي الهجرة المعادة التسمية renamed لا added، واسمها الجديد قد يصادم.
+ADDED_STATUSES = frozenset({"added", "renamed", "copied"})
 
 
 class NotMeasuredError(Exception):
@@ -55,7 +57,8 @@ def branch_added_paths(base: str) -> tuple[list[str], str]:
     if mb.returncode != 0 or not mb.stdout.strip():
         raise NotMeasuredError(f"تعذّر merge-base مع {base}")
     sha = mb.stdout.strip()
-    committed = run(["git", "diff", "--name-only", "--diff-filter=A", sha, "HEAD"])
+    # --no-renames: هجرة معادة التسمية تُعدّ مضافة باسمها الجديد، وإلا سقطت من الفحص.
+    committed = run(["git", "diff", "--no-renames", "--name-only", "--diff-filter=A", sha, "HEAD"])
     untracked = run(["git", "ls-files", "--others", "--exclude-standard"])
     return sorted(set(committed.stdout.splitlines()) | set(untracked.stdout.splitlines())), sha
 
@@ -79,7 +82,7 @@ def open_prs() -> dict[str, dict]:
         # placeholders الخاصة بـ gh تُبنى بالتسلسل حتى لا يفسّرها Jinja عند توليد القالب.
         owner_repo = "{" + "owner" + "}/{" + "repo" + "}"
         pages = gh_json(["api", f"repos/{owner_repo}/pulls/{pr['number']}/files", "--paginate", "--slurp"])
-        added = [f["filename"] for page in pages or [] for f in page if f.get("status") == "added"]
+        added = [f["filename"] for page in pages or [] for f in page if f.get("status") in ADDED_STATUSES]
         result[f"#{pr['number']} ({pr['headRefName']})"] = {
             "head": pr["headRefOid"],
             "branch": pr["headRefName"],
@@ -107,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
             if not (info["head"] == head or info["branch"] == branch)
         }
         others[f"{args.base} بعد الأساس"] = run(
-            ["git", "diff", "--name-only", "--diff-filter=A", mb, args.base]
+            ["git", "diff", "--no-renames", "--name-only", "--diff-filter=A", mb, args.base]
         ).stdout.splitlines()
     except NotMeasuredError as exc:
         print(f"غير مقيس: {exc}")

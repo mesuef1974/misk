@@ -153,6 +153,7 @@ class Hit:
 class Analysis:
     hits: list[Hit] = field(default_factory=list)
     override: str = ""
+    uncovered: bool = False  # مخالفةٌ في أمرٍ لا يشمله التجاوز: التجاوزُ لا يسري على الأمر كلِّه
 
 
 @dataclass
@@ -169,6 +170,7 @@ class Ctx:
     env: dict[str, str] = field(
         default_factory=dict
     )  # متغيّراتُ البادئة (`SKIP=… git commit`) في أمر git الجاري
+    standing_override: str = ""  # `$env:GUARD_GIT_ALLOW='…'` في PowerShell يسري على ما بعده في السطر
 
 
 LOCAL_RULES = frozenset(
@@ -892,13 +894,27 @@ def _override_word(words: list[str]) -> str:
 
 
 def _analyze_words(raw: list[str], ctx: Ctx, depth: int, out: Analysis) -> None:
+    """التجاوزُ يشمل أمرَه وحده: بادئةُ Bash (`GUARD_GIT_ALLOW='…' git …`) لهذا الأمر البسيط، و`$env:` في PowerShell
+    لما بعده. بادئةٌ على `echo` لا تُجيز `git push --force` بعد `;` في السطر نفسِه."""
+    start = len(out.hits)
+    reason = _override_word(raw).strip()
+    valid = len(reason) >= MIN_REASON
+    is_env = bool(raw) and raw[0].lower().startswith("$env:")
+    _analyze_simple(raw, ctx, depth, out)
+    covered = (valid and not is_env) or bool(ctx.standing_override)
+    if len(out.hits) > start and not covered:
+        out.uncovered = True
+    if valid:
+        out.override = out.override or reason
+        if is_env:
+            ctx.standing_override = reason
+
+
+def _analyze_simple(raw: list[str], ctx: Ctx, depth: int, out: Analysis) -> None:
     for rule_id, word_rule in WORD_RULES.items():
         message = word_rule(raw)
         if message:
             out.hits.append(Hit(rule_id, message))
-    reason = _override_word(raw).strip()
-    if len(reason) >= MIN_REASON and not out.override:
-        out.override = reason
     words = _strip_redirects(raw)
     env: dict[str, str] = {}
     for _ in range(MAX_DEPTH + 4):
@@ -986,6 +1002,8 @@ def check(
         if hit not in unique:
             unique.append(hit)
     out.hits = unique
+    if out.uncovered:
+        out.override = ""
     return out
 
 

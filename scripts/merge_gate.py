@@ -5,7 +5,10 @@
   1. سطر اعتماد المالك في وصف الطلب مربوط برأس الطلب الحالي (scripts/approval.py).
   2. لا ملف متغيّر يطابق المسارات المحظورة (security/sensitive_paths.json → forbidden_for_auto_merge).
      ملفات CI والـ lockfiles وسكربتات البوابات نفسها محظورة دائمًا: النموذج لا يعدّل حارسه.
-  3. كل فحوص CI خضراء (لا PENDING ولا FAILURE).
+  3. كل فحوص CI خضراء: الحالة الناجحة المعروفة وحدها تمرّ، وكل حالة غيرها تمنع.
+
+الاعتماد نص في وصف الطلب ولا يُتحقق من كاتبه: الجلسة تعمل بحساب المالك نفسه على GitHub، فلا هوية ثانية تُقارن.
+الضابط إجرائي: لا يكتب السطرَ غيرُ المالك، أو الجلسة بأمره الصريح لكل رأس (CLAUDE.md).
 
 الاستعمال:  python scripts/merge_gate.py <رقم الطلب> [--repo owner/name] [--enable]
 الخروج:     0 مسموح (أو فُعِّل)، 1 ممنوع يبقى يدويًا، 2 خطأ gh/شبكة.
@@ -33,6 +36,11 @@ ALWAYS_FORBIDDEN = (
     "scripts/approval.py",
     "scripts/pr_approval_head_check.py",
     "scripts/prepush_check.py",
+    "scripts/check_migration_collisions.py",
+    "scripts/railway-*.sh",
+    "automation/*",
+    "pyproject.toml",
+    ".dockerignore",
     "security/*",
     ".claude/hooks/*",
     ".claude/settings.json",
@@ -45,21 +53,39 @@ ALWAYS_FORBIDDEN = (
     "railway.toml",
     "railway.json",
 )
-FAILING = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"}
+PASSING = {"SUCCESS", "NEUTRAL", "SKIPPED"}
 PENDING = {"PENDING", "IN_PROGRESS", "QUEUED", "EXPECTED", "REQUESTED", "WAITING"}
 
 
-def gh_json(args: list[str]) -> dict:
+class GateError(Exception):
+    """تعذّر قياس شرط؛ البوابة لا تسمح بما لم تقسه."""
+
+
+def gh_json(args: list[str]):
     out = subprocess.run(["gh", *args], capture_output=True, text=True, encoding="utf-8", check=True)
     return json.loads(out.stdout)
 
 
 def forbidden_globs() -> tuple[str, ...]:
-    extra: list[str] = []
-    if RULES.exists():
-        data = json.loads(RULES.read_text(encoding="utf-8"))
-        extra = list(data.get("forbidden_for_auto_merge", []))
+    """قائمة الحظر من الملف؛ غيابه أو فساده يوقف البوابة ولا يُسقط الحظر."""
+    try:
+        extra = json.loads(RULES.read_text(encoding="utf-8"))["forbidden_for_auto_merge"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise GateError(f"تعذّرت قراءة {RULES.name}: {exc}") from exc
+    if not isinstance(extra, list) or not extra:
+        raise GateError(f"{RULES.name}: forbidden_for_auto_merge فارغة أو ليست قائمة")
     return ALWAYS_FORBIDDEN + tuple(extra)
+
+
+def changed_paths(pr: str, repo: str | None) -> list[str]:
+    """مسارات الطلب من واجهة الملفات: الاسم الجديد والقديم معًا، فإعادة التسمية لا تخفي مسارًا محظورًا."""
+    target = repo or "{owner}/{repo}"
+    pages = gh_json(["api", f"repos/{target}/pulls/{pr}/files", "--paginate", "--slurp"])
+    paths: list[str] = []
+    for page in pages or []:
+        for item in page:
+            paths += [p for p in (item.get("filename"), item.get("previous_filename")) if p]
+    return sorted(set(paths))
 
 
 def path_forbidden(path: str, globs: tuple[str, ...]) -> str | None:
@@ -69,9 +95,9 @@ def path_forbidden(path: str, globs: tuple[str, ...]) -> str | None:
     return None
 
 
-def evaluate(pr: str, repo: str | None) -> tuple[bool, list[str]]:
+def evaluate(pr: str, repo: str | None) -> tuple[bool, list[str], str]:
     reasons: list[str] = []
-    args = ["pr", "view", pr, "--json", "body,files,statusCheckRollup,headRefOid"]
+    args = ["pr", "view", pr, "--json", "body,statusCheckRollup,headRefOid"]
     if repo:
         args += ["--repo", repo]
     data = gh_json(args)
@@ -86,9 +112,11 @@ def evaluate(pr: str, repo: str | None) -> tuple[bool, list[str]]:
         )
 
     globs = forbidden_globs()
+    paths = changed_paths(pr, repo)
+    if not paths:
+        reasons.append("لا ملفات متغيّرة مقروءة من الطلب")
     blocked = []
-    for f in data.get("files") or []:
-        path = f.get("path", "")
+    for path in paths:
         pattern = path_forbidden(path, globs)
         if pattern:
             blocked.append(f"{path} ({pattern})")
@@ -101,11 +129,13 @@ def evaluate(pr: str, repo: str | None) -> tuple[bool, list[str]]:
     for c in checks:
         state = (c.get("conclusion") or c.get("state") or "").upper()
         name = c.get("name") or c.get("context") or "؟"
-        if state in FAILING:
-            reasons.append(f"فحص فاشل: {name}")
-        elif state in PENDING or not state:
+        if state in PASSING:
+            continue
+        if state in PENDING or not state:
             reasons.append(f"فحص لم يكتمل: {name}")
-    return (not reasons), reasons
+        else:
+            reasons.append(f"فحص غير ناجح ({state}): {name}")
+    return (not reasons), reasons, head
 
 
 def main() -> int:
@@ -115,15 +145,16 @@ def main() -> int:
     ap.add_argument("--enable", action="store_true")
     args = ap.parse_args()
     try:
-        ok, reasons = evaluate(args.pr, args.repo)
-    except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        ok, reasons, head = evaluate(args.pr, args.repo)
+    except (subprocess.CalledProcessError, json.JSONDecodeError, GateError) as exc:
         print(f"[خطأ] {exc}", file=sys.stderr)
         return 2
     if ok:
         print(f"[مسموح] الطلب #{args.pr} يستوفي شروط الدمج الآلي")
         if args.enable:
-            cmd = ["gh", "pr", "merge", args.pr, "--auto"] + (["--repo", args.repo] if args.repo else [])
-            subprocess.run(cmd, check=True)
+            # --match-head-commit: التفعيل للرأس المقيس وحده؛ دفعٌ لاحق يُسقطه فلا يُدمج ما لم يُفحص.
+            cmd = ["gh", "pr", "merge", args.pr, "--auto", "--squash", "--match-head-commit", head]
+            subprocess.run(cmd + (["--repo", args.repo] if args.repo else []), check=True)
             print("[تفعيل] auto-merge مفعّل؛ طابور الدمج يتولّى الباقي")
         return 0
     print(f"[ممنوع] الطلب #{args.pr} يبقى دمجًا يدويًا:")

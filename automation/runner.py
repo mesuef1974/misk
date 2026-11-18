@@ -61,15 +61,25 @@ def sh(cmd: list[str], cwd: Path = ROOT, check: bool = True, **kw) -> subprocess
 
 
 def acquire_lock() -> bool:
-    if LOCK.exists():
-        age = time.time() - LOCK.stat().st_mtime
-        if age < LOCK_STALE_SECONDS:
-            print(f"مشغّل آخر يعمل (قفل عمره {int(age)} ث) — خروج")
-            return False
-        print("قفل قديم — يُزال")
-        LOCK.unlink()
-    LOCK.write_text(str(os.getpid()), encoding="utf-8")
-    return True
+    """قفل ذرّي: الإنشاء الحصري يفشل إن سبق مشغّل آخر، فلا نافذة بين الفحص والكتابة."""
+    for _ in range(2):
+        try:
+            fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                age = time.time() - LOCK.stat().st_mtime
+            except FileNotFoundError:
+                continue
+            if age < LOCK_STALE_SECONDS:
+                print(f"مشغّل آخر يعمل (قفل عمره {int(age)} ث) — خروج")
+                return False
+            print("قفل قديم — يُزال")
+            LOCK.unlink(missing_ok=True)
+            continue
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(str(os.getpid()))
+        return True
+    return False
 
 
 def release_lock() -> None:
@@ -120,6 +130,21 @@ def run_model(path: Path, card: str, model: str | None, max_turns: int) -> int:
 def prepush(path: Path) -> bool:
     proc = sh([sys.executable, "scripts/prepush_check.py", "--allow-missing"], cwd=path, check=False)
     return proc.returncode == 0
+
+
+def unpushable(path: Path, head: str) -> str | None:
+    """سبب يمنع الدفع، أو None: المدفوع هو الرأس المفحوص نفسه، بشجرة نظيفة وإيداعات فوق main."""
+
+    def out(*cmd: str) -> str:
+        return sh(list(cmd), cwd=path, capture_output=True).stdout.strip()
+
+    if out("git", "status", "--porcelain"):
+        return "dirty_tree"
+    if out("git", "rev-parse", "HEAD") != head:
+        return "head_moved"
+    if out("git", "rev-list", "--count", "origin/main..HEAD") == "0":
+        return "no_commits"
+    return None
 
 
 def push_and_open_pr(path: Path, branch: str, card: str) -> str:
@@ -176,6 +201,11 @@ def main(argv: list[str] | None = None) -> int:
             print("الفحص المحلي فشل — البطاقة تبقى في worktree للمراجعة")
             return 1
         ledger.append(card, "prepush_ok", head=head)
+        blocker = unpushable(path, head)
+        if blocker:
+            ledger.append(card, blocker, head=head)
+            print(f"لا دفع ({blocker}) — البطاقة تبقى في worktree للمراجعة")
+            return 1
         url = push_and_open_pr(path, branch, card)
         ledger.append(card, "pr_opened", url=url, head=head)
         print(f"PR: {url}")

@@ -17,6 +17,7 @@
     "deny": [
       "Bash(railway *)",
       "Bash(gh pr merge*)",
+      "Bash(*merge_gate.py*--enable*)",
       "Read(./.env)",
       "Read(./.env.*)"
     ]

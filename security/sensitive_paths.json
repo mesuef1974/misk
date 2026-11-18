@@ -15,7 +15,7 @@
   "mandatory_review_when_diff_touches": {
     "authorization_identity": ["**/permissions*", "**/rbac*", "**/auth*", "config/settings/*"],
     "data_and_privacy": ["**/crypto*", "**/*export*", "**/*import*", "**/*upload*"],
-    "deploy_and_ci": [".github/**", "Dockerfile", ".railway/**", "railway.toml", "railway.json", "scripts/railway-*.sh", "scripts/*gate*.py", "scripts/approval.py"]
+    "deploy_and_ci": [".github/**", "Dockerfile", ".railway/**", "railway.toml", "railway.json", "scripts/railway-*.sh", "scripts/*gate*.py", "scripts/approval.py", "scripts/pr_approval_head_check.py", "scripts/prepush_check.py", "scripts/check_migration_collisions.py", "automation/**", "security/**", ".claude/hooks/**", ".claude/settings.json", "pyproject.toml", ".dockerignore"]
   },
   "mandatory_review_when_diff_content_matches": {
     "secrets_like": ["(?i)(secret|password|api[_-]?key|token)\\s*[=:]\\s*['\"][^'\"]{8,}"],
