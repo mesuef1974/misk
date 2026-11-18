@@ -9,7 +9,7 @@
    في `.worktrees/<card>`، يشغّل `claude -p` بصلاحيات مخفَّضة (لا push ولا gh merge ولا railway)،
    ثم يشغّل `scripts/prepush_check.py`، ويفتح PR بنفسه (المشغّل هو من يدفع، لا النموذج)، ويسجّل كل خطوة في الدفتر.
 3. `scripts/` — البوابات: `prepush_check.py` محليًا، وفي CI: `pr_approval_head_check.py` (اعتماد مربوط بالـ SHA)،
-   `check_migration_collisions.py`، `deploy_window.py` (في merge_group)، و`merge_gate.py` (قرار auto-merge).
+   `check_migration_collisions.py`، `deploy_window.py` (على الطلب وفي merge_group)، و`merge_gate.py` (قرار auto-merge).
 
 ## الأوامر
 
@@ -28,4 +28,4 @@ python automation/runner.py --dry-run         # يعرض ما سيفعله دو�
 - النجاح الشكلي خطر: `prepush_check.py` يفشل برمز 3 إن غابت أداة بدل أن ينجح صامتًا.
 - ملفات CI وlockfiles وسكربتات البوابات محظورة على الدمج الآلي (`merge_gate.ALWAYS_FORBIDDEN`) حتى لا يعدّل النموذج حارسه.
 - الاعتماد البشري مرة واحدة لكل بطاقة، في وصف الطلب، مربوط برأسه؛ أي دفع لاحق يُبطله.
-- الدمج عبر merge queue فقط؛ نافذة النشر تُفرض هناك.
+- نافذة النشر تُفرض على الطلب نفسه عبر «بوابة الجودة» المطلوبة (طابور الدمج غير متاح لمستودع حساب شخصي).
