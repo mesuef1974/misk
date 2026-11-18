@@ -6,14 +6,14 @@ from datetime import datetime
 from decimal import Decimal
 
 from django.http import HttpRequest
-from ninja import Field, Query, Router, Schema
+from ninja import Field, Query, Router, Schema, Status
 from ninja.errors import HttpError
 
 from apps.catalog.models import Calibration, Material
 from apps.core.auth import request_id, staff_auth
 from apps.core.paging import PageQuery, page_of
 
-from . import selectors, services
+from . import jobs, selectors, services
 from .models import RunLog, Sheet
 
 router = Router(tags=["الإنتاج"], auth=staff_auth)
@@ -85,15 +85,36 @@ def list_sheets(request: HttpRequest, page: Query[PageQuery], status: str | None
     return page_of(selectors.sheets(status), page, selectors.status_counts(), status)
 
 
-@router.post("/sheets/plan", response=list[SheetOut])
+class PlanJobOut(Schema):
+    id: str  # فارغ في التنفيذ المتزامن: لا شيء يُستطلع
+    status: str  # pending | done | failed
+    sheets: list[SheetOut]
+    error: str = ""
+
+
+def _job_out(job: jobs.PlanJob) -> dict:
+    sheets = selectors.sheets().filter(pk__in=job.sheet_ids) if job.sheet_ids else []
+    return {"id": job.id, "status": job.status, "sheets": sheets, "error": job.error}
+
+
+@router.post("/sheets/plan", response={200: PlanJobOut, 202: PlanJobOut})
 def plan(request: HttpRequest, payload: PlanIn):
+    """200 بالألواح حين يُخطَّط في الطلب نفسه، و202 بمعرّف يُستطلع من `/sheets/plan/{id}` حين يُخطَّط في العامل."""
     try:
-        planned = services.plan_sheets(material_id=payload.material_id, actor=request.user)
+        job = jobs.start_plan(material_id=payload.material_id, actor=request.user)
     except Material.DoesNotExist as exc:
         raise HttpError(404, "المادة غير موجودة") from exc
     except services.ProductionError as exc:
         raise HttpError(422, str(exc)) from exc
-    return selectors.sheets().filter(pk__in=[sheet.pk for sheet in planned])
+    return Status(202 if job.status == jobs.PENDING else 200, _job_out(job))
+
+
+@router.get("/sheets/plan/{job_id}", response=PlanJobOut)
+def plan_status(request: HttpRequest, job_id: str):
+    job = jobs.plan_job(job_id)
+    if job is None:
+        raise HttpError(404, "مهمة تخطيط غير معروفة")
+    return _job_out(job)
 
 
 @router.post("/sheets/{sheet_id}/runs", response=RunOut)

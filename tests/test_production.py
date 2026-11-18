@@ -1,10 +1,12 @@
 import uuid
 from decimal import Decimal
+from unittest.mock import ANY
 
 import pytest
 
+from apps.core.models import AuditLog
 from apps.orders import services as order_services
-from apps.production import domain, services, tasks
+from apps.production import domain, jobs, services, tasks
 from apps.production.models import Placement, RunLog, Sheet
 
 BED = {"sheet_width": 6000, "sheet_height": 3050, "margin": 50, "gap": 30}
@@ -110,8 +112,72 @@ def test_plan_sheets_rejects_oversized_template_and_saves_nothing(material, name
 @pytest.mark.django_db
 def test_plan_task_runs_eagerly(material, name_tag, calibration):
     _confirmed_order(material, 2)
-    sheet_ids = tasks.plan_sheets_async.delay(material_id=material.pk).get()
-    assert list(Sheet.objects.values_list("pk", flat=True)) == sheet_ids
+    outcome = tasks.plan_sheets_async.delay(material_id=material.pk).get()
+    assert outcome == {"sheets": list(Sheet.objects.values_list("pk", flat=True))}
+
+
+@pytest.mark.django_db
+def test_plan_task_returns_business_error_without_retrying(material, name_tag, calibration):
+    name_tag.width_mm = Decimal("700")
+    name_tag.save()
+    _confirmed_order(material, 1)
+    assert tasks.plan_sheets_async.delay(material_id=material.pk).get() == {"error": ANY}
+    assert not Sheet.objects.exists()
+
+
+def _plan(client, material_id):
+    return client.post(
+        "/api/production/sheets/plan", {"material_id": material_id}, content_type="application/json"
+    )
+
+
+@pytest.mark.django_db
+def test_plan_api_async_returns_job_and_polls_it(
+    client, staff_user, material, name_tag, calibration, settings
+):
+    settings.PLANNING_ASYNC = True
+    _confirmed_order(material, 2)
+    client.force_login(staff_user)
+    # التنفيذ الفوري في الاختبار يُنهي المهمة قبل الرد؛ المهم أن الرد يحمل معرّفًا يُستطلع بالشكل نفسه.
+    started = _plan(client, material.pk)
+    assert started.status_code == 200, started.content
+    job = started.json()
+    assert job["status"] == "done" and job["id"]
+    (sheet,) = job["sheets"]
+    assert len(sheet["placements"]) == 2
+    polled = client.get(f"/api/production/sheets/plan/{job['id']}").json()
+    assert (polled["status"], [s["id"] for s in polled["sheets"]]) == ("done", [sheet["id"]])
+    assert AuditLog.objects.get(action="production.plan").actor == staff_user  # الفاعل يعبر إلى العامل
+
+    assert _plan(client, 999999).status_code == 404  # المادة تُفحص قبل الطابور
+    assert client.get("/api/production/sheets/plan/not-a-uuid").status_code == 404
+    unknown = client.get(f"/api/production/sheets/plan/{uuid.uuid4()}").json()
+    assert (unknown["status"], unknown["sheets"]) == ("pending", [])
+
+
+@pytest.mark.django_db
+def test_plan_api_async_reports_business_error_as_failed_job(
+    client, staff_user, material, name_tag, calibration, settings
+):
+    settings.PLANNING_ASYNC = True
+    name_tag.width_mm = Decimal("700")
+    name_tag.save()
+    _confirmed_order(material, 1)
+    client.force_login(staff_user)
+    job = _plan(client, material.pk).json()
+    assert job["status"] == "failed" and job["error"]
+    assert client.get(f"/api/production/sheets/plan/{job['id']}").json()["error"] == job["error"]
+
+
+def test_plan_job_pending_while_worker_has_not_answered(monkeypatch):
+    class Waiting:
+        state = "PENDING"
+
+    monkeypatch.setattr(jobs, "AsyncResult", lambda *args, **kwargs: Waiting())
+    job_id = str(uuid.uuid4())
+    assert jobs.plan_job(job_id) == jobs.PlanJob(id=job_id, status=jobs.PENDING)
+    Waiting.state = "FAILURE"
+    assert jobs.plan_job(job_id).error == jobs.WORKER_FAILED
 
 
 @pytest.mark.django_db
@@ -171,18 +237,12 @@ def test_production_api(client, staff_user, material, name_tag, calibration):
     assert client.get("/api/production/sheets").status_code == 401
     _confirmed_order(material, 2)
     client.force_login(staff_user)
-    res = client.post(
-        "/api/production/sheets/plan", {"material_id": material.pk}, content_type="application/json"
-    )
+    res = _plan(client, material.pk)
     assert res.status_code == 200, res.content
-    (sheet,) = res.json()
+    assert (res.json()["status"], res.json()["id"]) == ("done", "")  # متزامن افتراضًا: لا شيء يُستطلع
+    (sheet,) = res.json()["sheets"]
     assert len(sheet["placements"]) == 2
-    assert (
-        client.post(
-            "/api/production/sheets/plan", {"material_id": 999999}, content_type="application/json"
-        ).status_code
-        == 404
-    )
+    assert _plan(client, 999999).status_code == 404
 
     url = f"/api/production/sheets/{sheet['id']}/runs"
     body = {"duration_s": 300, "outcome": "ok", "calibration_id": calibration.pk}

@@ -195,6 +195,12 @@ CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_TASK_TIME_LIMIT = 300
 CELERY_TASK_ALWAYS_EAGER = False
+# نتيجة مهمة التخطيط تُقرأ بالاستطلاع ثم لا حاجة إليها؛ ساعة تكفي ولا تملأ Redis.
+CELERY_RESULT_EXPIRES = 60 * 60
+
+# تخطيط الألواح في عامل Celery بدل الطلب نفسه (قاعدة 300ms). يشترط عاملًا وRedis مشتركًا بين الويب والعامل،
+# فهو معطَّل افتراضًا: بلاهما تبقى المهمة في طابور لا يقرؤه أحد ويتعطّل التخطيط كله.
+PLANNING_ASYNC = env_bool("PLANNING_ASYNC", False)
 
 SITE_TITLE = "مسك"
 

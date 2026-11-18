@@ -5,7 +5,8 @@ import { ApiError } from "@/api/client";
 import { routes } from "@/router";
 import { catalogService, type Calibration, type Material, type ProductTemplate } from "@/services/catalog";
 import { ordersService, type Order } from "@/services/orders";
-import { productionService, type Run, type Sheet } from "@/services/production";
+import { productionService, type PlanJob, type Run, type Sheet } from "@/services/production";
+import { PLAN_POLL_MS, PLAN_TIMEOUT_MESSAGE } from "@/stores/production";
 import { sessionService } from "@/services/session";
 import HomePage from "./HomePage.vue";
 import MaterialsPage from "./MaterialsPage.vue";
@@ -26,11 +27,15 @@ vi.mock("@/services/orders", () => ({
   ordersService: { list: vi.fn(), get: vi.fn(), create: vi.fn(), transition: vi.fn() },
 }));
 vi.mock("@/services/production", () => ({
-  productionService: { sheets: vi.fn(), plan: vi.fn(), recordRun: vi.fn(), scrap: vi.fn() },
+  productionService: { sheets: vi.fn(), plan: vi.fn(), planJob: vi.fn(), recordRun: vi.fn(), scrap: vi.fn() },
 }));
 vi.mock("@/services/session", () => ({
   sessionService: { me: vi.fn(), login: vi.fn(), logout: vi.fn() },
 }));
+
+function job(overrides: Partial<PlanJob> = {}): PlanJob {
+  return { id: "", status: "done", sheets: [], error: "", ...overrides };
+}
 
 const leather: Material = {
   id: 7,
@@ -139,6 +144,7 @@ beforeEach(() => {
   vi.mocked(ordersService.list).mockReset().mockResolvedValue({ items: [order], count: 1, counts: { confirmed: 1 } });
   vi.mocked(productionService.sheets).mockReset().mockResolvedValue(sheetsPage());
   vi.mocked(productionService.plan).mockReset();
+  vi.mocked(productionService.planJob).mockReset();
   vi.mocked(productionService.recordRun).mockReset();
   vi.mocked(productionService.scrap).mockReset();
   vi.mocked(sessionService.me).mockReset().mockResolvedValue({ id: 1, username: "staff", is_staff: true, admin_url: "/admin/" });
@@ -313,7 +319,9 @@ describe("صفحة الإنتاج", () => {
   });
 
   it("تخطّط ألواح المادة وتذكر حين لا قطع تنتظر", async () => {
-    vi.mocked(productionService.plan).mockResolvedValueOnce([sheet({ id: 2 })]).mockResolvedValueOnce([]);
+    vi.mocked(productionService.plan)
+      .mockResolvedValueOnce(job({ sheets: [sheet({ id: 2 })] }))
+      .mockResolvedValueOnce(job());
     const page = await show(ProductionPage, "/production");
     await page.get(".plan select").setValue("7");
     await page.get(".plan").trigger("submit");
@@ -325,6 +333,53 @@ describe("صفحة الإنتاج", () => {
     await page.get(".plan").trigger("submit");
     await flushPromises();
     expect(page.get(".plan .notice").text()).toContain("لا قطع تنتظر التخطيط");
+  });
+
+  it("تستطلع التخطيط في الخلفية حتى ينتهي", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      vi.mocked(productionService.plan).mockResolvedValueOnce(job({ id: "j1", status: "pending" }));
+      vi.mocked(productionService.planJob)
+        .mockResolvedValueOnce(job({ id: "j1", status: "pending" }))
+        .mockResolvedValueOnce(job({ id: "j1", sheets: [sheet({ id: 2 })] }));
+      const page = await show(ProductionPage, "/production");
+      await page.get(".plan select").setValue("7");
+      await page.get(".plan").trigger("submit");
+      await vi.runAllTimersAsync();
+      await flushPromises();
+      expect(productionService.planJob).toHaveBeenCalledTimes(2);
+      expect(productionService.planJob).toHaveBeenLastCalledWith("j1");
+      expect(page.findAll(".sheet-card")).toHaveLength(2);
+      expect(page.get(".plan .notice").text()).toContain("خُطِّطت 2 قطعة على 1 لوح");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("تعرض فشل التخطيط في الخلفية وتتوقف عن الاستطلاع بعد حدّه", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      vi.mocked(productionService.plan)
+        .mockResolvedValueOnce(job({ id: "j1", status: "pending" }))
+        .mockResolvedValueOnce(job({ id: "j2", status: "pending" }));
+      vi.mocked(productionService.planJob)
+        .mockResolvedValueOnce(job({ id: "j1", status: "failed", error: "القطعة أكبر من اللوح بعد الهامش" }))
+        .mockResolvedValue(job({ id: "j2", status: "pending" }));
+      const page = await show(ProductionPage, "/production");
+      await page.get(".plan select").setValue("7");
+      await page.get(".plan").trigger("submit");
+      await vi.runAllTimersAsync();
+      await flushPromises();
+      expect(page.get('.plan [role="alert"]').text()).toContain("أكبر من اللوح");
+
+      await page.get(".plan").trigger("submit");
+      await vi.runAllTimersAsync();
+      await flushPromises();
+      expect(productionService.planJob).toHaveBeenCalledTimes(1 + PLAN_POLL_MS.length);
+      expect(page.get('.plan [role="alert"]').text()).toContain(PLAN_TIMEOUT_MESSAGE);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("تعرض رفض التخطيط من الخادم", async () => {
