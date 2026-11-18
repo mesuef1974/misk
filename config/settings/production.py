@@ -5,8 +5,9 @@ DEBUG = False
 
 # خلف وكيل Railway: الطلب يصل HTTP والـ X-Forwarded-Proto يحمل https.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-# وكيل Railway واحد أمام التطبيق: بدونه يرى قفل الدخول عنوان الوكيل لكل الزوار.
-TRUSTED_PROXY_COUNT = int(env("TRUSTED_PROXY_COUNT", "1"))
+# Railway يكتب X-Forwarded-For بخانتين «العميل، الحافة» ويتجاهل ما يرسله العميل (مقيس 2026-11-18 عبر
+# /api/diagnostics/client-address): عنوان الزائر هو الخانة الثانية من اليمين. بـ1 يُقفل الدخول على عنوان الحافة المشترك.
+TRUSTED_PROXY_COUNT = int(env("TRUSTED_PROXY_COUNT", "2"))
 SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
 # فاحص الصحة في Railway يسأل الحاوية بـ HTTP بلا X-Forwarded-Proto: تحويله إلى HTTPS (301) يُفشل الفحص.
 # الاستثناء لمسار الصحة وحده؛ لا بيانات فيه ولا جلسة.
