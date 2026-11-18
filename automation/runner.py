@@ -48,7 +48,7 @@ PROMPT = """أنت تنفّذ بطاقة عمل واحدة في مستودع Dja
 {success}
 
 القواعد:
-- لا تعدّل ملفات .github/ أو scripts/ أو security/ أو lockfiles أو requirements*.txt أو Dockerfile أو railway.toml.
+- لا تعدّل ملفات .github/ أو scripts/ أو security/ أو lockfiles أو requirements*.txt أو Dockerfile أو .railway/.
 - كل تغيير في النماذج يرافقه makemigrations، وكل منطق في services.py لا في النماذج أو العروض.
 - أضف اختبارًا يفشل قبل تغييرك وينجح بعده.
 - في النهاية شغّل: python scripts/prepush_check.py --allow-missing، وأصلح ما يفشل.
