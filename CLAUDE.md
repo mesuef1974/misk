@@ -1,7 +1,7 @@
 # مسك
 
 Django 5 + Django Ninja (API تحت `/api/`) + Vue 3 (Vite، Pinia، TypeScript) تُحقن عبر django-vite في `templates/spa.html`.
-PostgreSQL + Redis + Celery (`config/celery.py`). النشر على Railway (`railway.toml`).
+PostgreSQL + Redis + Celery (`config/celery.py`). النشر على Railway (`.railway/railway.ts`، يُطبَّق بـ `railway config apply` من طرفية المالك).
 
 ## البنية
 - `config/` إعدادات (base/development/production/testing)، `apps/<app>/` كل تطبيق: `models.py` نحيل، `services.py` كتابة،
@@ -18,7 +18,7 @@ PostgreSQL + Redis + Celery (`config/celery.py`). النشر على Railway (`ra
 
 ## ما لا تفعله
 - لا `git push` ولا `gh pr merge` ولا `railway` من الجلسة؛ المشغّل والبوابات يفعلان ذلك (`.claude/hooks/guard_git.py` يحجب).
-- لا تعديل على `.github/`، `scripts/*gate*`, `security/`, lockfiles, `Dockerfile`, `railway.toml` داخل بطاقة عادية.
+- لا تعديل على `.github/`، `scripts/*gate*`, `security/`, lockfiles, `Dockerfile`, `.railway/` داخل بطاقة عادية.
 
 ## أوامر
 ```bash
