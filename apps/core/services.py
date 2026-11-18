@@ -27,6 +27,7 @@ def record_audit(
     قيد التفرّد يرفض الثاني فيُعاد صف الأول.
 
     `request_id` يأتي من ترويسة يكتبها العميل؛ ما زاد على طول العمود يُقصّ بدل أن يُسقط الطلب.
+    لا يُمرَّر لأحداث لا تُعاد (الدخول، الخروج، الاطّلاع): ترويسة مكرَّرة كانت ستُسقط الحدث الثاني من السجل.
     """
     request_id = request_id[:REQUEST_ID_LENGTH]
     known = actor if getattr(actor, "pk", None) else None
@@ -67,7 +68,7 @@ class SignInError(Exception):
         self.status = status
 
 
-def sign_in(request: HttpRequest, *, username: str, password: str, request_id: str = "") -> AbstractBaseUser:
+def sign_in(request: HttpRequest, *, username: str, password: str) -> AbstractBaseUser:
     """جلسة لمشرف فقط. الرد واحد للاسم الخاطئ وكلمة المرور الخاطئة والحساب الموقوف وغير المشرف،
     فلا يُعرف من الرد أن كلمة مرور حساب غير مشرف صحيحة.
 
@@ -78,14 +79,14 @@ def sign_in(request: HttpRequest, *, username: str, password: str, request_id: s
     if user is None or not user.is_staff:
         raise SignInError(401, "اسم المستخدم أو كلمة المرور غير صحيحة")
     login(request, user)
-    record_audit(action="auth.login", actor=user, target=f"user:{user.pk}", request_id=request_id)
+    record_audit(action="auth.login", actor=user, target=f"user:{user.pk}")
     return user
 
 
-def sign_out(request: HttpRequest, *, request_id: str = "") -> None:
+def sign_out(request: HttpRequest) -> None:
     """idempotent: الخروج بلا جلسة لا يفعل شيئًا."""
     user = request.user
     if not user.is_authenticated:
         return
-    record_audit(action="auth.logout", actor=user, target=f"user:{user.pk}", request_id=request_id)
+    record_audit(action="auth.logout", actor=user, target=f"user:{user.pk}")
     logout(request)

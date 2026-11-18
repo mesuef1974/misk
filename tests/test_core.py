@@ -339,10 +339,37 @@ def test_audit_keeps_actor_name_after_user_is_deleted(staff_user):
 
 
 @pytest.mark.django_db
-def test_audit_truncates_oversized_request_id(client, staff_user):
-    client.force_login(staff_user)
-    assert client.get("/api/audit", headers={"X-Request-ID": "r" * 500}).status_code == 200
-    assert AuditLog.objects.get(action="audit.view").request_id == "r" * 64
+def test_audit_truncates_oversized_request_id():
+    assert services.record_audit(action="x", request_id="r" * 500).request_id == "r" * 64
+
+
+@pytest.mark.django_db
+def test_repeated_request_id_does_not_hide_audit_views(client, staff_user, django_user_model):
+    """الترويسة يكتبها العميل: تكرارها لا يُسقط اطّلاع مشرف آخر من السجل."""
+    other = django_user_model.objects.create_user(username="other", password="x" * 12, is_staff=True)
+    for user in (staff_user, other):
+        client.force_login(user)
+        assert client.get("/api/audit", headers={"X-Request-ID": "same"}).status_code == 200
+    views = AuditLog.objects.filter(action="audit.view")
+    assert sorted(views.values_list("actor_name", flat=True)) == ["other", "staff"]
+
+
+@pytest.mark.django_db
+def test_repeated_request_id_does_not_hide_logins(staff_user):
+    from django.test import Client
+
+    for _ in range(2):
+        client = Client()
+        res = client.post(
+            "/api/auth/login",
+            {"username": "staff", "password": "x" * 12},
+            content_type="application/json",
+            headers={"X-Request-ID": "same"},
+        )
+        assert res.status_code == 200, res.content
+        assert client.post("/api/auth/logout", headers={"X-Request-ID": "same"}).status_code == 200
+    assert AuditLog.objects.filter(action="auth.login", actor=staff_user).count() == 2
+    assert AuditLog.objects.filter(action="auth.logout", actor=staff_user).count() == 2
 
 
 @pytest.mark.django_db

@@ -42,9 +42,19 @@ def plan_sheets(*, material_id: int, actor=None) -> list[Sheet]:
     إعادة الاستدعاء بلا بنود جديدة تعيد قائمة فارغة ولا تنشئ شيئًا.
     """
     material = Material.objects.get(pk=material_id)
+    # الطلبات قبل البنود، بترتيب الإلغاء نفسه (الطلب ثم اللوح): إلغاء متزامن إمّا ينتظر هذا التخطيط
+    # فيجد ألواحه ويرفع قطعه، وإمّا يسبقه فيُعاد فحص الحالة بعد القفل ويخرج الطلب من التخطيط.
+    # استعلام فرعي لا join مع distinct: PostgreSQL يرفض FOR UPDATE مع DISTINCT.
+    on_material = OrderItem.objects.filter(material=material).values("order_id")
+    order_ids = list(
+        Order.objects.select_for_update()
+        .filter(status__in=PLANNABLE, pk__in=on_material)
+        .order_by("id")
+        .values_list("id", flat=True)
+    )
     items = list(
         OrderItem.objects.select_for_update(of=("self",))
-        .filter(material=material, order__status__in=PLANNABLE)
+        .filter(material=material, order_id__in=order_ids)
         .select_related("template")
         .prefetch_related("placements")
         .order_by("id")
