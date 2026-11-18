@@ -17,7 +17,10 @@ export default defineRailway(() => {
     source: github(REPO, { checkSuites: false }),
     start: "bash scripts/railway-release.sh",
     healthcheck: "/health/",
+    healthcheckTimeout: 120,
     preDeploy: "bash scripts/railway-predeploy.sh",
+    // من railway.toml المحذوف: إعادة تشغيل عند الفشل بخمس محاولات.
+    deploy: { restartPolicyType: "ON_FAILURE", restartPolicyMaxRetries: 5 },
     replicas: { [REGION]: 1 },
     env: {
       ALLOWED_HOSTS: preserve(),
