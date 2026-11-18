@@ -1,0 +1,8 @@
+{
+  "name": "misk-infra",
+  "private": true,
+  "description": "أدوات جذر المستودع: SDK إعداد Railway الذي يستورده .railway/railway.ts. الواجهة في frontend/.",
+  "devDependencies": {
+    "railway": "3.17.0"
+  }
+}

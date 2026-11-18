@@ -9,6 +9,7 @@ htmlcov
 staticfiles
 media
 frontend/node_modules
+node_modules
 frontend_dist
 .worktrees
 automation/ledger
