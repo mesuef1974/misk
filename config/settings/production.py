@@ -28,3 +28,9 @@ if not env("DATABASE_URL"):
     from django.core.exceptions import ImproperlyConfigured
 
     raise ImproperlyConfigured("DATABASE_URL مطلوب في الإنتاج")
+
+if PLANNING_ASYNC and not env("REDIS_URL"):  # noqa: F405
+    from django.core.exceptions import ImproperlyConfigured
+
+    # بلا Redis يعمل Celery على memory:// داخل كل عملية: الويب يضع المهمة في ذاكرته والعامل لا يراها.
+    raise ImproperlyConfigured("PLANNING_ASYNC يشترط REDIS_URL مشتركًا بين الويب والعامل")

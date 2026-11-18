@@ -1,8 +1,26 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
-import { errorMessage } from "@/api/client";
+import { ApiError, errorMessage } from "@/api/client";
 import { appendPage } from "@/api/paging";
-import { productionService, type Run, type RunDraft, type Sheet } from "@/services/production";
+import { productionService, type PlanJob, type Run, type RunDraft, type Sheet } from "@/services/production";
+
+/** فترات استطلاع مهمة التخطيط: سريعة أولًا ثم كل ثلاث ثوانٍ، ودقيقتان حدًّا (مهلة العامل خمس دقائق). */
+export const PLAN_POLL_MS = [500, 1000, 1000, 2000, 2000, ...Array<number>(38).fill(3000)];
+export const PLAN_TIMEOUT_MESSAGE = "التخطيط يستغرق أطول من المعتاد. حدّث الصفحة بعد قليل لترى الألواح.";
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** ينتظر مهمة التخطيط حتى تنتهي. معرّف مجهول يبقى `pending` في الخادم، فالحدّ هنا لا هناك. */
+async function settled(job: PlanJob): Promise<Sheet[]> {
+  for (const delay of PLAN_POLL_MS) {
+    if (job.status !== "pending") break;
+    await wait(delay);
+    job = await productionService.planJob(job.id);
+  }
+  if (job.status === "failed") throw new ApiError(422, job.error);
+  if (job.status === "pending") throw new ApiError(504, PLAN_TIMEOUT_MESSAGE);
+  return job.sheets;
+}
 
 export const useProductionStore = defineStore("production", () => {
   /** ما حُمّل من صفحات التصفية الحالية، الأحدث أولًا. */
@@ -74,9 +92,10 @@ export const useProductionStore = defineStore("production", () => {
 
   // الكتابة ترمي الخطأ للصفحة لتعرضه بجانب الإجراء الذي سبّبه.
 
-  /** الألواح الجديدة في أول القائمة (الأحدث أولًا كترتيب الخادم). قائمة فارغة حين لا قطع تنتظر. */
+  /** الألواح الجديدة في أول القائمة (الأحدث أولًا كترتيب الخادم). قائمة فارغة حين لا قطع تنتظر.
+   *  الخادم يخطّط في الطلب نفسه أو في عامل خلفي؛ في الثاني تُستطلع المهمة حتى تنتهي. */
   async function plan(materialId: number): Promise<Sheet[]> {
-    const planned = await productionService.plan(materialId);
+    const planned = await settled(await productionService.plan(materialId));
     const fresh = new Set(planned.map((sheet) => sheet.id));
     sheets.value = [...planned, ...sheets.value.filter((sheet) => !fresh.has(sheet.id))];
     total.value += planned.length;

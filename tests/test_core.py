@@ -26,6 +26,28 @@ def test_health_is_exempt_from_https_redirect(client, settings, monkeypatch):
     assert client.get("/health/x").status_code == 301
 
 
+def test_planning_async_requires_shared_redis_in_production(monkeypatch):
+    # بلا Redis يضع الويب المهمة في ذاكرته والعامل لا يراها: الإنتاج يرفض الإقلاع بدل تعطّل التخطيط بصمت.
+    from django.core.exceptions import ImproperlyConfigured
+
+    base = importlib.import_module("config.settings.base")
+    monkeypatch.setenv("ALLOWED_HOSTS", "example.test")
+    monkeypatch.setenv("DATABASE_URL", "sqlite://:memory:")
+    monkeypatch.setenv("PLANNING_ASYNC", "true")
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    try:
+        importlib.reload(base)
+        with pytest.raises(ImproperlyConfigured, match="REDIS_URL"):
+            importlib.reload(importlib.import_module("config.settings.production"))
+        monkeypatch.setenv("REDIS_URL", "redis://example.test:6379/0")
+        importlib.reload(base)
+        assert importlib.reload(importlib.import_module("config.settings.production")).PLANNING_ASYNC is True
+    finally:
+        monkeypatch.delenv("PLANNING_ASYNC")
+        monkeypatch.delenv("REDIS_URL")
+        importlib.reload(base)
+
+
 @pytest.mark.django_db
 def test_ping(client):
     res = client.get("/api/ping")
