@@ -1,5 +1,9 @@
 .git
 .env
+.env.*
+*.sqlite3
+data
+laser
 .venv
 **/__pycache__
 .pytest_cache

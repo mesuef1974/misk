@@ -27,7 +27,9 @@ jobs:
           import fnmatch, json, os, subprocess
           base, pr = os.environ["BASE"], os.environ["PR"]
           rules = json.loads(subprocess.check_output(["git", "show", f"origin/{base}:security/sensitive_paths.json"], text=True))
-          changed = subprocess.check_output(["git", "diff", "--name-only", f"origin/{base}...HEAD"], text=True).split()
+          # --no-renames: المسار القديم والجديد معًا، فإعادة التسمية لا تخفي مسارًا حسّاسًا. -z: الأسماء العربية وذات المسافات كما هي.
+          diff = subprocess.check_output(["git", "diff", "--no-renames", "-z", "--name-only", f"origin/{base}...HEAD"], text=True, encoding="utf-8")
+          changed = [p for p in diff.split("\0") if p]
           hits = {cat: [p for p in changed if any(fnmatch.fnmatch(p, g) for g in globs)]
                   for cat, globs in rules["mandatory_review_when_diff_touches"].items()}
           hits = {k: v for k, v in hits.items() if v}

@@ -54,14 +54,19 @@ def status(proc: subprocess.CompletedProcess) -> tuple[str, str]:
     return (OK if proc.returncode == 0 else FAIL), tail(proc)
 
 
-def changed_files(base: str) -> list[str]:
+def changed_files(base: str) -> list[str] | None:
+    """ما تغيّر عن الأساس، أو None إن تعذّر القياس. -z: الأسماء العربية وذات المسافات تصل كما هي بلا اقتباس."""
     mb = run(["git", "merge-base", "HEAD", base])
-    if mb.returncode != 0:
-        return []
-    diff = run(["git", "diff", "--name-only", mb.stdout.strip(), "HEAD"])
-    untracked = run(["git", "ls-files", "--others", "--exclude-standard"])
-    staged = run(["git", "diff", "--name-only", "--cached"])
-    files = set(diff.stdout.split()) | set(untracked.stdout.split()) | set(staged.stdout.split())
+    if mb.returncode != 0 or not mb.stdout.strip():
+        return None
+    listings = (
+        run(["git", "diff", "-z", "--name-only", mb.stdout.strip(), "HEAD"]),
+        run(["git", "ls-files", "-z", "--others", "--exclude-standard"]),
+        run(["git", "diff", "-z", "--name-only", "--cached"]),
+    )
+    if any(listing.returncode != 0 for listing in listings):
+        return None
+    files = {name for listing in listings for name in listing.stdout.split("\0") if name}
     return sorted(f for f in files if (ROOT / f).is_file())
 
 
@@ -93,17 +98,21 @@ def check_collisions(base: str) -> tuple[str, str]:
     return status(proc)
 
 
-def check_secrets(files: list[str]) -> tuple[str, str]:
+def check_secrets(files: list[str] | None) -> tuple[str, str]:
+    if files is None:
+        return FAIL, "تعذّر حصر ما تغيّر عن الأساس (git merge-base/diff) — لا فحص أسرار بلا قائمة ملفات"
     if not files:
         return OK, "لا ملفات متغيرة"
     cmd = [sys.executable, "-m", "detect_secrets", "scan", *files]
     proc = run(cmd)
     if proc.returncode == 127 or "No module named" in (proc.stderr or ""):
         return MISSING, "detect-secrets غير مثبَّت"
+    if proc.returncode != 0:
+        return FAIL, f"detect-secrets خرج بالرمز {proc.returncode}:\n{tail(proc)}"
     try:
-        results = json.loads(proc.stdout or "{}").get("results", {})
-    except json.JSONDecodeError:
-        return FAIL, tail(proc)
+        results = json.loads(proc.stdout)["results"]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return FAIL, f"ردّ detect-secrets غير مقروء:\n{tail(proc)}"
     if results:
         return FAIL, "أسرار محتملة في: " + ", ".join(sorted(results))
     return OK, f"{len(files)} ملفًا بلا أسرار"
@@ -181,6 +190,12 @@ def main(argv: list[str] | None = None) -> int:
     if missing and not args.allow_missing:
         print(f"\nغير مقيس (أداة غائبة): {', '.join(missing)} — ثبّتها أو مرّر --allow-missing")
         return 3
+    skipped = sorted(skip & set(checks))
+    if skipped:
+        # الإيصال شهادة بأن الفحوص كلها نجحت على هذا الرأس؛ لا يُكتب لتشغيل ناقص.
+        (ROOT / ".prepush_receipt").unlink(missing_ok=True)
+        print(f"\nما قيس نجح، وتُرك: {', '.join(skipped)} — لا إيصال لتشغيل ناقص")
+        return 0
     write_receipt(results)
     print("\nكل ما قيس نجح — .prepush_receipt مكتوب")
     return 0

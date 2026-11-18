@@ -34,9 +34,13 @@ jobs:
       - run: mypy .
       - name: detect-secrets على ما تغيّر
         run: |
+          set -o pipefail
           base="${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}"
-          files=$(git diff --name-only "$base"...HEAD -- . ':!frontend/package-lock.json' | xargs -r ls 2>/dev/null || true)
-          [ -z "$files" ] || detect-secrets scan $files | python -c "import json,sys; r=json.load(sys.stdin)['results']; print(r); sys.exit(1 if r else 0)"
+          [ -n "$base" ] || { echo "لا أساس للمقارنة في هذا الحدث"; exit 0; }
+          # -z: الأسماء العربية وذات المسافات تصل كما هي. pipefail: انهيار git أو الماسح يُفشل الفحص ولا يمرّ صامتًا.
+          git diff -z --name-only --diff-filter=d "$base"...HEAD -- . ':!frontend/package-lock.json' \
+            | xargs -0 -r detect-secrets scan \
+            | python -c "import json,sys; raw=sys.stdin.read(); r=json.loads(raw)['results'] if raw.strip() else {}; print(r); sys.exit(1 if r else 0)"
 
   backend:
     name: pytest + تغطية + هجرات
