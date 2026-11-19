@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import secrets
 from typing import Any
 
+from axes.handlers.proxy import AxesProxyHandler
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import AbstractBaseUser
+from django.core import signing
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.http import HttpRequest
@@ -17,10 +20,17 @@ from .models import AuditLog
 
 REQUEST_ID_LENGTH = column_length(AuditLog, "request_id")
 # حدّ ثانٍ فوق قفل axes بالزوج (اسم، عنوان): تدوير العناوين لا يتيح أكثر من هذا العدد من التخمين
-# على اسم واحد في النافذة. أعلى من حدّ الزوج كي لا يقفل زائرٌ عابر مشرفًا يعرف اسمه.
+# على اسم واحد في النافذة. يحجب الأجهزة التي لم يُدخَل منها بهذا الاسم وحدها: الجهاز الذي دخل منه
+# صاحب الحساب يحمل كوكي موقَّعًا (نمط «كوكي الجهاز» في OWASP) فيُعدّ فشله عليه لا على الاسم،
+# ولا يقفله غريبٌ يعرف الاسم.
 NAME_FAILURE_LIMIT = 30
 NAME_FAILURE_WINDOW_S = 60 * 60
-NAME_LOCKED = "محاولات كثيرة على هذا الحساب؛ أعد المحاولة بعد ساعة"
+NAME_LOCKED = (
+    "محاولات كثيرة على هذا الحساب من أجهزة لم يُدخَل منها؛ ادخل من جهاز دخلت منه سابقًا أو أعد المحاولة بعد ساعة"
+)
+DEVICE_COOKIE = "misk_signin_device"
+DEVICE_MAX_AGE_S = 60 * 60 * 24 * 90
+_DEVICE_SALT = "apps.core.services.signin-device"
 
 
 def record_audit(
@@ -84,26 +94,57 @@ def sign_in(request: HttpRequest, *, username: str, password: str) -> AbstractBa
     و`login` يبدّل مفتاح الجلسة ورمز CSRF (لا تثبيت للجلسة).
     """
     throttled = getattr(settings, "AXES_ENABLED", True)
-    failures_key = _name_failures_key(username)
+    device = _known_device(request, username)
+    failures_key = _device_failures_key(device) if device else _name_failures_key(username)
     if throttled and cache.get(failures_key, 0) >= NAME_FAILURE_LIMIT:
         raise SignInError(429, NAME_LOCKED)
+    # ما يرفضه axes لقفل الزوج لا يجرّب كلمة المرور، فلا يُعدّ: عدّه كان يتيح لعنوان واحد قفل الاسم.
+    pair_locked = throttled and AxesProxyHandler.is_locked(request, {"username": username})
     user = authenticate(request, username=username, password=password)
     if user is None or not user.is_staff:
-        if throttled:
-            _count_name_failure(failures_key)
+        if throttled and not pair_locked:
+            _count_failure(failures_key)
         raise SignInError(401, "اسم المستخدم أو كلمة المرور غير صحيحة")
     login(request, user)
     record_audit(action="auth.login", actor=user, target=f"user:{user.pk}")
     return user
 
 
+def remember_device(request: HttpRequest, user: AbstractBaseUser) -> str:
+    """قيمة كوكي الجهاز بعد دخول ناجح. الجهاز المعروف يبقى بمعرّفه (وعدّاد فشله) ويتجدّد توقيعه."""
+    device = _known_device(request, user.get_username()) or secrets.token_urlsafe(16)
+    return signing.dumps({"n": _name_digest(user.get_username()), "d": device}, salt=_DEVICE_SALT)
+
+
+def _known_device(request: HttpRequest, username: str) -> str | None:
+    """معرّف الجهاز إن حمل كوكيًا موقَّعًا صالحًا لهذا الاسم نفسه، وإلا None."""
+    raw = request.COOKIES.get(DEVICE_COOKIE, "")
+    if not raw:
+        return None
+    try:
+        value = signing.loads(raw, salt=_DEVICE_SALT, max_age=DEVICE_MAX_AGE_S)
+    except signing.BadSignature:  # يشمل SignatureExpired
+        return None
+    if not isinstance(value, dict) or value.get("n") != _name_digest(username):
+        return None
+    device = value.get("d")
+    return device if isinstance(device, str) and device else None
+
+
+def _name_digest(username: str) -> str:
+    # بصمة لا الاسم نفسه: مفتاح الذاكرة المؤقتة والكوكي بطول ثابت ولا يحملان ما كتبه الزائر.
+    return hashlib.sha256(username.strip().casefold().encode()).hexdigest()
+
+
 def _name_failures_key(username: str) -> str:
-    # بصمة لا الاسم نفسه: مفتاح الذاكرة المؤقتة بطول ثابت ولا يحمل ما كتبه الزائر.
-    digest = hashlib.sha256(username.strip().casefold().encode()).hexdigest()
-    return f"signin-failures:{digest}"
+    return f"signin-failures:{_name_digest(username)}"
 
 
-def _count_name_failure(key: str) -> None:
+def _device_failures_key(device: str) -> str:
+    return f"signin-failures:device:{hashlib.sha256(device.encode()).hexdigest()}"
+
+
+def _count_failure(key: str) -> None:
     """نافذة ثابتة تبدأ من أول فشل؛ `add` ثم `incr` ذرّيّان في Redis فلا يضيع فشل بين طلبين متزامنين."""
     cache.add(key, 0, NAME_FAILURE_WINDOW_S)
     try:

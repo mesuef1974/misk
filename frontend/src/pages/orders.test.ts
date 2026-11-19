@@ -318,4 +318,32 @@ describe("مخزن الطلبات", () => {
     await filtering;
     expect(store.orders.map((candidate) => candidate.id)).toEqual([9]);
   });
+
+  it("لا يعيد رد كتابة بدأت قبل الخروج طلبًا إلى المخزن الممسوح", async () => {
+    const store = useOrdersStore();
+    const pending = <T,>() => {
+      let finish: (value: T) => void = () => {};
+      return { promise: new Promise<T>((resolve) => (finish = resolve)), finish: (value: T) => finish(value) };
+    };
+    const got = pending<Order>();
+    const made = pending<Order>();
+    const moved = pending<Order>();
+    vi.mocked(ordersService.get).mockReturnValueOnce(got.promise);
+    vi.mocked(ordersService.create).mockReturnValueOnce(made.promise);
+    vi.mocked(ordersService.transition).mockReturnValueOnce(moved.promise);
+    const fetching = store.fetchOne(42);
+    const creating = store.create({ client_ref: "r", customer_name: "س", occasion_date: null, notes: "", items: [] });
+    const moving = store.transition(43, "confirmed");
+    store.clear();
+    got.finish(order({ id: 42 }));
+    made.finish(order({ id: 44 }));
+    moved.finish(order({ id: 43, status: "confirmed" }));
+    expect((await fetching)?.id).toBe(42); // القيمة تعود للمستدعي
+    expect((await creating).id).toBe(44);
+    expect((await moving).id).toBe(43);
+    expect(store.orders).toEqual([]);
+    vi.mocked(ordersService.get).mockResolvedValueOnce(order({ id: 42 }));
+    await store.fetchOne(42);
+    expect(store.orders.map((candidate) => candidate.id)).toEqual([42]); // بعد المسح تعود الكتابة طبيعية
+  });
 });

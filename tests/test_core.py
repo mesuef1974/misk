@@ -94,9 +94,12 @@ def test_static_storage_has_no_django_manifest():
     assert not base.WHITENOISE_IMMUTABLE_FILE_TEST("", "/static/admin/css/base.css")
 
 
-def _login(client, username="staff", password="x" * 12):
+def _login(client, username="staff", password="x" * 12, **extra):
     return client.post(
-        "/api/auth/login", {"username": username, "password": password}, content_type="application/json"
+        "/api/auth/login",
+        {"username": username, "password": password},
+        content_type="application/json",
+        **extra,
     )
 
 
@@ -271,6 +274,69 @@ def test_name_limit_is_above_pair_limit_and_off_with_axes(client, staff_user, se
     settings.AXES_ENABLED = False  # التطوير والاختبار: لا عدّاد ولا قفل
     _fail_logins(client, services.NAME_FAILURE_LIMIT + 1)
     assert _login(client).status_code == 200
+
+
+def _guess_from_many_addresses(count, username="staff"):
+    """زائر يدوّر العناوين بلا كوكي جهاز: محاولة فاشلة واحدة من كل عنوان."""
+    from django.test import Client
+
+    stranger = Client()
+    for index in range(count):
+        stranger.post(
+            "/api/auth/login",
+            {"username": username, "password": "y" * 12},
+            content_type="application/json",
+            REMOTE_ADDR=f"203.0.113.{index + 1}",
+        )
+
+
+@pytest.mark.django_db
+def test_name_limit_spares_a_device_that_signed_in_before(client, staff_user, settings):
+    """هـ1: غريب يعرف الاسم لا يقفل المشرف خارج جهازه المعتاد، ويبقى محجوبًا هو وكل جهاز جديد."""
+    from django.test import Client
+
+    settings.AXES_ENABLED = True
+    first = _login(client)
+    assert first.status_code == 200
+    cookie = first.cookies[services.DEVICE_COOKIE]
+    assert cookie["httponly"] and cookie["samesite"] == "Strict" and cookie["path"] == "/api/auth/"
+    client.post("/api/auth/logout")
+    _guess_from_many_addresses(services.NAME_FAILURE_LIMIT)
+    assert _login(Client()).status_code == 429  # جهاز لم يُدخَل منه
+    assert _login(client).status_code == 200  # جهاز المشرف
+    # كوكي مُعبث به أو لاسم آخر لا يعفي.
+    forged = Client()
+    forged.cookies[services.DEVICE_COOKIE] = cookie.value + "x"
+    assert _login(forged).status_code == 429
+
+
+@pytest.mark.django_db
+def test_device_failures_are_limited_per_device(client, staff_user, settings):
+    """كوكي جهاز مسروق لا يفتح تخمينًا بلا حدّ: فشله يُعدّ عليه، ويُقفل وحده دون الاسم."""
+    settings.AXES_ENABLED = True
+    assert _login(client).status_code == 200
+    client.post("/api/auth/logout")
+    for index in range(services.NAME_FAILURE_LIMIT):
+        client.post(
+            "/api/auth/login",
+            {"username": "staff", "password": "y" * 12},
+            content_type="application/json",
+            REMOTE_ADDR=f"198.51.100.{index + 1}",
+        )
+    assert _login(client).status_code == 429
+    from django.test import Client
+
+    assert _login(Client()).status_code == 200  # الاسم لم يُحجب على غيره
+
+
+@pytest.mark.django_db
+def test_failures_rejected_by_pair_lock_do_not_count_on_the_name(client, staff_user, settings):
+    """هـ1: بعد أن يقفل axes الزوج لا تُجرَّب كلمة المرور، فلا يكفي عنوان واحد لقفل الاسم."""
+    from django.test import Client
+
+    settings.AXES_ENABLED = True
+    _fail_logins(client, services.NAME_FAILURE_LIMIT + 5, REMOTE_ADDR="203.0.113.7")
+    assert _login(Client(), REMOTE_ADDR="198.51.100.4").status_code == 200
 
 
 def test_client_ip_trusts_only_proxy_written_hops(rf, settings):
