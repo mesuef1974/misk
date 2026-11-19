@@ -494,6 +494,31 @@ describe("مخزن الإنتاج", () => {
     }
   });
 
+  it("لا يعدّ ألواح التخطيط مرتين إن حملها تحميل جرى أثناء الاستطلاع", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      vi.mocked(productionService.sheets).mockResolvedValueOnce(sheetsPage([sheet({ id: 1 })]));
+      const store = useProductionStore();
+      await store.load();
+      vi.mocked(productionService.plan).mockResolvedValueOnce(job({ id: "j1", status: "pending" }));
+      vi.mocked(productionService.planJob).mockResolvedValueOnce(job({ id: "j1", sheets: [sheet({ id: 2 })] }));
+      const planning = store.plan(7);
+      // تصفية أثناء الاستطلاع، وردّها يصل بعد أن ثبّت العامل وقبل أن يراه الاستطلاع.
+      const afterPlan = sheetsPage([sheet({ id: 2 }), sheet({ id: 1 })]);
+      vi.mocked(productionService.sheets).mockResolvedValue(afterPlan);
+      await store.load("planned");
+      expect(store.countByStatus).toEqual({ planned: 2 });
+      await vi.runAllTimersAsync();
+      expect((await planning).map((candidate) => candidate.id)).toEqual([2]);
+      expect(productionService.sheets).toHaveBeenLastCalledWith({ status: "planned" });
+      expect(store.sheets.map((candidate) => candidate.id)).toEqual([2, 1]);
+      expect(store.countByStatus).toEqual({ planned: 2 });
+      expect(store.total).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("يوقف الاستطلاع عند خطأ غير عابر", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout"] });
     try {
