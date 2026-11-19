@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -54,6 +55,12 @@ def status(proc: subprocess.CompletedProcess) -> tuple[str, str]:
     return (OK if proc.returncode == 0 else FAIL), tail(proc)
 
 
+def module_missing(proc: subprocess.CompletedProcess, module: str) -> bool:
+    """الأداة نفسها غائبة، لا وحدة تستوردها الشيفرة المفحوصة: تلك فشل يُبلَّغ لا أداة تُتخطّى."""
+    pattern = rf"No module named '?{re.escape(module)}'?\s*$"
+    return re.search(pattern, proc.stderr or "", re.MULTILINE) is not None
+
+
 def changed_files(base: str) -> list[str] | None:
     """ما تغيّر عن الأساس، أو None إن تعذّر القياس. -z: الأسماء العربية وذات المسافات تصل كما هي بلا اقتباس."""
     mb = run(["git", "merge-base", "HEAD", base])
@@ -80,7 +87,7 @@ def check_format() -> tuple[str, str]:
 
 def check_types() -> tuple[str, str]:
     proc = run([sys.executable, "-m", "mypy", "."], env=TEST_ENV)
-    if "No module named" in (proc.stderr or ""):
+    if module_missing(proc, "mypy"):
         return MISSING, "mypy غير مثبَّت"
     return status(proc)
 
@@ -105,7 +112,7 @@ def check_secrets(files: list[str] | None) -> tuple[str, str]:
         return OK, "لا ملفات متغيرة"
     cmd = [sys.executable, "-m", "detect_secrets", "scan", *files]
     proc = run(cmd)
-    if proc.returncode == 127 or "No module named" in (proc.stderr or ""):
+    if proc.returncode == 127 or module_missing(proc, "detect_secrets"):
         return MISSING, "detect-secrets غير مثبَّت"
     if proc.returncode != 0:
         return FAIL, f"detect-secrets خرج بالرمز {proc.returncode}:\n{tail(proc)}"

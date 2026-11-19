@@ -21,6 +21,8 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
+      # base_ref عبر env لا داخل run: اسم الفرع لا يُحقن نصًّا في الصدفة.
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: python scripts/check_migration_collisions.py --base origin/${{ github.base_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: python scripts/check_migration_collisions.py --base "origin/$BASE_REF"
