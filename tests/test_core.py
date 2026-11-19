@@ -242,6 +242,35 @@ def test_lockout_behind_proxy_keys_on_forwarded_client(client, staff_user, setti
     assert post("198.51.100.4").status_code == 200
 
 
+@pytest.mark.django_db
+def test_rotating_addresses_cannot_keep_guessing_one_name(client, staff_user, django_user_model, settings):
+    """قفل الزوج وحده يتيح خمس محاولات من كل عنوان؛ الحدّ الثاني يوقف التخمين على الاسم مهما تبدّل العنوان."""
+    settings.AXES_ENABLED = True
+    django_user_model.objects.create_user(username="second", password="x" * 12, is_staff=True)
+    for index in range(services.NAME_FAILURE_LIMIT):
+        _fail_logins(client, 1, REMOTE_ADDR=f"203.0.113.{index + 1}")
+    body = {"username": "staff", "password": "x" * 12}
+    fresh = client.post("/api/auth/login", body, content_type="application/json", REMOTE_ADDR="198.51.100.4")
+    assert fresh.status_code == 429
+    assert fresh.json()["detail"] == services.NAME_LOCKED
+    assert client.get("/api/me").status_code == 401
+    other = client.post(
+        "/api/auth/login",
+        {"username": "second", "password": "x" * 12},
+        content_type="application/json",
+        REMOTE_ADDR="198.51.100.4",
+    )
+    assert other.status_code == 200  # الحدّ لكل اسم: لا يقفل حسابًا آخر
+
+
+@pytest.mark.django_db
+def test_name_limit_is_above_pair_limit_and_off_with_axes(client, staff_user, settings):
+    assert services.NAME_FAILURE_LIMIT > settings.AXES_FAILURE_LIMIT
+    settings.AXES_ENABLED = False  # التطوير والاختبار: لا عدّاد ولا قفل
+    _fail_logins(client, services.NAME_FAILURE_LIMIT + 1)
+    assert _login(client).status_code == 200
+
+
 def test_client_ip_trusts_only_proxy_written_hops(rf, settings):
     from apps.core.auth import client_ip
 

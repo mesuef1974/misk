@@ -9,6 +9,8 @@ from django.db import IntegrityError, transaction
 
 from apps.catalog.models import Calibration, Material
 from apps.core.columns import column_length
+from apps.core.selectors import audit_entry
+from apps.core.services import REQUEST_ID_LENGTH as AUDIT_REQUEST_ID_LENGTH
 from apps.core.services import record_audit
 from apps.orders import services as order_services
 from apps.orders.models import Order, OrderItem
@@ -36,12 +38,16 @@ def _mm(value: int) -> Decimal:
 
 
 @transaction.atomic
-def plan_sheets(*, material_id: int, actor=None) -> list[Sheet]:
+def plan_sheets(*, material_id: int, actor=None, request_id: str = "") -> list[Sheet]:
     """يرتّب على ألواح جديدة كل نسخ البنود المؤكَّدة من هذه المادة التي لم توضع بعد.
 
-    إعادة الاستدعاء بلا بنود جديدة تعيد قائمة فارغة ولا تنشئ شيئًا.
+    إعادة الاستدعاء بلا بنود جديدة لا تنشئ شيئًا وتعيد قائمة فارغة، إلا إن أعادت المحاولةَ نفسها
+    (`request_id` نفسه): عندها تعيد الألواح التي أنشأتها تلك المحاولة. هكذا لا تُبلغ مهمةٌ أُعيد تسليمها
+    بعد أن ثبّتت ألواحها (`acks_late`) بأن «لا ألواح».
     """
     material = Material.objects.get(pk=material_id)
+    target = f"material:{material.pk}"
+    request_id = request_id[:AUDIT_REQUEST_ID_LENGTH]
     # الطلبات قبل البنود، بترتيب الإلغاء نفسه (الطلب ثم اللوح): إلغاء متزامن إمّا ينتظر هذا التخطيط
     # فيجد ألواحه ويرفع قطعه، وإمّا يسبقه فيُعاد فحص الحالة بعد القفل ويخرج الطلب من التخطيط.
     # استعلام فرعي لا join مع distinct: PostgreSQL يرفض FOR UPDATE مع DISTINCT.
@@ -67,7 +73,7 @@ def plan_sheets(*, material_id: int, actor=None) -> list[Sheet]:
             domain.Piece((item.pk, copy), width, height) for copy in range(item.quantity) if copy not in done
         )
     if not pieces:
-        return []
+        return _planned_by(target=target, request_id=request_id)
     try:
         placed = domain.pack(
             pieces,
@@ -98,10 +104,18 @@ def plan_sheets(*, material_id: int, actor=None) -> list[Sheet]:
     record_audit(
         action="production.plan",
         actor=actor,
-        target=f"material:{material.pk}",
+        target=target,
         payload={"sheets": [sheet.pk for sheet in sheets], "pieces": len(placed)},
+        request_id=request_id,
     )
     return sheets
+
+
+def _planned_by(*, target: str, request_id: str) -> list[Sheet]:
+    entry = audit_entry(action="production.plan", target=target, request_id=request_id)
+    if entry is None:
+        return []
+    return list(Sheet.objects.filter(pk__in=entry.payload.get("sheets", [])).order_by("id"))
 
 
 @transaction.atomic
