@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
-import { errorMessage } from "@/api/client";
+import { ApiError, errorMessage } from "@/api/client";
 import LiveNotice from "@/components/LiveNotice.vue";
 import SheetDiagram from "@/components/SheetDiagram.vue";
 import SheetRunForm from "@/components/SheetRunForm.vue";
@@ -94,7 +94,10 @@ async function plan(): Promise<void> {
     // الألواح الجديدة مخطَّطة: تصفية بحالة أخرى تخفيها، فنعود إلى الكل.
     if (planned.length > 0 && filter.value !== "" && filter.value !== "planned") await choose("");
   } catch (error) {
-    if (!(error instanceof PlanCancelled)) planError.value = errorMessage(error);
+    if (error instanceof PlanCancelled) return;
+    planError.value = errorMessage(error);
+    // انتهت المهلة والمهمة قد تكون ثبّتت ألواحها أو تثبّتها الآن: القائمة من الخادم لا من رد لم يصل.
+    if (error instanceof ApiError && error.status === 504) await production.load(filter.value);
   } finally {
     planning.value = false;
   }

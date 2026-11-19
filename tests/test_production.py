@@ -132,6 +132,28 @@ def test_redelivered_plan_task_returns_the_sheets_it_already_planned(material, n
 
 
 @pytest.mark.django_db
+def test_redelivered_plan_task_that_finds_new_pieces_audits_them_and_returns_all(
+    material, name_tag, calibration
+):
+    """هـ2: بين التثبيت وإعادة التسليم أُكّد طلب على المادة نفسها. الألواح الجديدة لها صف تدقيق،
+    والرد يذكر كل ما أنشأته المحاولة لا الجديد وحده."""
+    _confirmed_order(material, 2)
+    task_id = str(uuid.uuid4())
+    first = tasks.plan_sheets_async.apply(kwargs={"material_id": material.pk}, task_id=task_id).get()
+    _confirmed_order(material, 1)
+    again = tasks.plan_sheets_async.apply(kwargs={"material_id": material.pk}, task_id=task_id).get()
+    every = list(Sheet.objects.order_by("id").values_list("pk", flat=True))
+    assert len(every) > len(first["sheets"])
+    assert again == {"sheets": every}
+    rows = AuditLog.objects.filter(action="production.plan").order_by("id")
+    assert [row.request_id for row in rows] == [task_id, f"{task_id}+{every[len(first['sheets'])]}"]
+    assert [pk for row in rows for pk in row.payload["sheets"]] == every
+    # تسليم ثالث بلا جديد يعيد الألواح نفسها ولا يكتب.
+    third = tasks.plan_sheets_async.apply(kwargs={"material_id": material.pk}, task_id=task_id).get()
+    assert third == again and rows.count() == 2
+
+
+@pytest.mark.django_db
 def test_plan_task_returns_business_error_without_retrying(material, name_tag, calibration):
     name_tag.width_mm = Decimal("700")
     name_tag.save()
