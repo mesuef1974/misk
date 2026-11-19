@@ -25,7 +25,15 @@ onMounted(() => {
   session.ensureChecked();
   window.addEventListener("storage", theme.onStorage);
 });
-onBeforeUnmount(() => window.removeEventListener("storage", theme.onStorage));
+// تنبيه «لم يتم الخروج» يخصّ المحاولة التي سبّبته: لا يبقى قديمًا بعد الانتقال إلى صفحة أخرى.
+// يُمسح عند بدء الانتقال لا نهايته: انتقال بطيء بدأ قبل المحاولة لا يمسح تنبيهها حين ينتهي بعدها.
+const stopClearingLogoutError = router.beforeEach(() => {
+  logoutError.value = "";
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("storage", theme.onStorage);
+  stopClearingLogoutError();
+});
 
 async function logout(): Promise<void> {
   leaving.value = true;
@@ -65,7 +73,7 @@ async function logout(): Promise<void> {
         <a v-if="session.user?.admin_url" class="nav-item" :href="session.user.admin_url">لوحة الإدارة</a>
         <template v-if="session.user">
           <button type="button" class="nav-item" :disabled="leaving" @click="logout">خروج</button>
-          <LiveNotice :message="logoutError" />
+          <LiveNotice class="logout-error" :message="logoutError" />
           <div class="user">
             <span class="avatar" aria-hidden="true"></span>
             <div class="who"><b>{{ session.user.username }}</b><span class="muted">{{ store.siteTitle }}</span></div>
