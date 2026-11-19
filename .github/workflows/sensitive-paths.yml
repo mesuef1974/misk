@@ -24,7 +24,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           python3 - <<'PY'
-          import fnmatch, json, os, subprocess
+          import fnmatch, json, os, re, subprocess
           base, pr = os.environ["BASE"], os.environ["PR"]
           rules = json.loads(subprocess.check_output(["git", "show", f"origin/{base}:security/sensitive_paths.json"], text=True))
           # --no-renames: المسار القديم والجديد معًا، فإعادة التسمية لا تخفي مسارًا حسّاسًا. -z: الأسماء العربية وذات المسافات كما هي.
@@ -32,6 +32,17 @@ jobs:
           changed = [p for p in diff.split("\0") if p]
           hits = {cat: [p for p in changed if any(fnmatch.fnmatch(p, g) for g in globs)]
                   for cat, globs in rules["mandatory_review_when_diff_touches"].items()}
+          # الأسطر المضافة وحدها تُطابَق بأنماط المحتوى (أسرار، Django غير آمن)، وكل نمط يوسم ملفه.
+          patch = subprocess.check_output(["git", "diff", "--no-renames", "--no-color", "-U0", f"origin/{base}...HEAD"], text=True, encoding="utf-8", errors="replace")
+          content = {cat: [re.compile(p) for p in pats] for cat, pats in rules.get("mandatory_review_when_diff_content_matches", {}).items()}
+          current = None
+          for line in patch.splitlines():
+              if line.startswith("+++ "):
+                  current = line[6:] if line.startswith("+++ b/") else None
+              elif line.startswith("+") and current:
+                  for cat, pats in content.items():
+                      if any(p.search(line[1:]) for p in pats) and current not in hits.setdefault(cat, []):
+                          hits[cat].append(current)
           hits = {k: v for k, v in hits.items() if v}
           if hits:
               body = "مراجعة أمنية إلزامية — مسارات حسّاسة:\n" + "\n".join(f"- {k}: " + ", ".join(v) for k, v in hits.items())
