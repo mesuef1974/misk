@@ -21,7 +21,8 @@ import runner  # noqa: E402
 
 HEAD = "564d2a4b" + "0" * 32
 APPROVED = "اعتُمد من المالك — 2026-11-18 — الرأس 564d2a4b"
-GREEN = [{"name": "بوابة الجودة", "conclusion": "SUCCESS"}]
+GREEN = [{"name": name, "conclusion": "SUCCESS"} for name in ("بوابة الجودة", "approval-head", "scan")]
+RULES_TEXT = (ROOT / "security" / "sensitive_paths.json").read_text(encoding="utf-8")
 
 
 def done(stdout: str = "", returncode: int = 0, stderr: str = "") -> subprocess.CompletedProcess:
@@ -35,9 +36,23 @@ def done(stdout: str = "", returncode: int = 0, stderr: str = "") -> subprocess.
 def gate(monkeypatch):
     """بوابة معزولة عن gh: الطلب وملفاته يُعطيان مباشرة."""
 
-    def build(*, body=APPROVED, files=({"filename": "frontend/src/pages/HomePage.vue"},), checks=None):
-        pr = {"body": body, "headRefOid": HEAD, "statusCheckRollup": GREEN if checks is None else checks}
+    def build(
+        *,
+        body=APPROVED,
+        files=({"filename": "frontend/src/pages/HomePage.vue"},),
+        checks=None,
+        changed=None,
+        rules=RULES_TEXT,
+    ):
+        pr = {
+            "body": body,
+            "headRefOid": HEAD,
+            "baseRefName": "main",
+            "changedFiles": len(files) if changed is None else changed,
+            "statusCheckRollup": GREEN if checks is None else checks,
+        }
         monkeypatch.setattr(merge_gate, "gh_json", lambda args: [list(files)] if args[0] == "api" else pr)
+        monkeypatch.setattr(merge_gate, "base_rules", lambda repo, base: rules)
         return merge_gate.evaluate("7", "owner/repo")
 
     return build
@@ -86,24 +101,83 @@ def test_gate_blocks_when_no_files_can_be_read(gate):
     assert not gate(files=())[0]
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "CLAUDE.md",
+        "apps/orders/CLAUDE.md",
+        ".claude/rules/migrations.md",
+        ".claude/agents/reviewer.md",
+        ".claude/hooks/guard_deploy.py",
+        "frontend/package.json",
+        "config/urls.py",
+        "config/celery.py",
+        "migrations/0001_initial.py",
+        "automation/ledger/card.jsonl",
+    ],
+)
+def test_gate_forbids_paths_the_review_found_uncovered(gate, path):
+    """ج6: تعليمات الوكلاء، وسكربتات npm، والمسارات والعامل، والهجرات في الجذر."""
+    assert not gate(files=({"filename": path},))[0]
+
+
+def test_gate_stops_when_the_file_list_is_cut_short(gate):
+    """ج5: واجهة الملفات تقف عند 3000؛ ما لم يُقرأ لا يُفترض نظيفًا."""
+    with pytest.raises(merge_gate.GateError):
+        gate(changed=2)
+    many = tuple({"filename": f"docs/{index}.md"} for index in range(merge_gate.FILES_API_LIMIT))
+    with pytest.raises(merge_gate.GateError):
+        gate(files=many)
+
+
+@pytest.mark.parametrize("missing", ["بوابة الجودة", "approval-head", "scan"])
+def test_gate_requires_each_mandatory_check_by_name(gate, missing):
+    """ج5: فحص إلزامي لم يُسجَّل بعد لا يمرّ بغيابه، ولو اخضرّ كل ما سُجّل."""
+    ok, reasons, _ = gate(checks=[check for check in GREEN if check["name"] != missing])
+    assert not ok
+    assert any(missing in reason for reason in reasons)
+
+
+def test_gate_reads_its_rules_from_the_base_branch(monkeypatch, gate):
+    """ج5: القائمة من فرع الأساس على GitHub، لا من الشجرة التي قد يغيّرها الطلب."""
+    calls = []
+    monkeypatch.setattr(
+        merge_gate.subprocess,
+        "run",
+        lambda cmd, **k: calls.append(cmd) or done(RULES_TEXT),
+    )
+    assert merge_gate.base_rules("owner/repo", "main") == RULES_TEXT
+    (cmd,) = calls
+    assert cmd[-1] == "repos/owner/repo/contents/security/sensitive_paths.json?ref=main"
+    monkeypatch.setattr(merge_gate.subprocess, "run", lambda cmd, **k: done(returncode=1, stderr="404"))
+    with pytest.raises(merge_gate.GateError):
+        merge_gate.base_rules("owner/repo", "main")
+
+
+@pytest.mark.parametrize("flag", ["--ena", "--enab", "--e"])
+def test_gate_refuses_abbreviated_enable(monkeypatch, gate, flag):
+    """ج1: argparse كان يقبل `--ena` اختصارًا لـ`--enable` فيلتفّ على قاعدة deny."""
+    gate()
+    monkeypatch.setattr(sys, "argv", ["merge_gate.py", "7", flag])
+    monkeypatch.setattr(merge_gate.subprocess, "run", lambda *a, **k: pytest.fail("لا تفعيل باختصار"))
+    with pytest.raises(SystemExit):
+        merge_gate.main()
+
+
 def test_gate_blocks_without_approval_or_on_a_stale_head(gate):
     assert not gate(body="")[0]
     assert not gate(body="اعتُمد من المالك — 2026-11-18 — الرأس aaaaaaaa")[0]
 
 
-@pytest.mark.parametrize("content", [None, "{", "{}", '{"forbidden_for_auto_merge": []}'])
-def test_gate_stops_when_the_rules_file_is_missing_or_broken(tmp_path, monkeypatch, content):
-    rules = tmp_path / "sensitive_paths.json"
-    if content is not None:
-        rules.write_text(content, encoding="utf-8")
-    monkeypatch.setattr(merge_gate, "RULES", rules)
+@pytest.mark.parametrize("content", ["", "{", "{}", '{"forbidden_for_auto_merge": []}'])
+def test_gate_stops_when_the_rules_file_is_missing_or_broken(content):
     with pytest.raises(merge_gate.GateError):
-        merge_gate.forbidden_globs()
+        merge_gate.forbidden_globs(content)
 
 
-def test_gate_main_reports_an_error_not_a_pass_when_rules_are_missing(tmp_path, monkeypatch, gate):
+def test_gate_main_reports_an_error_not_a_pass_when_rules_are_missing(monkeypatch, gate):
     gate()
-    monkeypatch.setattr(merge_gate, "RULES", tmp_path / "absent.json")
+    monkeypatch.setattr(merge_gate, "base_rules", lambda repo, base: "")
     monkeypatch.setattr(sys, "argv", ["merge_gate.py", "7", "--enable"])
     monkeypatch.setattr(merge_gate.subprocess, "run", lambda *a, **k: pytest.fail("لا تفعيل عند خطأ"))
     assert merge_gate.main() == 2
@@ -235,6 +309,96 @@ def test_runner_pushes_only_the_checked_clean_head_with_commits(
     assert runner.unpushable(ROOT, HEAD) == expected
 
 
+def _runner_tree(monkeypatch, *, diff=(), untracked=(), rules=RULES_TEXT):
+    answers = {"show": rules, "diff": "\0".join(diff), "ls-files": "\0".join(untracked)}
+    monkeypatch.setattr(runner, "sh", lambda cmd, **k: done(answers[cmd[1]]))
+
+
+@pytest.mark.parametrize(
+    ("diff", "untracked", "expected"),
+    [
+        (["apps/orders/services.py"], [], []),
+        (["scripts/prepush_check.py"], [], ["scripts/prepush_check.py"]),
+        (["apps/x.py"], [".claude/hooks/extra.py"], [".claude/hooks/extra.py"]),
+        (["CLAUDE.md", "apps/x.py"], [], ["CLAUDE.md"]),
+    ],
+)
+def test_runner_finds_forbidden_paths_committed_or_not(monkeypatch, diff, untracked, expected):
+    """ج2: الفاحص في الـ worktree يكتبه النموذج؛ فرق يمسّ مسارًا محظورًا يُرفض قبل تشغيله."""
+    _runner_tree(monkeypatch, diff=diff, untracked=untracked)
+    assert runner.touched_forbidden(ROOT) == expected
+
+
+def test_runner_does_not_check_or_push_a_diff_touching_forbidden_paths(monkeypatch):
+    events = []
+    monkeypatch.setattr(runner, "pick_card", lambda: "c1")
+    monkeypatch.setattr(runner, "acquire_lock", lambda: True)
+    monkeypatch.setattr(runner, "release_lock", lambda: None)
+    monkeypatch.setattr(runner, "make_worktree", lambda card: (ROOT, "card/c1"))
+    monkeypatch.setattr(runner, "run_model", lambda *a: 0)
+    monkeypatch.setattr(runner.ledger, "append", lambda card, event, **data: events.append((event, data)))
+    monkeypatch.setattr(runner, "touched_forbidden", lambda path: ["scripts/prepush_check.py"])
+    monkeypatch.setattr(runner, "prepush", lambda path: pytest.fail("لا فحص بفاحص عدّله النموذج"))
+    monkeypatch.setattr(runner, "push_and_open_pr", lambda *a: pytest.fail("لا دفع"))
+    monkeypatch.setattr(runner, "sh", lambda cmd, **k: done(HEAD))
+    assert runner.main([]) == 1
+    assert events[-1] == (
+        "blocked",
+        {"reason": "forbidden_paths", "head": HEAD, "paths": ["scripts/prepush_check.py"]},
+    )
+
+
+def test_runner_blocks_when_the_rules_cannot_be_read(monkeypatch):
+    _runner_tree(monkeypatch, rules="")
+    with pytest.raises(merge_gate.GateError):
+        runner.touched_forbidden(ROOT)
+
+
+def test_runner_records_push_blockers_as_known_ledger_states():
+    """«dirty_tree» وأخواتها ليست حالات في الدفتر؛ كانت ترمي ValueError بدل أن تُسجَّل."""
+    for reason in ("dirty_tree", "head_moved", "no_commits", "forbidden_paths"):
+        assert reason not in runner.ledger.STATES
+    assert "blocked" in runner.ledger.STATES
+
+
+@pytest.mark.parametrize(
+    "tool",
+    [
+        "Bash(git -C . push origin x)",
+        "Bash(gh api repos/o/r/pulls/1/merge -X PUT)",
+        "Bash(npx @railway/cli up)",
+    ],
+)
+def test_runner_denies_the_known_bypasses(tool):
+    """ج2: البادئات `git -C` و`gh api` و`npx @railway/cli` كانت تمرّ من قائمة الأدوات الممنوعة."""
+    import fnmatch
+
+    assert any(fnmatch.fnmatchcase(tool, rule) for rule in runner.DISALLOWED_TOOLS)
+
+
+@pytest.mark.parametrize(
+    ("stderr", "missing"),
+    [
+        ("/usr/bin/python: No module named mypy\n", True),
+        ("ModuleNotFoundError: No module named 'mypy'", True),
+        ("ModuleNotFoundError: No module named 'apps.missing'", False),
+        ("No module named mypy_extensions", False),
+    ],
+)
+def test_prepush_counts_only_the_tool_itself_as_missing(stderr, missing):
+    """ج7: وحدة غائبة في الشيفرة المفحوصة فشل يُبلَّغ، لا أداة غائبة تُتخطّى."""
+    assert prepush_check.module_missing(done(returncode=1, stderr=stderr), "mypy") is missing
+
+
+def test_worker_script_waits_for_migrations_and_parses():
+    """ج4: العامل لا يبدأ قبل أن تُطبَّق هجرات preDeploy الويب."""
+    script = (ROOT / "scripts" / "railway-worker.sh").read_text(encoding="utf-8")
+    assert script.index("migrate --check") < script.index("exec celery")
+    shell = __import__("shutil").which("sh")
+    if shell:
+        assert subprocess.run([shell, "-n", str(ROOT / "scripts" / "railway-worker.sh")]).returncode == 0
+
+
 def test_runner_lock_is_exclusive_and_replaces_a_stale_one(tmp_path, monkeypatch):
     lock = tmp_path / ".lock"
     monkeypatch.setattr(runner, "LOCK", lock)
@@ -293,3 +457,71 @@ def test_guard_sees_through_git_dir():
         branch_lookup=lambda where: "claude/x",
     )
     assert [hit.rule for hit in result.hits] == ["push-force"]
+
+
+# ---------- حارس الدمج والنشر
+
+
+def _deploy_guard():
+    sys.path.insert(0, str(ROOT / ".claude" / "hooks"))
+    import guard_deploy
+
+    return guard_deploy
+
+
+@pytest.mark.parametrize(
+    ("command", "rule"),
+    [
+        ("gh pr merge 39 --squash", "gh-pr-merge"),
+        ("cd x && gh  pr   merge 39", "gh-pr-merge"),
+        ("gh api repos/o/r/pulls/39/merge -X PUT", "gh-api-merge"),
+        (
+            "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {}) { clientMutationId } }'",
+            "gh-api-merge",
+        ),
+        ("railway up", "railway-cli"),
+        ("RAILWAY_TOKEN=x railway config apply", "railway-cli"),
+        ("C:/tools/railway.exe variables", "railway-cli"),
+        ("npx @railway/cli up", "railway-npm"),
+        ("npm exec --yes @railway/cli -- up", "railway-npm"),
+        ("python scripts/merge_gate.py 39 --ena", "merge-gate-enable"),
+        ("python scripts/merge_gate.py 39 --enable", "merge-gate-enable"),
+    ],
+)
+def test_deploy_guard_blocks_merge_and_deploy_in_any_form(command, rule):
+    """ج1: قواعد deny تطابق البادئة؛ الحارس يبحث في الأمر كله."""
+    assert rule in _deploy_guard().hits(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat .railway/railway.ts",
+        "bash scripts/railway-worker.sh",
+        "sh -n scripts/railway-predeploy.sh",
+        "gh pr view 39 --json mergeable",
+        "gh pr checks 39",
+        "python scripts/merge_gate.py 39",
+        "git merge --ff-only origin/main",
+        "python -m pytest tests/test_gates.py",
+    ],
+)
+def test_deploy_guard_allows_reading_and_checking(command):
+    assert _deploy_guard().hits(command) == []
+
+
+def test_deploy_guard_hook_exit_codes(monkeypatch, capsys):
+    guard = _deploy_guard()
+    for command, code in (("gh pr merge 1", 2), ("gh pr view 1", 0)):
+        payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
+        monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(payload))
+        assert guard.main() == code
+    assert "gh-pr-merge" in capsys.readouterr().err
+
+
+def test_deploy_guard_is_registered_for_bash_and_powershell():
+    hooks = json.loads((ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))["hooks"][
+        "PreToolUse"
+    ]
+    (entry,) = [h for h in hooks if "guard_deploy.sh" in json.dumps(h)]
+    assert entry["matcher"] == "Bash|PowerShell"
