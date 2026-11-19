@@ -20,8 +20,9 @@ export default defineRailway(() => {
     healthcheck: "/health/",
     healthcheckTimeout: 120,
     preDeploy: "bash scripts/railway-predeploy.sh",
-    // من railway.toml المحذوف: إعادة تشغيل عند الفشل بخمس محاولات.
-    deploy: { restartPolicyType: "ON_FAILURE", restartPolicyMaxRetries: 5 },
+    // من railway.toml المحذوف: إعادة تشغيل عند الفشل بخمس محاولات. ON_FAILURE افتراضي Railway ويُخزَّن null،
+    // فذكر restartPolicyType يُبقي فرقًا دائمًا في `railway config plan` بعد كل apply (2026-11-19)؛ لذا يُترك.
+    deploy: { restartPolicyMaxRetries: 5 },
     replicas: { [REGION]: 1 },
     env: {
       ALLOWED_HOSTS: preserve(),
