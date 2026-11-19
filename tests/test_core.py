@@ -242,6 +242,35 @@ def test_lockout_behind_proxy_keys_on_forwarded_client(client, staff_user, setti
     assert post("198.51.100.4").status_code == 200
 
 
+@pytest.mark.django_db
+def test_rotating_addresses_cannot_keep_guessing_one_name(client, staff_user, django_user_model, settings):
+    """قفل الزوج وحده يتيح خمس محاولات من كل عنوان؛ الحدّ الثاني يوقف التخمين على الاسم مهما تبدّل العنوان."""
+    settings.AXES_ENABLED = True
+    django_user_model.objects.create_user(username="second", password="x" * 12, is_staff=True)
+    for index in range(services.NAME_FAILURE_LIMIT):
+        _fail_logins(client, 1, REMOTE_ADDR=f"203.0.113.{index + 1}")
+    body = {"username": "staff", "password": "x" * 12}
+    fresh = client.post("/api/auth/login", body, content_type="application/json", REMOTE_ADDR="198.51.100.4")
+    assert fresh.status_code == 429
+    assert fresh.json()["detail"] == services.NAME_LOCKED
+    assert client.get("/api/me").status_code == 401
+    other = client.post(
+        "/api/auth/login",
+        {"username": "second", "password": "x" * 12},
+        content_type="application/json",
+        REMOTE_ADDR="198.51.100.4",
+    )
+    assert other.status_code == 200  # الحدّ لكل اسم: لا يقفل حسابًا آخر
+
+
+@pytest.mark.django_db
+def test_name_limit_is_above_pair_limit_and_off_with_axes(client, staff_user, settings):
+    assert services.NAME_FAILURE_LIMIT > settings.AXES_FAILURE_LIMIT
+    settings.AXES_ENABLED = False  # التطوير والاختبار: لا عدّاد ولا قفل
+    _fail_logins(client, services.NAME_FAILURE_LIMIT + 1)
+    assert _login(client).status_code == 200
+
+
 def test_client_ip_trusts_only_proxy_written_hops(rf, settings):
     from apps.core.auth import client_ip
 
@@ -339,10 +368,37 @@ def test_audit_keeps_actor_name_after_user_is_deleted(staff_user):
 
 
 @pytest.mark.django_db
-def test_audit_truncates_oversized_request_id(client, staff_user):
-    client.force_login(staff_user)
-    assert client.get("/api/audit", headers={"X-Request-ID": "r" * 500}).status_code == 200
-    assert AuditLog.objects.get(action="audit.view").request_id == "r" * 64
+def test_audit_truncates_oversized_request_id():
+    assert services.record_audit(action="x", request_id="r" * 500).request_id == "r" * 64
+
+
+@pytest.mark.django_db
+def test_repeated_request_id_does_not_hide_audit_views(client, staff_user, django_user_model):
+    """الترويسة يكتبها العميل: تكرارها لا يُسقط اطّلاع مشرف آخر من السجل."""
+    other = django_user_model.objects.create_user(username="other", password="x" * 12, is_staff=True)
+    for user in (staff_user, other):
+        client.force_login(user)
+        assert client.get("/api/audit", headers={"X-Request-ID": "same"}).status_code == 200
+    views = AuditLog.objects.filter(action="audit.view")
+    assert sorted(views.values_list("actor_name", flat=True)) == ["other", "staff"]
+
+
+@pytest.mark.django_db
+def test_repeated_request_id_does_not_hide_logins(staff_user):
+    from django.test import Client
+
+    for _ in range(2):
+        client = Client()
+        res = client.post(
+            "/api/auth/login",
+            {"username": "staff", "password": "x" * 12},
+            content_type="application/json",
+            headers={"X-Request-ID": "same"},
+        )
+        assert res.status_code == 200, res.content
+        assert client.post("/api/auth/logout", headers={"X-Request-ID": "same"}).status_code == 200
+    assert AuditLog.objects.filter(action="auth.login", actor=staff_user).count() == 2
+    assert AuditLog.objects.filter(action="auth.logout", actor=staff_user).count() == 2
 
 
 @pytest.mark.django_db

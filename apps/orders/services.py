@@ -117,9 +117,9 @@ def create_order(
 
     try:
         with transaction.atomic():  # نقطة حفظ: فشل القيد لا يُفسد المعاملة الخارجية
-            customer = Customer.objects.filter(name=name).order_by("id").first()
-            if customer is None:
-                customer = Customer.objects.create(name=name)
+            # زبون لكل طلب لا مطابقة بالاسم: الاسم لا يميّز شخصين، فالمطابقة به تنسب طلب أحدهما
+            # وبياناته إلى الآخر (PDPPL)، وطلبان متزامنان بالاسم نفسه كانا ينشئان زبونين على أي حال.
+            customer = Customer.objects.create(name=name)
             order = Order.objects.create(
                 client_ref=client_ref, customer=customer, occasion_date=occasion_date, notes=notes
             )
