@@ -605,4 +605,83 @@ describe("الوصول في صفحة الإنتاج", () => {
       page.unmount();
     }
   });
+
+  async function attached(sheets: Sheet[], filterLabel = "") {
+    vi.mocked(productionService.sheets).mockResolvedValue(sheetsPage(sheets));
+    await router.push("/production");
+    await router.isReady();
+    const page = mount(ProductionPage, { global: { plugins: [router] }, attachTo: document.body });
+    await flushPromises();
+    if (filterLabel) {
+      await page.findAll(".chip").find((chip) => chip.text().startsWith(filterLabel))!.trigger("click");
+      await flushPromises();
+    }
+    return page;
+  }
+
+  const focused = () => document.activeElement?.textContent?.trim();
+
+  it("لا يُسقط التركيز بعد الإتلاف: زر الإتلاف عند الرفض، والبطاقة عند النجاح", async () => {
+    vi.mocked(productionService.scrap)
+      .mockRejectedValueOnce(new ApiError(409, "اللوح 1 ليس مخطَّطًا (نُفِّذ)"))
+      .mockResolvedValueOnce(sheet({ status: "scrapped", placements: [] }));
+    const page = await attached([sheet()]);
+    try {
+      for (const expected of ["إتلاف اللوح", "لوح 1"]) {
+        await button(page, "إتلاف اللوح").trigger("click");
+        await button(page, "تأكيد الإتلاف").trigger("click");
+        await flushPromises();
+        expect(focused()).toBe(expected);
+      }
+    } finally {
+      page.unmount();
+    }
+  });
+
+  it("ينقل التركيز إلى البطاقة التالية إن خرج اللوح التالف من التصفية، ثم إلى عنوان الصفحة", async () => {
+    vi.mocked(productionService.scrap)
+      .mockResolvedValueOnce(sheet({ id: 1, status: "scrapped", placements: [] }))
+      .mockResolvedValueOnce(sheet({ id: 2, status: "scrapped", placements: [] }));
+    const page = await attached([sheet({ id: 1 }), sheet({ id: 2 })], "مخطَّط");
+    try {
+      await page.findAll("button").filter((candidate) => candidate.text() === "إتلاف اللوح")[0].trigger("click");
+      await button(page, "تأكيد الإتلاف").trigger("click");
+      await flushPromises();
+      expect(page.findAll(".sheet-card")).toHaveLength(1);
+      expect(focused()).toBe("لوح 2");
+
+      await button(page, "إتلاف اللوح").trigger("click");
+      await button(page, "تأكيد الإتلاف").trigger("click");
+      await flushPromises();
+      expect(focused()).toBe("الإنتاج");
+    } finally {
+      page.unmount();
+    }
+  });
+
+  it("يعيد التركيز بعد إغلاق نموذج التشغيل: إلى زره عند الإلغاء، وإلى التالية إن أغلق التشغيلُ اللوح", async () => {
+    vi.mocked(productionService.recordRun).mockResolvedValueOnce(okRun);
+    const page = await attached([sheet({ id: 1 }), sheet({ id: 2 })], "مخطَّط");
+    try {
+      await page.findAll("button").filter((candidate) => candidate.text() === "تسجيل تشغيل")[0].trigger("click");
+      await flushPromises();
+      await button(page, "إلغاء").trigger("click");
+      await flushPromises();
+      expect(document.activeElement?.id).toBe("run-1");
+
+      await button(page, "تسجيل تشغيل").trigger("click");
+      await flushPromises();
+      const form = page.get(".run");
+      const inputs = form.findAll("input");
+      await inputs[0].setValue("3");
+      await inputs[1].setValue("20");
+      await form.findAll("select")[1].setValue("3");
+      await form.trigger("submit");
+      await flushPromises();
+      expect(page.findAll(".sheet-card")).toHaveLength(1);
+      expect(focused()).toBe("لوح 2");
+    } finally {
+      page.unmount();
+    }
+  });
 });
