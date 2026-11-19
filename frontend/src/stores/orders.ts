@@ -54,8 +54,9 @@ export const useOrdersStore = defineStore("orders", () => {
     }
   }
 
+  /** لا يعمل أثناء تحميل تصفية جديدة: الحالة والإزاحة ما زالتا للتصفية القديمة. */
   async function loadMore(): Promise<void> {
-    if (loadingMore.value || !hasMore.value) return;
+    if (loading.value || loadingMore.value || !hasMore.value) return;
     const ticket = latest;
     loadingMore.value = true;
     loadError.value = "";

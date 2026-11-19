@@ -10,12 +10,19 @@ export const PLAN_TIMEOUT_MESSAGE = "التخطيط يستغرق أطول من �
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/** أخطاء الاتصال والبوابة عابرة: المهمة ماضية في العامل، فيُعاد الاستطلاع في موعده التالي. */
+const TRANSIENT = new Set([0, 502, 503, 504]);
+
 /** ينتظر مهمة التخطيط حتى تنتهي. معرّف مجهول يبقى `pending` في الخادم، فالحدّ هنا لا هناك. */
 async function settled(job: PlanJob): Promise<Sheet[]> {
   for (const delay of PLAN_POLL_MS) {
     if (job.status !== "pending") break;
     await wait(delay);
-    job = await productionService.planJob(job.id);
+    try {
+      job = await productionService.planJob(job.id);
+    } catch (error) {
+      if (!(error instanceof ApiError && TRANSIENT.has(error.status))) throw error;
+    }
   }
   if (job.status === "failed") throw new ApiError(422, job.error);
   if (job.status === "pending") throw new ApiError(504, PLAN_TIMEOUT_MESSAGE);
@@ -60,8 +67,9 @@ export const useProductionStore = defineStore("production", () => {
     }
   }
 
+  /** لا يعمل أثناء تحميل تصفية جديدة: الحالة والإزاحة ما زالتا للتصفية القديمة. */
   async function loadMore(): Promise<void> {
-    if (loadingMore.value || !hasMore.value) return;
+    if (loading.value || loadingMore.value || !hasMore.value) return;
     const ticket = latest;
     loadingMore.value = true;
     loadError.value = "";

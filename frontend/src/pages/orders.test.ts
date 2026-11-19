@@ -303,3 +303,19 @@ describe("طلب جديد", () => {
     expect((await show(OrderNewPage, "/orders/new")).text()).toContain("قبل تعريف قالب واحد ومادة واحدة");
   });
 });
+
+describe("مخزن الطلبات", () => {
+  it("يتجاهل «تحميل المزيد» أثناء تحميل تصفية جديدة", async () => {
+    vi.mocked(ordersService.list).mockResolvedValueOnce({ items: [order()], count: 3, counts: {} });
+    const store = useOrdersStore();
+    await store.load();
+    let finish: (page: Page<Order>) => void = () => {};
+    vi.mocked(ordersService.list).mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+    const filtering = store.load("confirmed");
+    await store.loadMore();
+    expect(ordersService.list).toHaveBeenCalledTimes(2);
+    finish({ items: [order({ id: 9, status: "confirmed" })], count: 1, counts: {} });
+    await filtering;
+    expect(store.orders.map((candidate) => candidate.id)).toEqual([9]);
+  });
+});
