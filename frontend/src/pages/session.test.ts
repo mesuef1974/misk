@@ -61,6 +61,12 @@ describe("حارس المسارات", () => {
     expect(sessionService.me).toHaveBeenCalledTimes(1);
   });
 
+  it("يعرض صفحة «غير موجودة» للمسار المجهول دون دخول", async () => {
+    await router.push("/nonexistent/deep?x=1");
+    expect(router.currentRoute.value.name).toBe("not-found");
+    expect(sessionService.me).not.toHaveBeenCalled();
+  });
+
   it("يرفض غير المشرف", async () => {
     vi.mocked(sessionService.me).mockResolvedValue({ ...staff, is_staff: false, admin_url: null });
     await router.push("/orders");

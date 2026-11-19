@@ -166,7 +166,8 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--ri
 .more { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 16px; }
 .form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block-start: 16px; }
 .check { display: flex; align-items: center; gap: 8px; min-block-size: 44px; }
-.cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+/* عمود واحد بـ minmax(0, 1fr): بلا حدّ أدنى يتمدد البند لعرض محتواه (جدول المعايرات) فيُزيح الصفحة أفقيًّا. */
+.cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 /* صف القائمة في الدليل: بطاقة فيها أيقونة ثم العنوان وسطر باهت ثم الشارة. */
 .list-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 14px 18px;

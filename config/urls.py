@@ -6,7 +6,7 @@ from django.urls import path, re_path
 
 from apps.catalog.api import router as catalog_router
 from apps.core.api import api
-from apps.core.views import health, spa
+from apps.core.views import health, robots_txt, spa
 from apps.orders.api import router as orders_router
 from apps.production.api import router as production_router
 
@@ -18,5 +18,6 @@ urlpatterns = [
     path(settings.ADMIN_URL, admin.site.urls),
     path("api/", api.urls),
     path("health/", health, name="health"),
+    path("robots.txt", robots_txt, name="robots"),
     re_path(r"^(?!api/|static/|media/).*$", spa, name="spa"),
 ]

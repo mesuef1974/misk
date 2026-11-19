@@ -7,11 +7,10 @@ from django.http import HttpRequest
 from django.urls import reverse
 from ninja import Field, NinjaAPI, Query, Schema
 from ninja.errors import HttpError
-from ninja.security import django_auth
 from ninja.utils import check_csrf
 
 from . import selectors, services
-from .auth import client_ip, staff_auth
+from .auth import CSRF_FAILED, client_ip, session_auth, staff_auth
 
 # الوثائق ومخطط OpenAPI يكشفان كل المسارات والمخططات: للمشرفين فقط، وغيرهم يُحوَّل إلى دخول لوحة الإدارة.
 api = NinjaAPI(title="مسك", version="1.0", docs_url="/docs/", docs_decorator=staff_member_required)
@@ -71,7 +70,7 @@ def _me(user) -> dict:
     }
 
 
-@api.get("/me", response=MeOut, auth=django_auth)
+@api.get("/me", response=MeOut, auth=session_auth)
 def me(request: HttpRequest):
     return _me(request.user)
 
@@ -97,7 +96,7 @@ def client_address(request: HttpRequest):
 def login(request: HttpRequest, payload: LoginIn):
     # المسار بلا auth فلا يفحص Ninja رمز CSRF؛ نفحصه هنا كي لا يُدخَل الضحية بحساب غيره (login CSRF).
     if check_csrf(request) is not None:
-        raise HttpError(403, "رمز CSRF مفقود أو غير صالح؛ حدّث الصفحة")
+        raise HttpError(403, CSRF_FAILED)
     try:
         user = services.sign_in(request, username=payload.username, password=payload.password)
     except services.SignInError as exc:
@@ -105,13 +104,13 @@ def login(request: HttpRequest, payload: LoginIn):
     return _me(user)
 
 
-@api.post("/auth/logout", response=OkOut, auth=django_auth)
+@api.post("/auth/logout", response=OkOut, auth=session_auth)
 def logout(request: HttpRequest):
     services.sign_out(request)
     return {"ok": True}
 
 
-@api.get("/audit", response=list[AuditOut], auth=django_auth)
+@api.get("/audit", response=list[AuditOut], auth=session_auth)
 def audit(request: HttpRequest, limit: int = Query(50, ge=1)):
     if not request.user.is_staff:
         raise HttpError(403, "للمشرفين فقط")

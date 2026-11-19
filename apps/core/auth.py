@@ -6,10 +6,25 @@ import ipaddress
 
 from django.conf import settings
 from django.http import HttpRequest
+from ninja.errors import HttpError
 from ninja.security import SessionAuth
 
+CSRF_FAILED = "رمز CSRF مفقود أو غير صالح؛ حدّث الصفحة"
 
-class StaffSessionAuth(SessionAuth):
+
+class ArabicSessionAuth(SessionAuth):
+    """جلسة Django كما في Ninja، ورفض CSRF برسالة عربية بدل «CSRF check Failed»."""
+
+    def _get_key(self, request: HttpRequest) -> str | None:
+        try:
+            return super()._get_key(request)
+        except HttpError as exc:
+            if exc.status_code == 403:
+                raise HttpError(403, CSRF_FAILED) from exc
+            raise
+
+
+class StaffSessionAuth(ArabicSessionAuth):
     def authenticate(self, request: HttpRequest, key: str | None):
         user = request.user
         if user.is_authenticated and user.is_staff:
@@ -17,6 +32,7 @@ class StaffSessionAuth(SessionAuth):
         return None
 
 
+session_auth = ArabicSessionAuth()
 staff_auth = StaffSessionAuth()
 
 

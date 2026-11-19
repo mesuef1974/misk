@@ -154,7 +154,9 @@ def test_login_requires_csrf_token(staff_user):
     )
     assert res.status_code == 200, res.content
     # login يبدّل الرمز: القديم يُرفض والجديد من الكوكي يُقبل.
-    assert strict.post("/api/auth/logout", HTTP_X_CSRFTOKEN=token).status_code == 403
+    for url in ("/api/auth/logout", "/api/orders"):  # جلسة عامة وجلسة مشرف: الرسالة عربية في الحالين
+        stale = strict.post(url, {}, content_type="application/json", HTTP_X_CSRFTOKEN=token)
+        assert (stale.status_code, stale.json()["detail"]) == (403, "رمز CSRF مفقود أو غير صالح؛ حدّث الصفحة")
     fresh = strict.cookies["csrftoken"].value
     assert fresh != token
     assert strict.post("/api/auth/logout", HTTP_X_CSRFTOKEN=fresh).status_code == 200
@@ -451,3 +453,21 @@ def test_spa_applies_stored_theme_before_paint(client):
     page = client.get("/").content.decode()
     assert page.index("/static/core/theme-init.js") < page.index("src/main.ts")
     assert finders.find("core/theme-init.js")
+
+
+@pytest.mark.django_db
+def test_shell_health_and_robots_answer_head_and_reject_writes(client):
+    # أدوات مراقبة التوفر تسأل بـ HEAD؛ كان require_GET يرفضه بـ 405.
+    for url in ("/", "/orders", "/health/", "/robots.txt"):
+        assert client.head(url).status_code == 200, url
+        assert client.post(url).status_code == 405, url
+    res = client.get("/robots.txt")
+    assert res["Content-Type"].startswith("text/plain")
+    assert res.content.decode() == "User-agent: *\nDisallow: /\n"
+
+
+def test_webmanifest_is_served_as_manifest_json(settings):
+    from whitenoise.media_types import MediaTypes
+
+    types = MediaTypes(extra_types=settings.WHITENOISE_MIMETYPES)
+    assert types.get_type("static/site.webmanifest") == "application/manifest+json"

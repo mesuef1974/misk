@@ -536,3 +536,22 @@ def test_plan_sheets_locks_orders_before_items(material, name_tag, calibration, 
     services.plan_sheets(material_id=material.pk)
     assert locked[:2] == ["orders.Order", "orders.OrderItem"]
     assert Placement.objects.filter(order_item__order=planned).count() == 3
+
+
+@pytest.mark.django_db
+def test_ready_waits_until_every_piece_is_cut(material, name_tag, calibration):
+    order = _confirmed_order(material, 40)
+    first, second = services.plan_sheets(material_id=material.pk)
+    services.record_run(sheet_id=first.pk, request_id="r1", duration_s=60, outcome="ok")
+    order.refresh_from_db()
+    assert order.status == "in_production"
+    with pytest.raises(order_services.OrderError, match="بقيت 5 قطعة"):
+        order_services.transition(order_id=order.pk, to_status="ready")
+
+    services.scrap_sheet(sheet_id=second.pk)  # القطع المرفوعة عن لوح تالف لم تُقصّ بعد
+    with pytest.raises(order_services.OrderError, match="بقيت 5 قطعة"):
+        order_services.transition(order_id=order.pk, to_status="ready")
+
+    (replacement,) = services.plan_sheets(material_id=material.pk)
+    services.record_run(sheet_id=replacement.pk, request_id="r2", duration_s=60, outcome="ok")
+    assert order_services.transition(order_id=order.pk, to_status="ready").status == "ready"

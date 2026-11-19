@@ -31,6 +31,8 @@ class Material(TimeStampedModel):
     is_active = models.BooleanField(default=True)
 
     class Meta:
+        verbose_name = "مادة"
+        verbose_name_plural = "المواد"
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(fields=["name", "thickness_mm"], name="uniq_material_name_thickness"),
@@ -63,6 +65,8 @@ class Calibration(TimeStampedModel):
     notes = models.TextField(blank=True)
 
     class Meta:
+        verbose_name = "معايرة"
+        verbose_name_plural = "المعايرات"
         ordering = ["-measured_on", "-id"]
         indexes = [models.Index(fields=["material", "operation", "measured_on"])]
 
@@ -88,6 +92,8 @@ class ProductTemplate(TimeStampedModel):
     is_active = models.BooleanField(default=True)
 
     class Meta:
+        verbose_name = "قالب منتج"
+        verbose_name_plural = "قوالب المنتجات"
         ordering = ["name"]
 
     def __str__(self) -> str:

@@ -26,6 +26,7 @@ export const routes: RouteRecordRaw[] = [
   { path: "/production", name: "production", meta: staffOnly, component: () => import("@/pages/ProductionPage.vue") },
   { path: "/materials", name: "materials", meta: staffOnly, component: () => import("@/pages/MaterialsPage.vue") },
   { path: "/templates", name: "templates", meta: staffOnly, component: () => import("@/pages/TemplatesPage.vue") },
+  { path: "/:pathMatch(.*)*", name: "not-found", component: () => import("@/pages/NotFoundPage.vue") },
 ];
 
 export const router = createRouter({ history: createWebHistory("/"), routes });

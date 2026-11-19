@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from django.db.models import Count, QuerySet
+from django.db.models import Count, QuerySet, Sum
 
-from .models import Sheet
+from apps.orders.models import OrderItem
+
+from .models import Placement, Sheet
 
 
 def sheets(status: str | None = None) -> QuerySet[Sheet]:
@@ -19,3 +21,10 @@ def sheets(status: str | None = None) -> QuerySet[Sheet]:
 
 def status_counts() -> dict[str, int]:
     return dict(Sheet.objects.order_by().values_list("status").annotate(Count("id")))
+
+
+def uncut_pieces(order_id: int) -> int:
+    """قطع الطلب التي لم تُقصّ بعد: الكمية المطلوبة ناقص القطع الموضوعة على ألواح منفَّذة."""
+    wanted = OrderItem.objects.filter(order_id=order_id).aggregate(total=Sum("quantity"))["total"] or 0
+    cut = Placement.objects.filter(order_item__order_id=order_id, sheet__status=Sheet.Status.DONE).count()
+    return max(wanted - cut, 0)

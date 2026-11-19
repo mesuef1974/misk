@@ -9,3 +9,7 @@ from django.dispatch import Signal
 
 # kwargs: order (Order)، actor (المستخدم أو None).
 order_cancelled = Signal()
+
+# kwargs: order (Order). يُرسَل قبل الانتقال إلى «جاهز»؛ المستقبِل يرفضه برفع OrderError،
+# والإنتاج يرفضه ما بقيت في الطلب قطعة لم تُقصّ.
+order_ready_requested = Signal()
