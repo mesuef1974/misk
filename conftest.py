@@ -4,6 +4,16 @@ from decimal import Decimal
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _fresh_cache():
+    """الذاكرة المؤقتة تعيش في العملية كلها؛ عدّادات الدخول من اختبار لا تقفل اختبارًا بعده."""
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()
+
+
 @pytest.fixture
 def staff_user(django_user_model):
     return django_user_model.objects.create_user(username="staff", password="x" * 12, is_staff=True)

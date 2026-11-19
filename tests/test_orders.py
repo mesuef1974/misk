@@ -246,11 +246,12 @@ def test_orders_api_rejects_out_of_bounds_payload(client, staff_user, material, 
 
 
 @pytest.mark.django_db
-def test_same_customer_name_reuses_one_row(material, name_tag):
+def test_same_customer_name_does_not_merge_two_people(material, name_tag):
+    """الاسم لا يميّز شخصين: طلبان بالاسم نفسه لا يُنسبان إلى زبون واحد."""
     first = _order(material, customer_name="أم  خالد")
     second = _order(material, customer_name=" أم خالد ")
-    other = _order(material, customer_name="أبو خالد")
-    assert first.customer_id == second.customer_id != other.customer_id
+    assert first.customer_id != second.customer_id
+    assert first.customer.name == second.customer.name == "أم خالد"
     assert Customer.objects.count() == 2
 
 

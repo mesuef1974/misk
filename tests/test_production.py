@@ -117,6 +117,21 @@ def test_plan_task_runs_eagerly(material, name_tag, calibration):
 
 
 @pytest.mark.django_db
+def test_redelivered_plan_task_returns_the_sheets_it_already_planned(material, name_tag, calibration):
+    """acks_late: مهمة ثبّتت ألواحها ثم أُعيد تسليمها بالمعرّف نفسه لا تُبلغ بأن «لا ألواح»."""
+    _confirmed_order(material, 2)
+    task_id = str(uuid.uuid4())
+    first = tasks.plan_sheets_async.apply(kwargs={"material_id": material.pk}, task_id=task_id).get()
+    again = tasks.plan_sheets_async.apply(kwargs={"material_id": material.pk}, task_id=task_id).get()
+    assert first == again == {"sheets": list(Sheet.objects.values_list("pk", flat=True))}
+    assert first["sheets"]
+    assert Sheet.objects.count() == 1 and AuditLog.objects.filter(action="production.plan").count() == 1
+    # مهمة أخرى (نقرة ثانية) لم تنشئ شيئًا: تبقى قائمتها فارغة كي لا تُحسب ألواح غيرها جديدة.
+    other = tasks.plan_sheets_async.apply(kwargs={"material_id": material.pk}, task_id=str(uuid.uuid4()))
+    assert other.get() == {"sheets": []}
+
+
+@pytest.mark.django_db
 def test_plan_task_returns_business_error_without_retrying(material, name_tag, calibration):
     name_tag.width_mm = Decimal("700")
     name_tag.save()
@@ -171,6 +186,7 @@ def test_plan_api_async_reports_business_error_as_failed_job(
 
 def test_plan_job_pending_while_worker_has_not_answered(monkeypatch):
     class Waiting:
+        name = None  # Celery لا يحفظ الاسم بلا result_extended
         state = "PENDING"
 
     monkeypatch.setattr(jobs, "AsyncResult", lambda *args, **kwargs: Waiting())
@@ -178,6 +194,47 @@ def test_plan_job_pending_while_worker_has_not_answered(monkeypatch):
     assert jobs.plan_job(job_id) == jobs.PlanJob(id=job_id, status=jobs.PENDING)
     Waiting.state = "FAILURE"
     assert jobs.plan_job(job_id).error == jobs.WORKER_FAILED
+
+
+@pytest.mark.parametrize(
+    ("name", "outcome"),
+    [
+        (None, "نص"),
+        (None, None),
+        (None, ["sheets"]),
+        (None, {"sheets": ["1"]}),
+        (None, {"sheets": "1"}),
+        (None, {"error": {"x": 1}}),
+        ("apps.core.tasks.other", {"sheets": [1]}),
+    ],
+)
+def test_plan_job_ignores_results_of_other_tasks(monkeypatch, name, outcome):
+    """المعرّف يكتبه العميل: نتيجة مهمة أخرى «غير معروفة» لا 500 ولا ألواح."""
+
+    class Other:
+        state = "SUCCESS"
+
+    Other.name, Other.result = name, outcome
+    monkeypatch.setattr(jobs, "AsyncResult", lambda *args, **kwargs: Other())
+    assert jobs.plan_job(str(uuid.uuid4())) is None
+
+
+def test_plan_job_reads_a_plan_result(monkeypatch):
+    class Done:
+        name, state, result = tasks.plan_sheets_async.name, "SUCCESS", {"sheets": [3, 4]}
+
+    monkeypatch.setattr(jobs, "AsyncResult", lambda *args, **kwargs: Done())
+    assert jobs.plan_job(str(uuid.uuid4())).sheet_ids == [3, 4]
+
+
+@pytest.mark.django_db
+def test_plan_status_api_answers_404_for_foreign_result(client, staff_user, monkeypatch):
+    class Other:
+        name, state, result = None, "SUCCESS", "نص"
+
+    monkeypatch.setattr(jobs, "AsyncResult", lambda *args, **kwargs: Other())
+    client.force_login(staff_user)
+    assert client.get(f"/api/production/sheets/plan/{uuid.uuid4()}").status_code == 404
 
 
 @pytest.mark.django_db
