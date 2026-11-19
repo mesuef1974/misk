@@ -73,7 +73,7 @@ onMounted(() => store.load());
   </ul>
   <div v-if="!store.loadError && store.hasMore" class="more">
     <span class="muted num">يعرض {{ store.orders.length }} من {{ store.total }}</span>
-    <button type="button" class="btn" :disabled="store.loadingMore" @click="store.loadMore()">
+    <button type="button" class="btn" :disabled="store.loading || store.loadingMore" @click="store.loadMore()">
       {{ store.loadingMore ? "يحمّل…" : "تحميل المزيد" }}
     </button>
   </div>

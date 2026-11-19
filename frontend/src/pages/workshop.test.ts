@@ -6,7 +6,7 @@ import { routes } from "@/router";
 import { catalogService, type Calibration, type Material, type ProductTemplate } from "@/services/catalog";
 import { ordersService, type Order } from "@/services/orders";
 import { productionService, type PlanJob, type Run, type Sheet } from "@/services/production";
-import { PLAN_POLL_MS, PLAN_TIMEOUT_MESSAGE } from "@/stores/production";
+import { PLAN_POLL_MS, PLAN_TIMEOUT_MESSAGE, useProductionStore } from "@/stores/production";
 import { sessionService } from "@/services/session";
 import HomePage from "./HomePage.vue";
 import MaterialsPage from "./MaterialsPage.vue";
@@ -450,5 +450,54 @@ describe("اللوحة الرئيسية", () => {
     expect(page.text()).toContain("دخول المشرف");
     expect(page.find(".tile").exists()).toBe(false);
     expect(ordersService.list).not.toHaveBeenCalled();
+  });
+});
+
+describe("مخزن الإنتاج", () => {
+  it("يتجاهل «تحميل المزيد» أثناء تحميل تصفية جديدة", async () => {
+    vi.mocked(productionService.sheets).mockResolvedValueOnce(sheetsPage([sheet()], 3));
+    const store = useProductionStore();
+    await store.load();
+    let finish: (page: ReturnType<typeof sheetsPage>) => void = () => {};
+    vi.mocked(productionService.sheets).mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+    const filtering = store.load("done");
+    await store.loadMore();
+    expect(productionService.sheets).toHaveBeenCalledTimes(2);
+    finish(sheetsPage([sheet({ id: 3, status: "done" })]));
+    await filtering;
+    expect(store.sheets.map((candidate) => candidate.id)).toEqual([3]);
+  });
+
+  it("يواصل استطلاع التخطيط بعد خطأ عابر", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      vi.mocked(productionService.plan).mockResolvedValueOnce(job({ id: "j1", status: "pending" }));
+      vi.mocked(productionService.planJob)
+        .mockRejectedValueOnce(new ApiError(0, "تعذّر الاتصال بالخادم"))
+        .mockRejectedValueOnce(new ApiError(503, "الخدمة غير متاحة"))
+        .mockResolvedValueOnce(job({ id: "j1", sheets: [sheet({ id: 2 })] }));
+      const store = useProductionStore();
+      const planning = store.plan(7);
+      await vi.runAllTimersAsync();
+      expect((await planning).map((candidate) => candidate.id)).toEqual([2]);
+      expect(productionService.planJob).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("يوقف الاستطلاع عند خطأ غير عابر", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      vi.mocked(productionService.plan).mockResolvedValueOnce(job({ id: "j1", status: "pending" }));
+      vi.mocked(productionService.planJob).mockRejectedValueOnce(new ApiError(403, "للمشرفين فقط"));
+      const store = useProductionStore();
+      const planning = store.plan(7).catch((error: unknown) => error);
+      await vi.runAllTimersAsync();
+      expect(await planning).toMatchObject({ status: 403 });
+      expect(productionService.planJob).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

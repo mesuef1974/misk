@@ -224,7 +224,7 @@ async function scrap(sheetId: number): Promise<void> {
   </ul>
   <div v-if="!production.loadError && production.hasMore" class="more">
     <span class="muted num">يعرض {{ production.sheets.length }} من {{ production.total }}</span>
-    <button type="button" class="btn" :disabled="production.loadingMore" @click="production.loadMore()">
+    <button type="button" class="btn" :disabled="production.loading || production.loadingMore" @click="production.loadMore()">
       {{ production.loadingMore ? "يحمّل…" : "تحميل المزيد" }}
     </button>
   </div>
