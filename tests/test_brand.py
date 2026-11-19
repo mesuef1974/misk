@@ -256,20 +256,63 @@ def test_default_palette_values_are_oud():
         assert re.search(rf"{var}:\s*{oud[var]};", root, re.I), var
 
 
-def test_colored_logo_component_keeps_source_paths():
-    # مكوّن الشعار الملوَّن ينسخ مسارات أصل سِمة حرفيًّا ويأخذ اللون وحده من السمة.
-    source = (ROOT / "brand" / "misk" / "misk-logo-color.svg").read_text(encoding="utf-8")
-    component = (ROOT / "frontend" / "src" / "components" / "BrandLogo.vue").read_text(encoding="utf-8")
-    parts = dict(re.findall(r'<path id="(\w+)"[^>]*? d="([^"]+)"', source))
-    assert list(parts) == ["ribbon", "folds", "design"]
-    fills = {
-        "ribbon": "var(--color-mark-ink)",
-        "folds": "var(--color-mark-fold)",
-        "design": "var(--color-mark-ink)",
-    }
-    for part, d in parts.items():
-        assert f'<path class="logo-{part}" fill="{fills[part]}" fill-rule="nonzero" d="{d}" />' in component
-    assert not re.search(r"#[0-9a-fA-F]{6}", component)
+_PATH_D = re.compile(r'<path\b[^>]*? d="([^"]+)"')
+
+
+def test_mark_component_and_favicon_are_the_sima_mark():
+    # الرمز المعتمد (v8) مسار واحد بلون واحد: المكوّن وأيقونة المتصفح ينسخانه حرفيًّا، بلا مربع خلفه.
+    mark = (ROOT / "brand" / "misk" / "misk-mark.svg").read_text(encoding="utf-8")
+    component = (ROOT / "frontend" / "src" / "components" / "BrandMark.vue").read_text(encoding="utf-8")
+    favicon = ROOT / "frontend" / "public" / "favicon.svg"
+    paths = _PATH_D.findall(mark)
+    assert len(paths) == 1
+    assert _PATH_D.findall(component) == paths
+    assert favicon.read_bytes() == (ROOT / "brand" / "misk" / "favicon.svg").read_bytes()
+    assert _PATH_D.findall(favicon.read_text(encoding="utf-8")) == paths
+    assert re.findall(r'fill="([^"]+)"', component) == ["var(--color-mark-ink, #68112F)"]
+    view_box = re.search(r'viewBox="([^"]+)"', mark)
+    assert view_box and f'viewBox="{view_box.group(1)}"' in component
+    for text in (mark, component, favicon.read_text(encoding="utf-8")):
+        assert "<rect" not in text
+
+
+def test_mark_ink_is_one_color_following_the_palette():
+    # لون واحد للشعار: لون السمة نهارًا وأبيض ليلًا؛ لا متغيرات مربع ولا نقطة ولا طيّات.
+    tokens = _tokens_text()
+    assert "--color-mark-ink: light-dark(var(--day-color), #ffffff);" in tokens
+    for old in ("--color-mark-tile", "--color-mark-dot", "--color-mark-accent", "--color-mark-fold"):
+        assert old not in tokens
+        for path in [*FRONTEND_SRC.rglob("*.vue"), *FRONTEND_SRC.rglob("*.css")]:
+            assert old not in path.read_text(encoding="utf-8"), path.name
+
+
+def test_old_logo_shape_is_gone_from_the_frontend():
+    # نسبة الشعار السابق (100 إلى 65.85) لا تبقى في مكوّن ولا قناع: كل موضع بنسبة الرمز المعتمد.
+    mark = (ROOT / "brand" / "misk" / "misk-mark.svg").read_text(encoding="utf-8")
+    view_box = re.search(r'viewBox="0 0 100 ([\d.]+)"', mark)
+    assert view_box
+    ratio = f"aspect-ratio: 100 / {view_box.group(1)};"
+    assert ratio in (FRONTEND_SRC / "styles" / "base.css").read_text(encoding="utf-8")
+    assert ratio in (STATIC_BRAND / "splash.css").read_text(encoding="utf-8")
+    for path in [*FRONTEND_SRC.rglob("*.vue"), *FRONTEND_SRC.rglob("*.css")]:
+        assert "65.85071" not in path.read_text(encoding="utf-8"), path.name
+    components = {p.name for p in (FRONTEND_SRC / "components").glob("Brand*.vue")}
+    assert components == {"BrandIcon.vue", "BrandLockup.vue", "BrandMark.vue", "BrandPanel.vue"}
+
+
+def test_spa_links_the_identity_icons(client):
+    page = client.get("/").content.decode()
+    for link in (
+        '<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">',
+        '<link rel="icon" href="/static/favicon.ico" sizes="any">',
+        '<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">',
+        '<link rel="manifest" href="/static/site.webmanifest">',
+    ):
+        assert link in page, link
+    public = ROOT / "frontend" / "public"
+    manifest = (public / "site.webmanifest").read_text(encoding="utf-8")
+    for src in re.findall(r'"src": "/static/([^"]+)"', manifest):
+        assert (public / src).is_file(), src
 
 
 @pytest.mark.parametrize(
@@ -317,7 +360,7 @@ def test_mark_intro_motion_is_applied():
     base = (ROOT / "frontend" / "src" / "styles" / "base.css").read_text(encoding="utf-8")
     app = (ROOT / "frontend" / "src" / "App.vue").read_text(encoding="utf-8")
     assert '@import "../static/brand/motion.css"' in base
-    assert re.search(r'<BrandLogo[^>]*class="sima-mark-intro"', app)
+    assert re.search(r'<BrandMark[^>]*class="sima-mark-intro"', app)
 
 
 def test_spa_shows_splash_until_app_boots(client):
@@ -373,6 +416,8 @@ def test_pages_use_identity_icons_and_pattern():
         used |= set(
             re.findall(r': "([\w-]+)"', catalog.split(f"export const {table}", 1)[1].split("};", 1)[0])
         )
+    # الأسماء القديمة (giveaways وlaser) خرجت من الهوية v8 وحلّ محلها favors وlaser-engrave.
+    assert {"favors", "laser-engrave"} <= used
     # كل اسم مستعمل أيقونة موجودة في الهوية. الأيقونة الوحيدة بلا موضع هي portrait:
     # لا منتج صور في المنصة بعد، فلا تُحشر (ADOPTION.yaml: icons-used).
     assert used <= names
