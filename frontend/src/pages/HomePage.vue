@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
 import BrandIcon from "@/components/BrandIcon.vue";
+import BrandMark from "@/components/BrandMark.vue";
 import BrandPanel from "@/components/BrandPanel.vue";
-import BrandRibbonLogo from "@/components/BrandRibbonLogo.vue";
 import StatusCard from "@/components/StatusCard.vue";
 import { ORDER_STATUSES, STATUS_LABELS } from "@/domain/orders";
 import { useAppStore } from "@/stores/app";
@@ -44,8 +44,8 @@ watch(
 <template>
   <template v-if="session.isStaff">
     <div class="page-head">
-      <!-- الاسم شعارَ الشريط (PNG) بلون السمة المختارة لا نصًّا؛ الاسم المقروء في aria-label. -->
-      <h1 class="home-logo" :aria-label="store.siteTitle"><BrandRibbonLogo :height="104" /></h1>
+      <!-- الاسم رمزَ الهوية بلون السمة المختارة لا نصًّا؛ الاسم المقروء في aria-label. -->
+      <h1 class="home-logo" :aria-label="store.siteTitle"><BrandMark :size="104" /></h1>
       <RouterLink class="btn primary" :to="{ name: 'order-new' }">طلب جديد</RouterLink>
     </div>
 
@@ -68,7 +68,7 @@ watch(
       <h2 id="home-work">الورشة</h2>
       <div class="tiles">
         <RouterLink class="list-row tile" :to="{ name: 'production' }">
-          <BrandIcon name="laser" />
+          <BrandIcon name="laser-engrave" />
           <span class="what"><b class="num">{{ production.loaded ? plannedSheets : "—" }}</b><span class="muted">ألواح تنتظر التشغيل</span></span>
         </RouterLink>
         <RouterLink class="list-row tile" :to="{ name: 'materials' }">

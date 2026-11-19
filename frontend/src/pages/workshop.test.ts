@@ -442,10 +442,12 @@ describe("اللوحة الرئيسية", () => {
   it("تعرض الاسم شعارًا بلون السمة لا نصًّا", async () => {
     const page = await show(HomePage, "/");
     const heading = page.get("h1");
-    expect(heading.text()).toBe("");
+    // الشعار رمز v8 مسارًا واحدًا بلون السمة (--color-mark-ink)، لا صورة ولا نص ظاهر بجواره؛ وصف SVG ليس نصًّا ظاهرًا.
+    const loose = [...heading.element.childNodes].filter((node) => node.nodeType === Node.TEXT_NODE);
+    expect(loose.map((node) => node.textContent?.trim()).join("")).toBe("");
     expect(heading.attributes("aria-label")).toBeDefined();
-    // العودي السمة الافتراضية: ملف PNG لها، ولكل سمة ملفها.
-    expect(heading.get("img").attributes("src")).toContain("misk-oud.png");
+    expect(heading.get("svg.brand-mark").get("path").attributes("fill")).toContain("--color-mark-ink");
+    expect(heading.find("img").exists()).toBe(false);
   });
 
   it("تحمّل البيانات مرة واحدة عند أول فتح", async () => {

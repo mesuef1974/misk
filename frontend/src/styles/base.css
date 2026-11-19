@@ -73,9 +73,8 @@ code { background: var(--surface); border: 1px solid var(--line); border-radius:
   -webkit-mask: url("../static/brand/motif-mono.svg") top center / 130px auto repeat;
   mask: url("../static/brand/motif-mono.svg") top center / 130px auto repeat;
 }
-/* شعار الرئيسية (PNG بلون السمة النهاري) يُفتَّح ليلًا كي لا تغيب كلمة DESIGN في الخلفية العميقة. */
-:root[data-theme="dark"] .home-logo img { filter: brightness(1.7); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .home-logo img { filter: brightness(1.7); } }
+/* الرمز المولَّد (BrandMark.vue) يضع size عرضًا وارتفاعًا والرمز أعرض من ارتفاعه: size ارتفاعه والعرض بنسبته. */
+.brand-mark { inline-size: auto; max-inline-size: 100%; }
 
 @media (max-width: 860px) {
   .shell { display: block; }
@@ -118,7 +117,7 @@ code { background: var(--surface); border: 1px solid var(--line); border-radius:
   border: 1px solid var(--line); border-radius: calc(var(--radius) * 2);
 }
 .empty .mark {
-  inline-size: 56px; aspect-ratio: 100 / 65.85071; margin: 0 auto 12px; background: var(--color-mark-ink);
+  inline-size: 56px; aspect-ratio: 100 / 47.09756; margin: 0 auto 12px; background: var(--color-mark-ink);
   -webkit-mask: url("../static/brand/mark.svg") center / contain no-repeat;
   mask: url("../static/brand/mark.svg") center / contain no-repeat;
 }
@@ -189,7 +188,7 @@ a.list-row:hover { border-color: var(--accent); }
   :root, :root[data-theme] {
     color-scheme: light;
     --ink: var(--print-ink); --muted: var(--print-muted); --line: var(--print-ink); --line-strong: var(--print-ink);
-    --accent: var(--print-ink); --color-mark-ink: var(--print-ink); --color-mark-fold: var(--print-ink);
+    --accent: var(--print-ink); --color-mark-ink: var(--print-ink);
   }
   body { background: none; color: var(--print-ink); font-size: 12pt; }
   .side, .btn, .filters, .more { display: none !important; }
