@@ -24,8 +24,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends libpq5 wget && 
 RUN groupadd -r app && useradd -r -g app -d /app app && mkdir -p /app/staticfiles /app/media && chown -R app:app /app
 WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
-COPY --chown=app:app . .
-COPY --from=frontend --chown=app:app /build/frontend_dist ./frontend_dist
+# الشيفرة ملك root ولا يكتبها مستخدم التشغيل؛ staticfiles وmedia وحدهما له (collectstatic في العامل والإصدار).
+COPY . .
+COPY --from=frontend /build/frontend_dist ./frontend_dist
+RUN mkdir -p /app/staticfiles /app/media && chown -R app:app /app/staticfiles /app/media
 USER app
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \

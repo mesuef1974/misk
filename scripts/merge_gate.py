@@ -3,9 +3,11 @@
 
 الشروط (كلها لازمة):
   1. سطر اعتماد المالك في وصف الطلب مربوط برأس الطلب الحالي (scripts/approval.py).
-  2. لا ملف متغيّر يطابق المسارات المحظورة (security/sensitive_paths.json → forbidden_for_auto_merge).
+  2. لا ملف متغيّر يطابق المسارات المحظورة (security/sensitive_paths.json → forbidden_for_auto_merge)،
+     والقائمة تُقرأ من فرع الأساس على GitHub لا من الشجرة المحلية: الطلب لا يخفّف قواعد نفسه.
      ملفات CI والـ lockfiles وسكربتات البوابات نفسها محظورة دائمًا: النموذج لا يعدّل حارسه.
-  3. كل فحوص CI خضراء: الحالة الناجحة المعروفة وحدها تمرّ، وكل حالة غيرها تمنع.
+     قائمة ملفات ناقصة (واجهة GitHub تقف عند 3000 ملف) تمنع: ما لم يُقرأ لا يُفترض نظيفًا.
+  3. كل فحوص CI خضراء، والفحوص الإلزامية (REQUIRED_CHECKS) حاضرة بأسمائها: فحص لم يُسجَّل بعد لا يمرّ بغيابه.
 
 الاعتماد نص في وصف الطلب ولا يُتحقق من كاتبه: الجلسة تعمل بحساب المالك نفسه على GitHub، فلا هوية ثانية تُقارن.
 الضابط إجرائي: لا يكتب السطرَ غيرُ المالك، أو الجلسة بأمره الصريح لكل رأس (CLAUDE.md).
@@ -26,8 +28,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from approval import approved_heads, same_head  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
-RULES = ROOT / "security" / "sensitive_paths.json"
+RULES = "security/sensitive_paths.json"
+FILES_API_LIMIT = 3000
+REQUIRED_CHECKS = ("بوابة الجودة", "approval-head", "scan")
 
 ALWAYS_FORBIDDEN = (
     ".github/*",
@@ -39,11 +42,13 @@ ALWAYS_FORBIDDEN = (
     "scripts/check_migration_collisions.py",
     "scripts/railway-*.sh",
     "automation/*",
+    "automation/**",
     "pyproject.toml",
     ".dockerignore",
     "security/*",
-    ".claude/hooks/*",
-    ".claude/settings.json",
+    ".claude/*",
+    ".claude/**",
+    "CLAUDE.md",
     "package-lock.json",
     "frontend/package-lock.json",
     "requirements*.txt",
@@ -66,25 +71,52 @@ def gh_json(args: list[str]):
     return json.loads(out.stdout)
 
 
-def forbidden_globs() -> tuple[str, ...]:
-    """قائمة الحظر من الملف؛ غيابه أو فساده يوقف البوابة ولا يُسقط الحظر."""
+def base_rules(repo: str | None, base: str) -> str:
+    """نص قائمة الحظر كما هو في فرع الأساس على GitHub؛ ما يغيّره الطلب نفسه لا يُقرأ."""
+    target = repo or "{owner}/{repo}"
+    out = subprocess.run(
+        [
+            "gh",
+            "api",
+            "-H",
+            "Accept: application/vnd.github.raw",
+            f"repos/{target}/contents/{RULES}?ref={base}",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if out.returncode != 0:
+        raise GateError(f"تعذّرت قراءة {RULES} من {base}: {out.stderr.strip()}")
+    return out.stdout
+
+
+def forbidden_globs(text: str) -> tuple[str, ...]:
+    """قائمة الحظر من نص الملف؛ فساده أو خلوّه يوقف البوابة ولا يُسقط الحظر."""
     try:
-        extra = json.loads(RULES.read_text(encoding="utf-8"))["forbidden_for_auto_merge"]
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        raise GateError(f"تعذّرت قراءة {RULES.name}: {exc}") from exc
+        extra = json.loads(text)["forbidden_for_auto_merge"]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise GateError(f"تعذّرت قراءة {RULES}: {exc}") from exc
     if not isinstance(extra, list) or not extra:
-        raise GateError(f"{RULES.name}: forbidden_for_auto_merge فارغة أو ليست قائمة")
+        raise GateError(f"{RULES}: forbidden_for_auto_merge فارغة أو ليست قائمة")
     return ALWAYS_FORBIDDEN + tuple(extra)
 
 
-def changed_paths(pr: str, repo: str | None) -> list[str]:
-    """مسارات الطلب من واجهة الملفات: الاسم الجديد والقديم معًا، فإعادة التسمية لا تخفي مسارًا محظورًا."""
+def changed_paths(pr: str, repo: str | None, expected: int) -> list[str]:
+    """مسارات الطلب من واجهة الملفات: الاسم الجديد والقديم معًا، فإعادة التسمية لا تخفي مسارًا محظورًا.
+
+    `expected` عدد الملفات كما يعلنه الطلب؛ قائمة أقصر منه (حدّ الواجهة) تُوقف البوابة.
+    """
     target = repo or "{owner}/{repo}"
     pages = gh_json(["api", f"repos/{target}/pulls/{pr}/files", "--paginate", "--slurp"])
     paths: list[str] = []
+    listed = 0
     for page in pages or []:
         for item in page:
+            listed += 1
             paths += [p for p in (item.get("filename"), item.get("previous_filename")) if p]
+    if listed < expected or listed >= FILES_API_LIMIT:
+        raise GateError(f"قائمة الملفات ناقصة: قُرئ {listed} من {expected} (حدّ الواجهة {FILES_API_LIMIT})")
     return sorted(set(paths))
 
 
@@ -97,7 +129,7 @@ def path_forbidden(path: str, globs: tuple[str, ...]) -> str | None:
 
 def evaluate(pr: str, repo: str | None) -> tuple[bool, list[str], str]:
     reasons: list[str] = []
-    args = ["pr", "view", pr, "--json", "body,statusCheckRollup,headRefOid"]
+    args = ["pr", "view", pr, "--json", "body,statusCheckRollup,headRefOid,baseRefName,changedFiles"]
     if repo:
         args += ["--repo", repo]
     data = gh_json(args)
@@ -111,8 +143,8 @@ def evaluate(pr: str, repo: str | None) -> tuple[bool, list[str], str]:
             f"سطر الاعتماد على رأس قديم ({', '.join(h[:8] for h in heads)})، والرأس الحالي {head[:8]}"
         )
 
-    globs = forbidden_globs()
-    paths = changed_paths(pr, repo)
+    globs = forbidden_globs(base_rules(repo, data.get("baseRefName") or "main"))
+    paths = changed_paths(pr, repo, int(data.get("changedFiles") or 0))
     if not paths:
         reasons.append("لا ملفات متغيّرة مقروءة من الطلب")
     blocked = []
@@ -126,6 +158,10 @@ def evaluate(pr: str, repo: str | None) -> tuple[bool, list[str], str]:
     checks = data.get("statusCheckRollup") or []
     if not checks:
         reasons.append("لا فحوص CI مسجّلة على الطلب بعد")
+    present = {c.get("name") or c.get("context") for c in checks}
+    for required in REQUIRED_CHECKS:
+        if required not in present:
+            reasons.append(f"فحص إلزامي غير مسجَّل: {required}")
     for c in checks:
         state = (c.get("conclusion") or c.get("state") or "").upper()
         name = c.get("name") or c.get("context") or "؟"
@@ -139,7 +175,8 @@ def evaluate(pr: str, repo: str | None) -> tuple[bool, list[str], str]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    # allow_abbrev=False: `--ena` لا يُقبل اختصارًا لـ`--enable`، فلا يلتفّ على قاعدة deny التي تطابق الاسم كاملًا.
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("pr")
     ap.add_argument("--repo")
     ap.add_argument("--enable", action="store_true")
