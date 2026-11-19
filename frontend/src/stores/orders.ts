@@ -18,6 +18,8 @@ export const useOrdersStore = defineStore("orders", () => {
   const loaded = ref(false);
   const loadError = ref("");
   let latest = 0;
+  /** يرتفع بـ clear() وحده (الخروج أو انتهاء الجلسة): رد كتابة بدأت قبله لا يعيد بيانات زبون إلى المخزن. */
+  let generation = 0;
 
   const totalAll = computed(() => Object.values(countByStatus.value).reduce((sum, count) => sum + count, 0));
   const hasMore = computed(() => orders.value.length < total.value);
@@ -79,16 +81,23 @@ export const useOrdersStore = defineStore("orders", () => {
 
   /** طلب واحد من الخادم، للرابط المباشر إلى طلب ليس في القائمة. undefined حين لا طلب بهذا الرقم. */
   async function fetchOne(orderId: number): Promise<Order | undefined> {
+    const ticket = generation;
     try {
-      return upsert(await ordersService.get(orderId));
+      return keep(ticket, await ordersService.get(orderId));
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return undefined;
       throw error;
     }
   }
 
+  /** يضع الطلب في المخزن إن لم يُمسح منذ بدأ الطلب، ويعيده في الحالتين ليعرضه المستدعي أو يتجاهله. */
+  function keep(ticket: number, order: Order): Order {
+    return ticket === generation ? upsert(order) : order;
+  }
+
   function clear(): void {
     latest += 1;
+    generation += 1;
     loading.value = false;
     orders.value = [];
     status.value = "";
@@ -100,11 +109,13 @@ export const useOrdersStore = defineStore("orders", () => {
 
   // الكتابة ترمي الخطأ للصفحة لتعرضه بجانب الإجراء الذي سبّبه.
   async function create(draft: OrderDraft): Promise<Order> {
-    return upsert(await ordersService.create(draft));
+    const ticket = generation;
+    return keep(ticket, await ordersService.create(draft));
   }
 
   async function transition(orderId: number, toStatus: string): Promise<Order> {
-    return upsert(await ordersService.transition(orderId, toStatus));
+    const ticket = generation;
+    return keep(ticket, await ordersService.transition(orderId, toStatus));
   }
 
   return {

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponse
 from django.urls import reverse
 from ninja import Field, NinjaAPI, Query, Schema
 from ninja.errors import HttpError
@@ -56,8 +57,6 @@ class ClientAddressOut(Schema):
 
 @api.get("/ping", response=PingOut)
 def ping(request: HttpRequest):
-    from django.conf import settings
-
     return {"ok": True, "site": settings.SITE_TITLE}
 
 
@@ -81,8 +80,6 @@ def client_address(request: HttpRequest):
 
     العنوان المحسوب `client_ip` هو ما يُقفل عليه الدخول؛ يجب أن يساوي عنوان المتصفح العام.
     """
-    from django.conf import settings
-
     return {
         "remote_addr": request.META.get("REMOTE_ADDR", ""),
         "x_forwarded_for": request.META.get("HTTP_X_FORWARDED_FOR", ""),
@@ -93,7 +90,7 @@ def client_address(request: HttpRequest):
 
 
 @api.post("/auth/login", response=MeOut)
-def login(request: HttpRequest, payload: LoginIn):
+def login(request: HttpRequest, response: HttpResponse, payload: LoginIn):
     # المسار بلا auth فلا يفحص Ninja رمز CSRF؛ نفحصه هنا كي لا يُدخَل الضحية بحساب غيره (login CSRF).
     if check_csrf(request) is not None:
         raise HttpError(403, CSRF_FAILED)
@@ -101,6 +98,16 @@ def login(request: HttpRequest, payload: LoginIn):
         user = services.sign_in(request, username=payload.username, password=payload.password)
     except services.SignInError as exc:
         raise HttpError(exc.status, str(exc)) from exc
+    # كوكي الجهاز لا يُفتح به شيء: يعفي هذا الجهاز من حجب الاسم الذي يسبّبه غيره (services.NAME_LOCKED).
+    response.set_cookie(
+        services.DEVICE_COOKIE,
+        services.remember_device(request, user),
+        max_age=services.DEVICE_MAX_AGE_S,
+        path="/api/auth/",
+        secure=settings.SESSION_COOKIE_SECURE,
+        httponly=True,
+        samesite="Strict",
+    )
     return _me(user)
 
 
