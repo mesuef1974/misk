@@ -11,7 +11,8 @@
   <link rel="stylesheet" href="{% static 'brand/splash.css' %}">
   {% vite_hmr_client %}
   {% vite_asset 'src/main.ts' %}
-  <link rel="alternate icon" href="{% static 'favicon.ico' %}">
+  <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
+  <link rel="icon" href="{% static 'favicon.ico' %}" sizes="any">
   <link rel="apple-touch-icon" href="{% static 'apple-touch-icon.png' %}">
   <link rel="manifest" href="{% static 'site.webmanifest' %}">
 </head>

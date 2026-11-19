@@ -12,10 +12,10 @@ html[data-theme="dark"] { color-scheme: dark; }
   background: var(--bg);
 }
 
-/* نسب الأصل: عرض الرمز 400 من 1080، ونسبة الرمز 100 إلى 65.85. */
+/* نسب الأصل: عرض الرمز 400 من 1080، ونسبة الرمز 100 إلى 47.1. */
 .splash-mark {
   inline-size: min(37vw, 400px);
-  aspect-ratio: 100 / 65.85071;
+  aspect-ratio: 100 / 47.09756;
   background: var(--color-mark-ink);
   -webkit-mask: url("mark.svg") center / contain no-repeat;
   mask: url("mark.svg") center / contain no-repeat;
