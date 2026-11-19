@@ -372,12 +372,15 @@ describe("صفحة الإنتاج", () => {
       await vi.runAllTimersAsync();
       await flushPromises();
       expect(page.get('.plan [role="alert"]').text()).toContain("أكبر من اللوح");
+      const listed = vi.mocked(productionService.sheets).mock.calls.length;
 
       await page.get(".plan").trigger("submit");
       await vi.runAllTimersAsync();
       await flushPromises();
       expect(productionService.planJob).toHaveBeenCalledTimes(1 + PLAN_POLL_MS.length);
       expect(page.get('.plan [role="alert"]').text()).toContain(PLAN_TIMEOUT_MESSAGE);
+      // عند المهلة تُعاد القائمة من الخادم: العامل قد ثبّت ألواحًا لم يصل ردّها.
+      expect(productionService.sheets).toHaveBeenCalledTimes(listed + 1);
     } finally {
       vi.useRealTimers();
     }

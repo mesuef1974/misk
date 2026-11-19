@@ -9,7 +9,7 @@ from django.db import IntegrityError, transaction
 
 from apps.catalog.models import Calibration, Material
 from apps.core.columns import column_length
-from apps.core.selectors import audit_entry
+from apps.core.selectors import audit_entries
 from apps.core.services import REQUEST_ID_LENGTH as AUDIT_REQUEST_ID_LENGTH
 from apps.core.services import record_audit
 from apps.orders import services as order_services
@@ -21,6 +21,8 @@ from .models import Placement, RunLog, Sheet
 MARGIN_MM = Decimal("5")
 GAP_MM = Decimal("3")
 MAX_DURATION_S = 7 * 24 * 60 * 60
+# مفتاح التخطيط يُقصّ ليتّسع العمود للاحقة إعادة التسليم (`+<رقم اللوح>`، حتى 20 خانة).
+PLAN_KEY_LENGTH = AUDIT_REQUEST_ID_LENGTH - 21
 REQUEST_ID_LENGTH = column_length(RunLog, "request_id")
 PLANNABLE = {Order.Status.CONFIRMED, Order.Status.IN_PRODUCTION}
 
@@ -47,7 +49,7 @@ def plan_sheets(*, material_id: int, actor=None, request_id: str = "") -> list[S
     """
     material = Material.objects.get(pk=material_id)
     target = f"material:{material.pk}"
-    request_id = request_id[:AUDIT_REQUEST_ID_LENGTH]
+    request_id = request_id[:PLAN_KEY_LENGTH]
     # الطلبات قبل البنود، بترتيب الإلغاء نفسه (الطلب ثم اللوح): إلغاء متزامن إمّا ينتظر هذا التخطيط
     # فيجد ألواحه ويرفع قطعه، وإمّا يسبقه فيُعاد فحص الحالة بعد القفل ويخرج الطلب من التخطيط.
     # استعلام فرعي لا join مع distinct: PostgreSQL يرفض FOR UPDATE مع DISTINCT.
@@ -72,8 +74,9 @@ def plan_sheets(*, material_id: int, actor=None, request_id: str = "") -> list[S
         pieces.extend(
             domain.Piece((item.pk, copy), width, height) for copy in range(item.quantity) if copy not in done
         )
+    previous = _planned_by(target=target, request_id=request_id)
     if not pieces:
-        return _planned_by(target=target, request_id=request_id)
+        return previous
     try:
         placed = domain.pack(
             pieces,
@@ -106,16 +109,20 @@ def plan_sheets(*, material_id: int, actor=None, request_id: str = "") -> list[S
         actor=actor,
         target=target,
         payload={"sheets": [sheet.pk for sheet in sheets], "pieces": len(placed)},
-        request_id=request_id,
+        # إعادة تسليم وجدت قطعًا جديدة (أُكّد طلب بعد التثبيت الأول) تكتب صفًّا ثانيًا بمفتاح فرعي:
+        # بالمفتاح نفسه كان القيد سيعيد صف التثبيت الأول صامتًا فلا أثر للألواح الجديدة في السجل.
+        request_id=f"{request_id}+{sheets[0].pk}" if previous else request_id,
     )
-    return sheets
+    return previous + sheets
 
 
 def _planned_by(*, target: str, request_id: str) -> list[Sheet]:
-    entry = audit_entry(action="production.plan", target=target, request_id=request_id)
-    if entry is None:
+    """كل الألواح التي ثبّتتها هذه المحاولة عبر تسليماتها، بترتيب إنشائها."""
+    entries = audit_entries(action="production.plan", target=target, request_id=request_id)
+    sheet_ids = [pk for entry in entries for pk in entry.payload.get("sheets", [])]
+    if not sheet_ids:
         return []
-    return list(Sheet.objects.filter(pk__in=entry.payload.get("sheets", [])).order_by("id"))
+    return list(Sheet.objects.filter(pk__in=sheet_ids).order_by("id"))
 
 
 @transaction.atomic
