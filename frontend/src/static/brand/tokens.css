@@ -6,10 +6,10 @@
 @font-face { font-family: "Cairo"; src: url("fonts/Cairo-Variable.ttf") format("truetype"); font-display: swap; font-weight: 100 1000; }
 @font-face { font-family: "Almarai"; src: url("fonts/Almarai-Regular.ttf") format("truetype"); font-display: swap; font-weight: 400; }
 
-/* السمات العشر (قرار المالك 2026-11-17): لون الشريط وكلمة DESIGN في الشعار هو لون السمة والطيّات شامبانيا.
+/* السمات العشر (قرار المالك 2026-11-17): لون الشعار هو لون السمة.
    لكل سمة نهارها وليلها: --day-bg خلفية نهارية بصبغة السمة (العودي على العاجي)، و--night-bg خلفية ليلية عميقة
    بصبغتها، و--night-accent لون التمييز الليلي. بقية السطوح والحدود تُشتق منها أدناه. العودي افتراضي،
-   ونهاره وليله قيم دليل الهوية v7 حرفيًّا (token_map في brand/misk/identity/ADOPTION.yaml وشاشة app-dark) لا اشتقاقًا:
+   ونهاره وليله قيم دليل الهوية v8 حرفيًّا (token_map في brand/misk/identity/ADOPTION.yaml وشاشة app-dark) لا اشتقاقًا:
    ليل العودي ليل الدليل بقرار المالك 2026-11-17، وبقية السمات تشتق ليلها من --night-bg و--night-accent.
    الأسماء نفسها في frontend/src/domain/theme.ts وapps/core/static/core/theme-init.js (tests/test_brand.py يطابقها
    ويفحص تباين كل سمة في الوضعين). */
@@ -73,6 +73,8 @@
   --night-surface: #312529; --night-raised: #46393d; --night-line: #5d4e53; --night-soft: #402b30; }
 
 :root, html[data-theme] {
+  /* نهار العودي هو قيم الهوية v8 نفسها (#f8f2e9، #fdf2f5، #35242c، #6c5c61، #ddd0d4، #68112f) عبر --day-*؛
+     تبقى light-dark ليتبع كل متغير الوضع الليلي والسمة المختارة. */
   --bg: light-dark(var(--day-bg), var(--night-bg));
   --surface: light-dark(var(--day-surface), var(--night-surface));
   --ink: light-dark(var(--day-ink), #fdf2f5);
@@ -85,14 +87,13 @@
 }
 
 :root {
-  /* الشعار: الشريط وكلمة DESIGN بلون السمة والطيّات شامبانيا على الفاتح، وكله أبيض على الداكن. */
+  /* الشعار (v8) بلون واحد: لون السمة على الفاتح (العودي #68112f افتراضًا) وأبيض على الداكن. */
   --color-mark-ink: light-dark(var(--day-color), #ffffff);
-  --color-mark-fold: light-dark(var(--champagne), #ffffff);
   /* كلمة القفل (BrandLockup.vue المولَّد) تقرأ --color-ink: تُربط بحبر النص ليتبع الوضع الليلي. */
   --color-ink: var(--ink);
 }
 
-/* بقية ألوان الهوية v7 كما في شاشات الدليل (brand/misk/identity/screens/app-light.html وapp-dark.html):
+/* بقية ألوان الهوية v8 كما في شاشات الدليل (brand/misk/identity/screens/app-light.html وapp-dark.html):
    سطوح وحدود وتركيز وحالات. الصفحات تقرأ هذه المتغيرات وحدها، بلا لون خام.
    السطح المرفوع والخلفية الناعمة مشتقّان من لون السمة على خلفيتها في الوضعين. */
 :root, html[data-theme] {
@@ -113,6 +114,6 @@
   /* الورق المطبوع حبر أسود في الوضعين (screens/print.html). */
   --print-ink: #000000;
   --print-muted: #333333;
-  /* الزوايا 2 بقرار المالك 2026-11-17 (والدليل v7 عليها). */
+  /* الزوايا 2 بقرار المالك 2026-11-17 (والدليل v8 عليها). */
   --radius: 2px;
 }

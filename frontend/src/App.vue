@@ -3,7 +3,7 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { errorMessage } from "@/api/client";
 import BrandIcon from "@/components/BrandIcon.vue";
-import BrandLogo from "@/components/BrandLogo.vue";
+import BrandMark from "@/components/BrandMark.vue";
 import LiveNotice from "@/components/LiveNotice.vue";
 import ThemePicker from "@/components/ThemePicker.vue";
 import { useAppStore } from "@/stores/app";
@@ -50,10 +50,10 @@ async function logout(): Promise<void> {
   <div class="shell">
     <aside class="side">
       <!-- الشعار مسارات بلا نص حي: الاسم المقروء على الرابط نفسه. وهو رابط الرئيسية. -->
-      <RouterLink class="brand" to="/" :aria-label="store.siteTitle"><BrandLogo class="sima-mark-intro" :height="36" /></RouterLink>
+      <RouterLink class="brand" to="/" :aria-label="store.siteTitle"><BrandMark class="sima-mark-intro" :size="36" /></RouterLink>
       <nav class="main" aria-label="أقسام المنصة">
         <RouterLink class="nav-item" to="/orders"><BrandIcon name="order" /><span>الطلبات</span></RouterLink>
-        <RouterLink class="nav-item" to="/production"><BrandIcon name="laser" /><span>الإنتاج</span></RouterLink>
+        <RouterLink class="nav-item" to="/production"><BrandIcon name="laser-engrave" /><span>الإنتاج</span></RouterLink>
         <RouterLink class="nav-item" to="/materials"><BrandIcon name="leather" /><span>المواد</span></RouterLink>
         <RouterLink class="nav-item" to="/templates"><BrandIcon name="name" /><span>القوالب</span></RouterLink>
       </nav>
@@ -76,7 +76,7 @@ async function logout(): Promise<void> {
     </aside>
     <main class="wrap">
       <!-- رأس الورقة المطبوعة وتذييلها كما في شاشة الطباعة من الدليل؛ لا يظهران على الشاشة. -->
-      <div class="print-only print-head" aria-hidden="true"><BrandLogo :height="48" /></div>
+      <div class="print-only print-head" aria-hidden="true"><BrandMark :size="48" /></div>
       <RouterView />
       <div class="print-only print-foot" aria-hidden="true"><span>يُرسم اسمك ثم يُحفر</span></div>
     </main>
