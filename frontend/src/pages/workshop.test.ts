@@ -6,7 +6,8 @@ import { routes } from "@/router";
 import { catalogService, type Calibration, type Material, type ProductTemplate } from "@/services/catalog";
 import { ordersService, type Order } from "@/services/orders";
 import { productionService, type PlanJob, type Run, type Sheet } from "@/services/production";
-import { PLAN_POLL_MS, PLAN_TIMEOUT_MESSAGE, useProductionStore } from "@/stores/production";
+import { PlanCancelled, PLAN_POLL_MS, PLAN_TIMEOUT_MESSAGE, useProductionStore } from "@/stores/production";
+import { useCatalogStore } from "@/stores/catalog";
 import { sessionService } from "@/services/session";
 import HomePage from "./HomePage.vue";
 import MaterialsPage from "./MaterialsPage.vue";
@@ -444,6 +445,13 @@ describe("اللوحة الرئيسية", () => {
     expect(heading.get("img").attributes("src")).toContain("misk-oud.png");
   });
 
+  it("تحمّل البيانات مرة واحدة عند أول فتح", async () => {
+    await show(HomePage, "/");
+    expect(ordersService.list).toHaveBeenCalledTimes(1);
+    expect(productionService.sheets).toHaveBeenCalledTimes(1);
+    expect(catalogService.materials).toHaveBeenCalledTimes(1);
+  });
+
   it("تدعو غير المشرف إلى الدخول ولا تطلب بيانات", async () => {
     vi.mocked(sessionService.me).mockResolvedValue(null);
     const page = await show(HomePage, "/");
@@ -498,6 +506,103 @@ describe("مخزن الإنتاج", () => {
       expect(productionService.planJob).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
+    }
+  });
+});
+
+describe("التخطيط والتصفية بعد الإيقاف والمسح", () => {
+  it("يتوقف الاستطلاع عند مغادرة الصفحة", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      vi.mocked(productionService.plan).mockResolvedValueOnce(job({ id: "j1", status: "pending" }));
+      vi.mocked(productionService.planJob).mockResolvedValue(job({ id: "j1", status: "pending" }));
+      const store = useProductionStore();
+      const planning = store.plan(7).catch((error: unknown) => error);
+      await flushPromises();
+      store.stopPlanning();
+      await vi.runAllTimersAsync();
+      expect(await planning).toBeInstanceOf(PlanCancelled);
+      expect(productionService.planJob).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("لا يكتب تخطيط بدأ قبل المسح في المخزن", async () => {
+    let finish: (value: PlanJob) => void = () => {};
+    vi.mocked(productionService.plan).mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+    const store = useProductionStore();
+    const planning = store.plan(7).catch((error: unknown) => error);
+    store.clear();
+    finish(job({ sheets: [sheet({ id: 2 })] }));
+    expect(await planning).toBeInstanceOf(PlanCancelled);
+    expect(store.sheets).toEqual([]);
+    expect(store.countByStatus).toEqual({});
+  });
+
+  it("الألواح الجديدة لا تدخل قائمة مصفّاة بحالة أخرى", async () => {
+    vi.mocked(productionService.sheets).mockResolvedValueOnce(sheetsPage([sheet({ id: 3, status: "done" })]));
+    vi.mocked(productionService.plan).mockResolvedValueOnce(job({ sheets: [sheet({ id: 2 })] }));
+    const store = useProductionStore();
+    await store.load("done");
+    await store.plan(7);
+    expect(store.sheets.map((candidate) => candidate.id)).toEqual([3]);
+    expect(store.total).toBe(1);
+    expect(store.countByStatus.planned).toBe(1);
+  });
+
+  it("اللوح الذي نُفِّذ أو أُتلف يخرج من تصفية «مخطَّط»", async () => {
+    vi.mocked(productionService.sheets).mockResolvedValueOnce(sheetsPage([sheet(), sheet({ id: 2 })]));
+    vi.mocked(productionService.recordRun).mockResolvedValueOnce(okRun);
+    vi.mocked(productionService.scrap).mockResolvedValueOnce(sheet({ id: 2, status: "scrapped", placements: [] }));
+    const store = useProductionStore();
+    await store.load("planned");
+    await store.recordRun(1, { outcome: "ok", duration_s: 200, calibration_id: null, notes: "" }, "r1");
+    await store.scrap(2);
+    expect(store.sheets).toEqual([]);
+    expect(store.total).toBe(0);
+    expect(store.countByStatus).toMatchObject({ planned: 0, done: 1, scrapped: 1 });
+  });
+
+  it("رد الكتالوج المتأخر بعد المسح لا يُكتب", async () => {
+    let finish: (value: Material[]) => void = () => {};
+    vi.mocked(catalogService.materials).mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+    const catalog = useCatalogStore();
+    const loading = catalog.load();
+    catalog.clear();
+    finish([leather]);
+    await loading;
+    expect(catalog.materials).toEqual([]);
+    expect(catalog.loaded).toBe(false);
+    expect(catalog.loading).toBe(false);
+  });
+});
+
+describe("الوصول في صفحة الإنتاج", () => {
+  it("مناطق الإعلان قائمة قبل رسائلها", async () => {
+    const page = await show(ProductionPage, "/production");
+    expect(page.get('.plan [role="alert"]').text()).toBe("");
+    expect(page.get('.plan [role="status"]').text()).toBe("");
+    expect(page.get('.sheet-card [role="alert"]').text()).toBe("");
+  });
+
+  it("ينقل التركيز إلى بديل الزر الذي اختفى", async () => {
+    await router.push("/production");
+    await router.isReady();
+    const page = mount(ProductionPage, { global: { plugins: [router] }, attachTo: document.body });
+    try {
+      await flushPromises();
+      await button(page, "إتلاف اللوح").trigger("click");
+      await flushPromises();
+      expect(document.activeElement?.textContent?.trim()).toBe("تراجع");
+      await button(page, "تراجع").trigger("click");
+      await flushPromises();
+      expect(document.activeElement?.textContent?.trim()).toBe("إتلاف اللوح");
+      await button(page, "تسجيل تشغيل").trigger("click");
+      await flushPromises();
+      expect(document.activeElement).toBe(page.get(".run input").element);
+    } finally {
+      page.unmount();
     }
   });
 });

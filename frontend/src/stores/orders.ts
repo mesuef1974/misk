@@ -89,6 +89,7 @@ export const useOrdersStore = defineStore("orders", () => {
 
   function clear(): void {
     latest += 1;
+    loading.value = false;
     orders.value = [];
     status.value = "";
     total.value = 0;

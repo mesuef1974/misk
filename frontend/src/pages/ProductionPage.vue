@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { errorMessage } from "@/api/client";
+import LiveNotice from "@/components/LiveNotice.vue";
 import SheetDiagram from "@/components/SheetDiagram.vue";
 import SheetRunForm from "@/components/SheetRunForm.vue";
 import { formatInstant, formatMoney } from "@/domain/orders";
@@ -14,7 +15,7 @@ import {
   usedFraction,
 } from "@/domain/production";
 import { useCatalogStore } from "@/stores/catalog";
-import { useProductionStore } from "@/stores/production";
+import { PlanCancelled, useProductionStore } from "@/stores/production";
 
 const production = useProductionStore();
 const catalog = useCatalogStore();
@@ -75,6 +76,8 @@ function choose(value: string): Promise<void> {
 }
 
 onMounted(() => Promise.all([production.load(), catalog.ensureLoaded()]));
+// المهمة تمضي في الخادم؛ لا استطلاع لصفحة غادرها المستخدم.
+onBeforeUnmount(() => production.stopPlanning());
 
 async function plan(): Promise<void> {
   if (planMaterial.value === "") return;
@@ -91,7 +94,7 @@ async function plan(): Promise<void> {
     // الألواح الجديدة مخطَّطة: تصفية بحالة أخرى تخفيها، فنعود إلى الكل.
     if (planned.length > 0 && filter.value !== "" && filter.value !== "planned") await choose("");
   } catch (error) {
-    planError.value = errorMessage(error);
+    if (!(error instanceof PlanCancelled)) planError.value = errorMessage(error);
   } finally {
     planning.value = false;
   }
@@ -101,9 +104,22 @@ function recorded(): void {
   running.value = null;
 }
 
+/** الزر الذي ضُغط يختفي مع تبدّل الأزرار؛ ينتقل التركيز إلى بديله كي لا يسقط إلى أول الصفحة. */
+async function focusById(id: string): Promise<void> {
+  await nextTick();
+  document.getElementById(id)?.focus();
+}
+
+function cancelScrap(sheetId: number): Promise<void> {
+  confirmingScrap.value = null;
+  return focusById(`scrap-${sheetId}`);
+}
+
 async function scrap(sheetId: number): Promise<void> {
   if (confirmingScrap.value !== sheetId) {
     confirmingScrap.value = sheetId;
+    // «تراجع» لا «تأكيد»: ضغطة Enter ثانية بالخطأ لا تُتلف اللوح.
+    await focusById(`scrap-cancel-${sheetId}`);
     return;
   }
   confirmingScrap.value = null;
@@ -137,8 +153,8 @@ async function scrap(sheetId: number): Promise<void> {
     <button type="submit" class="btn primary" :disabled="planning || planMaterial === ''">
       {{ planning ? "يخطّط…" : "تخطيط الألواح" }}
     </button>
-    <div v-if="planError" class="notice" role="alert">{{ planError }}</div>
-    <div v-else-if="planResult" class="notice ok" role="status">{{ planResult }}</div>
+    <LiveNotice :message="planError" />
+    <LiveNotice kind="status" :message="planError ? '' : planResult" />
   </form>
 
   <div class="filters" role="group" aria-label="تصفية بالحالة">
@@ -199,7 +215,7 @@ async function scrap(sheetId: number): Promise<void> {
         </ol>
       </section>
 
-      <div v-if="scrapError[card.sheet.id]" class="notice" role="alert">{{ scrapError[card.sheet.id] }}</div>
+      <LiveNotice :message="scrapError[card.sheet.id] ?? ''" />
 
       <SheetRunForm
         v-if="running === card.sheet.id"
@@ -214,9 +230,11 @@ async function scrap(sheetId: number): Promise<void> {
           <button type="button" class="btn danger" :disabled="scrapping" @click="scrap(card.sheet.id)">
             تأكيد الإتلاف
           </button>
-          <button type="button" class="btn" @click="confirmingScrap = null">تراجع</button>
+          <button :id="`scrap-cancel-${card.sheet.id}`" type="button" class="btn" @click="cancelScrap(card.sheet.id)">
+            تراجع
+          </button>
         </template>
-        <button v-else type="button" class="btn" :disabled="scrapping" @click="scrap(card.sheet.id)">
+        <button v-else :id="`scrap-${card.sheet.id}`" type="button" class="btn" :disabled="scrapping" @click="scrap(card.sheet.id)">
           إتلاف اللوح
         </button>
       </div>

@@ -21,20 +21,26 @@ export const useCatalogStore = defineStore("catalog", () => {
   const loading = ref(false);
   const loaded = ref(false);
   const loadError = ref("");
+  /** يزيد عند المسح: رد طلب بدأ قبله (بعد الخروج) لا يكتب في المخزن. */
+  let generation = 0;
 
   async function load(): Promise<void> {
+    const ticket = generation;
     loading.value = true;
     loadError.value = "";
     try {
-      [materials.value, templates.value] = await Promise.all([
+      const [loadedMaterials, loadedTemplates] = await Promise.all([
         catalogService.materials(),
         catalogService.templates(),
       ]);
+      if (ticket !== generation) return;
+      materials.value = loadedMaterials;
+      templates.value = loadedTemplates;
       loaded.value = true;
     } catch (error) {
-      loadError.value = errorMessage(error);
+      if (ticket === generation) loadError.value = errorMessage(error);
     } finally {
-      loading.value = false;
+      if (ticket === generation) loading.value = false;
     }
   }
 
@@ -57,32 +63,39 @@ export const useCatalogStore = defineStore("catalog", () => {
 
   // الكتابة ترمي الخطأ للصفحة لتعرضه بجانب النموذج الذي سبّبه.
   async function saveMaterial(draft: MaterialDraft): Promise<Material> {
+    const ticket = generation;
     const saved = await catalogService.saveMaterial(draft);
-    materials.value = place(materials.value, saved);
+    if (ticket === generation) materials.value = place(materials.value, saved);
     return saved;
   }
 
   async function saveTemplate(draft: TemplateDraft): Promise<ProductTemplate> {
+    const ticket = generation;
     const saved = await catalogService.saveTemplate(draft);
-    templates.value = place(templates.value, saved);
+    if (ticket === generation) templates.value = place(templates.value, saved);
     return saved;
   }
 
   async function loadCalibrations(materialId: number): Promise<Calibration[]> {
+    const ticket = generation;
     const rows = await catalogService.calibrations(materialId);
-    calibrations.value[materialId] = rows;
+    if (ticket === generation) calibrations.value[materialId] = rows;
     return rows;
   }
 
   /** الخادم يعيد السجل الموجود لقياس مكرر في اليوم نفسه، فلا يُضاف مرتين هنا أيضًا. */
   async function addCalibration(materialId: number, draft: CalibrationDraft): Promise<Calibration> {
+    const ticket = generation;
     const saved = await catalogService.addCalibration(materialId, draft);
+    if (ticket !== generation) return saved;
     const rows = calibrations.value[materialId] ?? [];
     if (!rows.some((row) => row.id === saved.id)) calibrations.value[materialId] = [saved, ...rows];
     return saved;
   }
 
   function clear(): void {
+    generation += 1;
+    loading.value = false;
     materials.value = [];
     templates.value = [];
     calibrations.value = {};
