@@ -17,7 +17,8 @@ def plan_sheets_async(self, *, material_id: int, actor_id: int | None = None) ->
     """
     actor = get_user_model().objects.filter(pk=actor_id).first() if actor_id else None
     try:
-        sheets = services.plan_sheets(material_id=material_id, actor=actor)
+        # معرّف المهمة ثابت عبر إعادة التسليم، فإعادتها بعد التثبيت تجد ألواحها.
+        sheets = services.plan_sheets(material_id=material_id, actor=actor, request_id=self.request.id or "")
     except services.ProductionError as exc:
         return {"error": str(exc)}
     return {"sheets": [sheet.pk for sheet in sheets]}
