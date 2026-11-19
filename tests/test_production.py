@@ -459,3 +459,23 @@ def test_sheet_list_query_count_is_constant(material, name_tag, calibration, dja
             assert [p.order_item.order.customer.name for p in sheet.placements.all()]
             assert [p.order_item.template.slug for p in sheet.placements.all()]
             assert list(sheet.runs.all()) == []
+
+
+@pytest.mark.django_db
+def test_plan_sheets_locks_orders_before_items(material, name_tag, calibration, monkeypatch):
+    """الإلغاء يقفل الطلب ثم ألواحه؛ لو قفل التخطيط البنود وحدها لثبّت قطع طلب أُلغي أثناءه.
+    SQLite يتجاهل FOR UPDATE، فالاختبار يثبت ترتيب الأقفال لا السباق نفسه (يحتاج PostgreSQL)."""
+    from django.db.models import QuerySet
+
+    planned = _confirmed_order(material, 3)
+    locked = []
+    real = QuerySet.select_for_update
+
+    def spy(self, *args, **kwargs):
+        locked.append(self.model._meta.label)
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(QuerySet, "select_for_update", spy)
+    services.plan_sheets(material_id=material.pk)
+    assert locked[:2] == ["orders.Order", "orders.OrderItem"]
+    assert Placement.objects.filter(order_item__order=planned).count() == 3
