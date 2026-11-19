@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { errorMessage } from "@/api/client";
+import LiveNotice from "@/components/LiveNotice.vue";
 import { operationLabel } from "@/domain/catalog";
 import { formatDate } from "@/domain/orders";
 import { buildRunDraft, emptyRunForm, OUTCOME_LABELS, OUTCOMES, type RunForm } from "@/domain/production";
@@ -24,7 +25,11 @@ const saving = ref(false);
 
 const calibrations = computed(() => catalog.calibrations[props.sheet.material_id] ?? []);
 
+const firstField = ref<HTMLInputElement | null>(null);
+
 onMounted(async () => {
+  // النموذج يحلّ محل زر «تسجيل تشغيل» الذي ضُغط: التركيز إلى أول حقل لا إلى أول الصفحة.
+  firstField.value?.focus();
   // المعايرة اختيارية في السجل: تعذّر جلبها لا يمنع تسجيل التشغيل.
   try {
     await catalog.loadCalibrations(props.sheet.material_id);
@@ -55,7 +60,7 @@ async function submit(): Promise<void> {
     <div class="form-grid">
       <label class="field">
         <span>المدة: دقائق</span>
-        <input v-model.number="form.minutes" type="number" min="0" step="1" inputmode="numeric" :aria-invalid="Boolean(errors.duration)" />
+        <input ref="firstField" v-model.number="form.minutes" type="number" min="0" step="1" inputmode="numeric" :aria-invalid="Boolean(errors.duration)" />
       </label>
       <label class="field">
         <span>ثوانٍ</span>
@@ -85,7 +90,7 @@ async function submit(): Promise<void> {
       </label>
     </div>
     <p class="hint">النجاح يغلق اللوح نهائيًّا. الفشل يبقيه مخطَّطًا لإعادة التشغيل.</p>
-    <div v-if="saveError" class="notice" role="alert">{{ saveError }}</div>
+    <LiveNotice :message="saveError" />
     <div class="form-actions">
       <button type="submit" class="btn primary" :disabled="saving">{{ saving ? "يسجّل…" : "حفظ التشغيل" }}</button>
       <button type="button" class="btn" :disabled="saving" @click="emit('cancel')">إلغاء</button>

@@ -30,16 +30,14 @@ function loadAll(): Promise<unknown> {
   return Promise.all([orders.load(), production.load(), catalog.load()]);
 }
 
-onMounted(async () => {
-  await session.ensureChecked();
-  if (session.isStaff) await loadAll();
-});
-// الدخول من هذه الصفحة نفسها لا يعيد تركيبها.
+onMounted(() => session.ensureChecked());
+// مصدر واحد للتحميل: صار المستخدم مشرفًا عند التركيب، أو بعد التحقق من الجلسة، أو بالدخول من هذه الصفحة نفسها.
 watch(
   () => session.isStaff,
   (isStaff) => {
     if (isStaff) void loadAll();
   },
+  { immediate: true },
 );
 </script>
 

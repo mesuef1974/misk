@@ -13,11 +13,21 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
 /** أخطاء الاتصال والبوابة عابرة: المهمة ماضية في العامل، فيُعاد الاستطلاع في موعده التالي. */
 const TRANSIENT = new Set([0, 502, 503, 504]);
 
-/** ينتظر مهمة التخطيط حتى تنتهي. معرّف مجهول يبقى `pending` في الخادم، فالحدّ هنا لا هناك. */
-async function settled(job: PlanJob): Promise<Sheet[]> {
+/** أُوقف انتظار التخطيط (مغادرة الصفحة أو الخروج). المهمة ماضية في الخادم، وألواحها تظهر عند التحميل التالي. */
+export class PlanCancelled extends Error {
+  constructor() {
+    super("أُوقف انتظار التخطيط");
+    this.name = "PlanCancelled";
+  }
+}
+
+/** ينتظر مهمة التخطيط حتى تنتهي. معرّف مجهول يبقى `pending` في الخادم، فالحدّ هنا لا هناك.
+ *  `alive` يُسأل بعد كل انتظار وكل رد: إن صار كاذبًا توقّف الاستطلاع. */
+async function settled(job: PlanJob, alive: () => boolean): Promise<Sheet[]> {
   for (const delay of PLAN_POLL_MS) {
     if (job.status !== "pending") break;
     await wait(delay);
+    if (!alive()) throw new PlanCancelled();
     try {
       job = await productionService.planJob(job.id);
     } catch (error) {
@@ -43,6 +53,18 @@ export const useProductionStore = defineStore("production", () => {
   const loaded = ref(false);
   const loadError = ref("");
   let latest = 0;
+  /** يزيد عند إيقاف التخطيط أو المسح: تخطيط بدأ قبله لا يستطلع ولا يكتب في القائمة. */
+  let planGeneration = 0;
+
+  /** هل يدخل لوح بهذه الحالة في التصفية المحمّلة؟ */
+  const matches = (sheetStatus: string) => status.value === "" || status.value === sheetStatus;
+
+  /** لوح غيّر حالته فخرج من التصفية: يُرفع من القائمة كما لو أُعيد التحميل. */
+  function dropIfFiltered(sheetId: number, sheetStatus: string): void {
+    if (matches(sheetStatus)) return;
+    sheets.value = sheets.value.filter((candidate) => candidate.id !== sheetId);
+    total.value = Math.max(0, total.value - 1);
+  }
 
   const totalAll = computed(() => Object.values(countByStatus.value).reduce((sum, count) => sum + count, 0));
   const hasMore = computed(() => sheets.value.length < total.value);
@@ -103,12 +125,26 @@ export const useProductionStore = defineStore("production", () => {
   /** الألواح الجديدة في أول القائمة (الأحدث أولًا كترتيب الخادم). قائمة فارغة حين لا قطع تنتظر.
    *  الخادم يخطّط في الطلب نفسه أو في عامل خلفي؛ في الثاني تُستطلع المهمة حتى تنتهي. */
   async function plan(materialId: number): Promise<Sheet[]> {
-    const planned = await settled(await productionService.plan(materialId));
-    const fresh = new Set(planned.map((sheet) => sheet.id));
-    sheets.value = [...planned, ...sheets.value.filter((sheet) => !fresh.has(sheet.id))];
-    total.value += planned.length;
+    const generation = planGeneration;
+    const alive = () => generation === planGeneration;
+    const job = await productionService.plan(materialId);
+    if (!alive()) throw new PlanCancelled();
+    const planned = await settled(job, alive);
+    if (!alive()) throw new PlanCancelled();
     moved(null, "planned", planned.length);
+    // الجديد مخطَّط: تصفية بحالة أخرى لا تعرضه.
+    if (matches("planned")) {
+      const fresh = new Set(planned.map((sheet) => sheet.id));
+      const added = planned.filter((sheet) => !sheets.value.some((existing) => existing.id === sheet.id));
+      sheets.value = [...planned, ...sheets.value.filter((sheet) => !fresh.has(sheet.id))];
+      total.value += added.length;
+    }
     return planned;
+  }
+
+  /** يوقف استطلاع التخطيط الجاري؛ الصفحة تستدعيه عند مغادرتها. */
+  function stopPlanning(): void {
+    planGeneration += 1;
   }
 
   /** السجل يدخل تاريخ اللوح، والتشغيل الناجح يغلقه في الخادم؛ نعكس ذلك هنا بلا إعادة تحميل. */
@@ -120,6 +156,7 @@ export const useProductionStore = defineStore("production", () => {
       if (run.outcome === "ok" && sheet.status === "planned") {
         sheet.status = "done";
         moved("planned", "done");
+        dropIfFiltered(sheet.id, "done");
       }
     }
     return run;
@@ -132,12 +169,15 @@ export const useProductionStore = defineStore("production", () => {
     if (index !== -1) {
       if (sheets.value[index].status !== scrapped.status) moved(sheets.value[index].status, scrapped.status);
       sheets.value[index] = scrapped;
+      dropIfFiltered(scrapped.id, scrapped.status);
     }
     return scrapped;
   }
 
   function clear(): void {
     latest += 1;
+    stopPlanning();
+    loading.value = false;
     sheets.value = [];
     status.value = "";
     total.value = 0;
@@ -161,6 +201,7 @@ export const useProductionStore = defineStore("production", () => {
     loadMore,
     ensureLoaded,
     plan,
+    stopPlanning,
     recordRun,
     scrap,
     clear,

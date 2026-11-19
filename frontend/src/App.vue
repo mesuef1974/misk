@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { errorMessage } from "@/api/client";
 import BrandIcon from "@/components/BrandIcon.vue";
 import BrandLogo from "@/components/BrandLogo.vue";
+import LiveNotice from "@/components/LiveNotice.vue";
 import ThemePicker from "@/components/ThemePicker.vue";
 import { useAppStore } from "@/stores/app";
 import { useCatalogStore } from "@/stores/catalog";
@@ -16,6 +18,7 @@ const session = useSessionStore();
 const theme = useThemeStore();
 const router = useRouter();
 const leaving = ref(false);
+const logoutError = ref("");
 
 onMounted(() => {
   store.loadPing();
@@ -26,6 +29,7 @@ onBeforeUnmount(() => window.removeEventListener("storage", theme.onStorage));
 
 async function logout(): Promise<void> {
   leaving.value = true;
+  logoutError.value = "";
   try {
     await session.logout();
     // بيانات المشرف لا تبقى في الذاكرة بعد الخروج.
@@ -33,8 +37,9 @@ async function logout(): Promise<void> {
     useProductionStore().clear();
     useCatalogStore().clear();
     await router.push({ name: "login" });
-  } catch {
+  } catch (error) {
     // تعذّر الوصول إلى الخادم: الجلسة ما زالت قائمة والزر يبقى ظاهرًا لإعادة المحاولة.
+    logoutError.value = `لم يتم الخروج: ${errorMessage(error)}`;
   } finally {
     leaving.value = false;
   }
@@ -60,6 +65,7 @@ async function logout(): Promise<void> {
         <a v-if="session.user?.admin_url" class="nav-item" :href="session.user.admin_url">لوحة الإدارة</a>
         <template v-if="session.user">
           <button type="button" class="nav-item" :disabled="leaving" @click="logout">خروج</button>
+          <LiveNotice :message="logoutError" />
           <div class="user">
             <span class="avatar" aria-hidden="true"></span>
             <div class="who"><b>{{ session.user.username }}</b><span class="muted">{{ store.siteTitle }}</span></div>

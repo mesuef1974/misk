@@ -188,6 +188,23 @@ describe("رابط لوحة الإدارة في القائمة", () => {
   });
 });
 
+describe("الخروج من القائمة", () => {
+  it("يعلن تعذّر الخروج ويبقي الزر لإعادة المحاولة", async () => {
+    vi.mocked(sessionService.me).mockResolvedValue(staff);
+    vi.mocked(sessionService.logout).mockRejectedValueOnce(new ApiError(0, "تعذّر الاتصال بالخادم"));
+    const { default: App } = await import("@/App.vue");
+    const app = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
+    const alert = app.get('nav [role="alert"]');
+    expect(alert.text()).toBe("");
+    const leave = app.findAll("button").find((candidate) => candidate.text() === "خروج")!;
+    await leave.trigger("click");
+    await flushPromises();
+    expect(alert.text()).toContain("تعذّر الاتصال بالخادم");
+    expect(leave.attributes("disabled")).toBeUndefined();
+  });
+});
+
 describe("شعار الشريط العلوي", () => {
   it("رابط الرئيسية يعرض الشعار ويحمل اسمًا مقروءًا", async () => {
     vi.mocked(sessionService.me).mockResolvedValue(null);
