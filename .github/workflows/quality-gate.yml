@@ -3,6 +3,9 @@ name: بوابة الجودة
 on:
   pull_request:
     branches: [main]
+  # يعمل على إيداع الدمج في main: Railway ينشره بعد نجاح هذه الحزمة وحدها (checkSuites في .railway/railway.ts).
+  push:
+    branches: [main]
   merge_group:
   workflow_dispatch:
 
@@ -11,7 +14,8 @@ permissions:
 
 concurrency:
   group: quality-gate-${{ github.ref }}
-  cancel-in-progress: true
+  # لا يُلغى تشغيل على main: الحزمة الملغاة تُسقط نشر إيداعها.
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 env:
   DJANGO_SETTINGS_MODULE: config.settings.testing
@@ -35,7 +39,9 @@ jobs:
       - name: detect-secrets على ما تغيّر
         run: |
           set -o pipefail
-          base="${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}"
+          base="${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}"
+          # before كله أصفار حين يُنشأ الفرع: لا أساس للمقارنة.
+          case "$base" in ''|*[!0]*) ;; *) base='' ;; esac
           [ -n "$base" ] || { echo "لا أساس للمقارنة في هذا الحدث"; exit 0; }
           # -z: الأسماء العربية وذات المسافات تصل كما هي. pipefail: انهيار git أو الماسح يُفشل الفحص ولا يمرّ صامتًا.
           git diff -z --name-only --diff-filter=d "$base"...HEAD -- . ':!frontend/package-lock.json' \
