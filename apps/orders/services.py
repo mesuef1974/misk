@@ -142,6 +142,8 @@ def create_order(
 def transition(*, order_id: int, to_status: str, actor=None) -> Order:
     """الانتقال إلى الحالة الحالية نفسها لا يغيّر شيئًا. التأكيد يشترط معايرة لكل مادة في الطلب.
 
+    «جاهز» يُرسل `order_ready_requested` قبل الحفظ، وبه يرفض الإنتاج طلبًا بقيت فيه قطعة لم تُقصّ.
+
     الإلغاء يرسل `order_cancelled` في المعاملة نفسها، وبه يرفع الإنتاج قطع الطلب عن الألواح التي لم تُقصّ.
     """
     order = Order.objects.select_for_update().get(pk=order_id)
@@ -155,6 +157,8 @@ def transition(*, order_id: int, to_status: str, actor=None) -> Order:
         if missing:
             names = "، ".join(str(m) for m in Material.objects.filter(pk__in=missing))
             raise OrderError(f"لا تأكيد قبل معايرة المادة من قصاصة اختبار: {names}")
+    if to_status == Status.READY:
+        signals.order_ready_requested.send(sender=Order, order=order)
     previous = order.status
     order.status = to_status
     order.save(update_fields=["status", "updated_at"])

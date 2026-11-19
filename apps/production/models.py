@@ -23,6 +23,8 @@ class Sheet(TimeStampedModel):
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PLANNED, db_index=True)
 
     class Meta:
+        verbose_name = "لوح"
+        verbose_name_plural = "الألواح"
         ordering = ["-created_at", "-id"]
 
     def __str__(self) -> str:
@@ -41,6 +43,8 @@ class Placement(TimeStampedModel):
     height_mm = models.DecimalField(max_digits=6, decimal_places=1)
 
     class Meta:
+        verbose_name = "موضع قطعة"
+        verbose_name_plural = "مواضع القطع"
         ordering = ["sheet_id", "y_mm", "x_mm"]
         constraints = [
             models.UniqueConstraint(fields=["order_item", "copy_index"], name="uniq_placement_item_copy"),
@@ -69,6 +73,8 @@ class RunLog(TimeStampedModel):
     request_id = models.CharField(max_length=64, unique=True)
 
     class Meta:
+        verbose_name = "سجل تشغيل"
+        verbose_name_plural = "سجل التشغيل"
         ordering = ["-created_at", "-id"]
 
     def __str__(self) -> str:

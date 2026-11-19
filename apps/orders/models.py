@@ -21,6 +21,8 @@ class Customer(TimeStampedModel):
     notes = models.TextField(blank=True)
 
     class Meta:
+        verbose_name = "عميل"
+        verbose_name_plural = "العملاء"
         ordering = ["name"]
 
     def __str__(self) -> str:
@@ -43,6 +45,8 @@ class Order(TimeStampedModel):
     notes = models.TextField(blank=True)
 
     class Meta:
+        verbose_name = "طلب"
+        verbose_name_plural = "الطلبات"
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
@@ -61,6 +65,8 @@ class OrderItem(TimeStampedModel):
     svg_sha256 = models.CharField(max_length=64, blank=True)
 
     class Meta:
+        verbose_name = "بند طلب"
+        verbose_name_plural = "بنود الطلبات"
         ordering = ["id"]
 
     def __str__(self) -> str:

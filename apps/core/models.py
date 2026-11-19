@@ -28,6 +28,8 @@ class AuditLog(TimeStampedModel):
     request_id = models.CharField(max_length=64, blank=True, db_index=True)
 
     class Meta:
+        verbose_name = "سجل تدقيق"
+        verbose_name_plural = "سجل التدقيق"
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["action", "created_at"])]
         constraints = [

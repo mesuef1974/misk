@@ -92,11 +92,15 @@ def test_confirm_requires_calibrated_material(material, name_tag):
 @pytest.mark.django_db
 def test_transitions_follow_the_map(material, name_tag, calibration):
     order = _order(material)
-    for status in ("confirmed", "in_production", "ready", "delivered"):
+    for status in ("confirmed", "in_production"):
         assert services.transition(order_id=order.pk, to_status=status).status == status
-    for status in ("draft", "confirmed", "cancelled"):
+    with pytest.raises(services.OrderError, match="قصّ"):  # «جاهز» بعد القصّ: tests/test_production.py
+        services.transition(order_id=order.pk, to_status="ready")
+    for status in ("draft", "confirmed", "delivered"):
         with pytest.raises(services.OrderError):
             services.transition(order_id=order.pk, to_status=status)
+    order.refresh_from_db()
+    assert order.status == "in_production"
 
 
 @pytest.mark.django_db

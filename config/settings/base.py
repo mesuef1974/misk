@@ -43,7 +43,7 @@ INSTALLED_APPS = [
     "whitenoise.runserver_nostatic",
     "django.contrib.staticfiles",
     "django_vite",
-    "axes",
+    "apps.core.axes_app.MiskAxesConfig",  # axes باسم عربي في لوحة الإدارة
     "apps.core",
     "apps.catalog",
     "apps.orders",
@@ -143,6 +143,8 @@ def _immutable_static(path: str, url: str) -> bool:
 
 
 WHITENOISE_IMMUTABLE_FILE_TEST = _immutable_static
+# whitenoise لا يعرف .webmanifest فيرسله application/octet-stream.
+WHITENOISE_MIMETYPES = {".webmanifest": "application/manifest+json"}
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
