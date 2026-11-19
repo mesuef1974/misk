@@ -73,12 +73,12 @@
   --night-surface: #312529; --night-raised: #46393d; --night-line: #5d4e53; --night-soft: #402b30; }
 
 :root, html[data-theme] {
-  --bg: light-dark(var(--day-bg), var(--night-bg));
-  --surface: light-dark(var(--day-surface), var(--night-surface));
-  --ink: light-dark(var(--day-ink), #fdf2f5);
-  --muted: light-dark(var(--day-muted), #c4b6ba);
-  --line: light-dark(var(--day-line), var(--night-line));
-  --accent: light-dark(var(--day-accent), var(--night-accent));
+  --bg: #f8f2e9;
+  --surface: #fdf2f5;
+  --ink: #35242c;
+  --muted: #6c5c61;
+  --line: #ddd0d4;
+  --accent: #68112f;
   --risk: light-dark(#76021a, #ff9a99);
   --font-ui: "Almarai", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
   --font-heading: "Cairo", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
@@ -86,7 +86,7 @@
 
 :root {
   /* الشعار: الشريط وكلمة DESIGN بلون السمة والطيّات شامبانيا على الفاتح، وكله أبيض على الداكن. */
-  --color-mark-ink: light-dark(var(--day-color), #ffffff);
+  --color-mark-ink: light-dark(#68112f, #ffffff);
   --color-mark-fold: light-dark(var(--champagne), #ffffff);
   /* كلمة القفل (BrandLockup.vue المولَّد) تقرأ --color-ink: تُربط بحبر النص ليتبع الوضع الليلي. */
   --color-ink: var(--ink);

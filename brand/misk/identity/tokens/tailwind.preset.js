@@ -107,6 +107,7 @@ module.exports = {
           "accent": "var(--misk-accent)",
           "border-strong": "var(--misk-border-strong)",
           "focus": "var(--misk-focus)",
+          "brand-text": "var(--misk-brand-text)",
           "brand-soft": "var(--misk-brand-soft)",
           "accent-text": "var(--misk-accent-text)",
           "accent-soft": "var(--misk-accent-soft)",
