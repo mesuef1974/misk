@@ -13,8 +13,9 @@ export default defineRailway(() => {
   // وسيط Celery والذاكرة المؤقتة (config/settings/base.py: REDIS_URL).
   const Redis = redis("Redis", { region: REGION });
 
+  // checkSuites: لا يُنشر إيداع على main قبل نجاح فحوص CI عليه (قرار المالك 2026-11-19، ج4).
   const misk = service("misk", {
-    source: github(REPO, { checkSuites: false }),
+    source: github(REPO, { checkSuites: true }),
     start: "bash scripts/railway-release.sh",
     healthcheck: "/health/",
     healthcheckTimeout: 120,
@@ -28,12 +29,15 @@ export default defineRailway(() => {
       DATABASE_URL: preserve(),
       SECRET_KEY: preserve(),
       REDIS_URL: Redis.env.REDIS_URL,
+      // مفعَّل في الإنتاج على الخدمتين؛ غيابه هنا قد يحذفه عند التطبيق فيعود التخطيط متزامنًا بصمت (ج3).
+      PLANNING_ASYNC: preserve(),
     },
   });
 
   // عامل Celery: المستودع نفسه بأمر بدء آخر، بلا healthcheck HTTP ولا هجرات (الهجرات في preDeploy الويب وحده).
   const worker = service("worker", {
-    source: github(REPO, { checkSuites: false }),
+    source: github(REPO, { checkSuites: true }),
+    // ينتظر هجرات preDeploy الويب قبل أن يأخذ مهمة (scripts/railway-worker.sh).
     start: "sh scripts/railway-worker.sh",
     replicas: { [REGION]: 1 },
     env: {
@@ -41,6 +45,7 @@ export default defineRailway(() => {
       DATABASE_URL: Postgres.env.DATABASE_URL,
       SECRET_KEY: misk.env.SECRET_KEY,
       REDIS_URL: Redis.env.REDIS_URL,
+      PLANNING_ASYNC: preserve(),
     },
   });
 
