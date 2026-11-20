@@ -35,7 +35,7 @@ vi.mock("@/services/session", () => ({
 }));
 
 function job(overrides: Partial<PlanJob> = {}): PlanJob {
-  return { id: "", status: "done", sheets: [], error: "", ...overrides };
+  return { id: "", status: "done", sheets: [], error: "", waiting: 0, ...overrides };
 }
 
 const leather: Material = {
@@ -336,6 +336,17 @@ describe("صفحة الإنتاج", () => {
     expect(page.get(".plan .notice").text()).toContain("لا قطع تنتظر التخطيط");
   });
 
+  it("تذكر حين تكون قطع المادة مخطَّطة سلفًا على ألواح تنتظر القصّ", async () => {
+    vi.mocked(productionService.plan).mockResolvedValueOnce(job({ waiting: 3 }));
+    const page = await show(ProductionPage, "/production");
+    await page.get(".plan select").setValue("7");
+    await page.get(".plan").trigger("submit");
+    await flushPromises();
+    const notice = page.get(".plan .notice").text();
+    expect(notice).toContain("مخطَّطة سلفًا على 3 لوح");
+    expect(notice).not.toContain("لا قطع تنتظر");
+  });
+
   it("تستطلع التخطيط في الخلفية حتى ينتهي", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout"] });
     try {
@@ -492,7 +503,7 @@ describe("مخزن الإنتاج", () => {
       const store = useProductionStore();
       const planning = store.plan(7);
       await vi.runAllTimersAsync();
-      expect((await planning).map((candidate) => candidate.id)).toEqual([2]);
+      expect((await planning).sheets.map((candidate) => candidate.id)).toEqual([2]);
       expect(productionService.planJob).toHaveBeenCalledTimes(3);
     } finally {
       vi.useRealTimers();
@@ -514,7 +525,7 @@ describe("مخزن الإنتاج", () => {
       await store.load("planned");
       expect(store.countByStatus).toEqual({ planned: 2 });
       await vi.runAllTimersAsync();
-      expect((await planning).map((candidate) => candidate.id)).toEqual([2]);
+      expect((await planning).sheets.map((candidate) => candidate.id)).toEqual([2]);
       expect(productionService.sheets).toHaveBeenLastCalledWith({ status: "planned" });
       expect(store.sheets.map((candidate) => candidate.id)).toEqual([2, 1]);
       expect(store.countByStatus).toEqual({ planned: 2 });

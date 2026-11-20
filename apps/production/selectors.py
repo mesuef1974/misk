@@ -19,6 +19,11 @@ def sheets(status: str | None = None) -> QuerySet[Sheet]:
     return queryset
 
 
+def waiting_sheets(material_id: int) -> int:
+    """ألواح المادة المخطَّطة التي لم تُقصّ بعد: تخطيط لا ينشئ جديدًا يذكرها كي لا يُفهم أن لا قطع للمادة."""
+    return Sheet.objects.filter(material_id=material_id, status=Sheet.Status.PLANNED).count()
+
+
 def status_counts() -> dict[str, int]:
     return dict(Sheet.objects.order_by().values_list("status").annotate(Count("id")))
 

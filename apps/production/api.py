@@ -90,11 +90,12 @@ class PlanJobOut(Schema):
     status: str  # pending | done | failed
     sheets: list[SheetOut]
     error: str = ""
+    waiting: int = 0  # ألواح المادة المخطَّطة التي لم تُقصّ بعد التخطيط
 
 
 def _job_out(job: jobs.PlanJob) -> dict:
     sheets = selectors.sheets().filter(pk__in=job.sheet_ids) if job.sheet_ids else []
-    return {"id": job.id, "status": job.status, "sheets": sheets, "error": job.error}
+    return {"id": job.id, "status": job.status, "sheets": sheets, "error": job.error, "waiting": job.waiting}
 
 
 @router.post("/sheets/plan", response={200: PlanJobOut, 202: PlanJobOut})
