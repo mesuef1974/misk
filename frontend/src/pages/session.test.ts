@@ -209,6 +209,22 @@ describe("الخروج من القائمة", () => {
     expect(alert.text()).toContain("تعذّر الاتصال بالخادم");
     expect(leave.attributes("disabled")).toBeUndefined();
   });
+
+  it("يمسح تنبيه تعذّر الخروج عند الانتقال إلى صفحة أخرى", async () => {
+    vi.mocked(sessionService.me).mockResolvedValue(staff);
+    vi.mocked(sessionService.logout).mockRejectedValueOnce(new ApiError(0, "تعذّر الاتصال بالخادم"));
+    const { default: App } = await import("@/App.vue");
+    const app = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
+    await app.findAll("button").find((candidate) => candidate.text() === "خروج")!.trigger("click");
+    await flushPromises();
+    const alert = app.get('nav [role="alert"]');
+    expect(alert.text()).toContain("تعذّر الاتصال بالخادم");
+    await router.push("/about");
+    await flushPromises();
+    expect(alert.text()).toBe("");
+    app.unmount();
+  });
 });
 
 describe("شعار الشريط العلوي", () => {

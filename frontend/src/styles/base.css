@@ -91,6 +91,8 @@ code { background: var(--surface); border: 1px solid var(--line); border-radius:
   .side nav.main .nav-item.router-link-active { background: none; color: var(--accent); }
   .side .aux { margin-block-start: 0; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0 4px; }
   .side .aux .nav-item { padding-inline: 8px; }
+  /* التنبيه لا يقسم صف الروابط: سطر كامل في آخره. */
+  .side .aux .logout-error.notice { flex-basis: 100%; order: 1; margin-block: 8px 0; padding: 10px 14px; font-size: 14px; }
   /* الصف لا يتسع للاسم، والدائرة وحدها زخرف ينزل إلى سطر ثانٍ بلا معنى: «خروج» يكفي دليلًا على الدخول. */
   .side .user { display: none; }
   .wrap { gap: 16px; padding: 16px 20px 108px; --wrap-pad-block: 16px; --wrap-pad-inline: 20px; }
