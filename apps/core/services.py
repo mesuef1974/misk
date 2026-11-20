@@ -99,11 +99,12 @@ def sign_in(request: HttpRequest, *, username: str, password: str) -> AbstractBa
     device = _known_device(request, username)
     failures_key = _device_failures_key(device) if device else _name_failures_key(username)
     slowed = throttled and cache.get(failures_key, 0) >= NAME_FAILURE_LIMIT
-    # `add` ذرّي: طلب واحد يأخذ الفرصة في كل فترة، وما سواه لا يجرّب كلمة المرور.
-    if slowed and not cache.add(_slow_slot_key(failures_key), 1, NAME_SLOW_INTERVAL_S):
-        raise SignInError(429, NAME_LOCKED)
     # ما يرفضه axes لقفل الزوج لا يجرّب كلمة المرور، فلا يُعدّ: عدّه كان يتيح لعنوان واحد قفل الاسم.
     pair_locked = throttled and AxesProxyHandler.is_locked(request, {"username": username})
+    # `add` ذرّي: طلب واحد يأخذ الفرصة في كل فترة، وما سواه لا يجرّب كلمة المرور. والزوج المقفول
+    # لا يأخذها، وإلا احتكر عنوان واحد كل الفرص بلا كلفة فحجب صاحب الحساب.
+    if slowed and (pair_locked or not cache.add(_slow_slot_key(failures_key), 1, NAME_SLOW_INTERVAL_S)):
+        raise SignInError(429, NAME_LOCKED)
     user = authenticate(request, username=username, password=password)
     if user is None or not user.is_staff:
         if throttled and not pair_locked:

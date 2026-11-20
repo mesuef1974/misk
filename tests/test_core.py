@@ -356,6 +356,21 @@ def test_owner_on_a_new_device_gets_in_once_the_slow_slot_frees(client, staff_us
 
 
 @pytest.mark.django_db
+def test_a_locked_pair_cannot_hog_the_slow_slot(client, staff_user, settings):
+    """عنوان قفله axes لا يأخذ فرصة الفترة، فلا يحجب به المهاجم صاحب الحساب."""
+    from django.core.cache import cache
+    from django.test import Client
+
+    settings.AXES_ENABLED = True
+    locked = {"REMOTE_ADDR": "203.0.113.250"}
+    _fail_logins(client, settings.AXES_FAILURE_LIMIT, **locked)  # يُقفل الزوج قبل بلوغ حدّ الاسم
+    _guess_from_many_addresses(services.NAME_FAILURE_LIMIT)
+    cache.delete(services._slow_slot_key(services._name_failures_key("staff")))  # انقضت الفترة
+    _fail_logins(client, 10, **locked)  # إغراق من الزوج المقفول
+    assert _login(Client(), REMOTE_ADDR="198.51.100.4").status_code == 200
+
+
+@pytest.mark.django_db
 def test_sign_in_resets_the_device_counter(client, staff_user, settings):
     """ح2: مشرف أخطأ حتى قُبيل الحدّ ثم دخل لا يُحجب بعد خطأ واحد لاحق."""
     settings.AXES_ENABLED = True
