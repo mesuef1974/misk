@@ -21,7 +21,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     DJANGO_SETTINGS_MODULE=config.settings.production \
     PATH="/opt/venv/bin:$PATH"
 RUN apt-get update && apt-get install -y --no-install-recommends libpq5 wget && rm -rf /var/lib/apt/lists/*
-RUN groupadd -r app && useradd -r -g app -d /app app && mkdir -p /app/staticfiles /app/media && chown -R app:app /app
+# /app نفسه ملك root (ينشئه WORKDIR): لو ملكه app لأنشأ فيه /app/json.py فظلّل وحدة (/app أول sys.path)، أو أعاد تسمية ملفات root (د7).
+RUN groupadd -r app && useradd -r -g app -d /app -M app
 WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 # الشيفرة ملك root ولا يكتبها مستخدم التشغيل؛ staticfiles وmedia وحدهما له (collectstatic في العامل والإصدار).
