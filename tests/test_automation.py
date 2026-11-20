@@ -139,6 +139,7 @@ def run(book, tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "prepush", record("prepush", True))
     monkeypatch.setattr(runner, "unpushable", record("unpushable", None))
     monkeypatch.setattr(runner, "push_and_open_pr", record("push", "https://github.com/o/r/pull/9"))
+    monkeypatch.setattr(runner, "git_fingerprint", lambda path, env: "same")
     monkeypatch.setattr(runner, "sh", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, HEAD + "\n", ""))
     return (lambda: [e["event"] for e in ledger.events("card1")]), calls
 
@@ -171,7 +172,7 @@ def test_runner_happy_path_records_each_step_and_opens_the_pr(run):
 
 def test_runner_failed_prepush_neither_pushes_nor_keeps_the_lock(run, monkeypatch):
     trail, calls = run
-    monkeypatch.setattr(runner, "prepush", lambda path: False)
+    monkeypatch.setattr(runner, "prepush", lambda path, env=None: False)
     assert runner.main([]) == 1
     assert trail()[-1] == "prepush_failed"
     assert "unpushable" not in calls and "push" not in calls
@@ -180,7 +181,7 @@ def test_runner_failed_prepush_neither_pushes_nor_keeps_the_lock(run, monkeypatc
 
 def test_runner_push_blocker_is_recorded_as_blocked_with_its_reason(run, monkeypatch):
     trail, calls = run
-    monkeypatch.setattr(runner, "unpushable", lambda path, head: "head_moved")
+    monkeypatch.setattr(runner, "unpushable", lambda path, head, env=None: "head_moved")
     assert runner.main([]) == 1
     assert trail()[-2:] == ["prepush_ok", "blocked"]
     assert ledger.state("card1")["reason"] == "head_moved"
@@ -237,11 +238,128 @@ def test_runner_pr_body_asks_for_the_owner_line_and_does_not_write_it(book, tmp_
         return subprocess.CompletedProcess(cmd, 0, "https://github.com/o/r/pull/9\n", "")
 
     monkeypatch.setattr(runner, "sh", fake_sh)
-    assert runner.push_and_open_pr(tmp_path, "card/card1", "card1") == "https://github.com/o/r/pull/9"
+    no_hooks = tmp_path / "no-hooks"
+    assert (
+        runner.push_and_open_pr(tmp_path, "card/card1", "card1", HEAD, no_hooks)
+        == "https://github.com/o/r/pull/9"
+    )
     push, create = commands
-    assert push == ["git", "push", "-u", "origin", "card/card1"]
+    # الـSHA المفحوص لا اسم الفرع، وبلا خطّافات: عملية متروكة لا تبدّل ما يُدفع ولا تعمل عند الدفع.
+    assert push == [
+        "git",
+        "-c",
+        f"core.hooksPath={no_hooks}",
+        "push",
+        "--no-verify",
+        "origin",
+        f"{HEAD}:refs/heads/card/card1",
+    ]
     body = create[create.index("--body") + 1]
     assert create[create.index("--title") + 1] == "عنوان"
     assert "card1" in body and "المطلوب" in body
     # السطر قالب بلا SHA حقيقي: فحص approval-head لا يقبله، فلا يُعتمد الطلب بلا مراجعة المالك.
     assert not re.search(r"الرأس [0-9a-f]{7,}", body)
+
+
+# د2: النموذج والفحص بلا رموز، والرموز بعد البصمة وحدها
+
+
+def test_isolated_env_drops_credentials_and_keeps_only_what_is_asked(tmp_path, monkeypatch):
+    for name in (
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "RAILWAY_API_TOKEN",
+        "AWS_SECRET_ACCESS_KEY",
+        "SSH_AUTH_SOCK",
+        "GIT_ASKPASS",
+    ):
+        monkeypatch.setenv(name, "secret")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "model-key")
+    monkeypatch.setenv("MISK_HARMLESS", "1")
+
+    sealed = runner.isolated_env(tmp_path / "m", keep=runner.MODEL_KEEP)
+    checking = runner.isolated_env(tmp_path / "c", home=True)
+
+    assert "secret" not in sealed.values() and "secret" not in checking.values()
+    assert sealed["ANTHROPIC_API_KEY"] == "model-key" and "ANTHROPIC_API_KEY" not in checking
+    assert sealed["MISK_HARMLESS"] == checking["MISK_HARMLESS"] == "1"
+    for env in (sealed, checking):
+        assert Path(env["GH_CONFIG_DIR"]).is_dir() and not any(Path(env["GH_CONFIG_DIR"]).iterdir())
+        assert (env["GIT_CONFIG_KEY_0"], env["GIT_CONFIG_VALUE_0"], env["GIT_TERMINAL_PROMPT"]) == (
+            "credential.helper",
+            "",
+            "0",
+        )
+    # المنزل للفحص وحده: claude يقرأ اعتماده من المنزل الحقيقي.
+    assert {checking[v] for v in runner.HOME_VARS} == {str(tmp_path / "c" / "home")}
+    assert all(sealed.get(v) == runner.os.environ.get(v) for v in runner.HOME_VARS)
+
+
+def _git(path, *args, env=None):
+    return subprocess.run(["git", *args], cwd=path, capture_output=True, text=True, env=env, check=False)
+
+
+def test_isolated_git_has_no_credential_helper_even_if_one_is_configured(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "credential.helper", "!echo password=leaked; :")
+    env = runner.isolated_env(tmp_path / "s", home=True)
+    proc = subprocess.run(
+        ["git", "credential", "fill"],
+        cwd=repo,
+        input="protocol=https\nhost=github.com\n\n",
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert "leaked" not in proc.stdout and proc.returncode != 0
+
+
+def test_git_fingerprint_sees_planted_config_and_hooks(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    env = dict(runner.os.environ)
+    base = runner.git_fingerprint(repo, env)
+    assert runner.git_fingerprint(repo, env) == base
+    _git(repo, "config", "core.fsmonitor", "steal-tokens")
+    planted_config = runner.git_fingerprint(repo, env)
+    assert planted_config != base
+    (repo / ".git" / "hooks" / "pre-push").write_text("#!/bin/sh\nsteal-tokens\n", encoding="utf-8")
+    assert runner.git_fingerprint(repo, env) != planted_config
+
+
+def test_runner_gives_the_model_and_the_check_no_credentials(run, monkeypatch):
+    trail, calls = run
+    monkeypatch.setenv("GH_TOKEN", "secret")
+    seen = {}
+
+    def model(path, card, model, max_turns, env=None):
+        seen["model"] = env
+        return 0
+
+    def check(path, env=None):
+        seen["check"] = env
+        return True
+
+    monkeypatch.setattr(runner, "run_model", model)
+    monkeypatch.setattr(runner, "prepush", check)
+    assert runner.main([]) == 0
+    assert "GH_TOKEN" not in seen["model"] and "GH_TOKEN" not in seen["check"]
+    assert seen["check"]["HOME"] != runner.os.environ.get("HOME")
+
+
+@pytest.mark.parametrize("changed_after", [1, 2])
+def test_runner_stops_before_credentials_when_git_config_changes(run, monkeypatch, changed_after):
+    """البصمة تُقاس بعد النموذج (1) وبعد الفحص (2)، فكلاهما ينفّذ شيفرة البطاقة."""
+    trail, calls = run
+    readings = iter(["before"] + ["before"] * (changed_after - 1) + ["planted"] * 3)
+    monkeypatch.setattr(runner, "git_fingerprint", lambda path, env: next(readings))
+    assert runner.main([]) == 1
+    assert trail()[-1] == "blocked"
+    assert ledger.state("card1")["reason"] == "git_config_changed"
+    assert "push" not in calls
+    assert ("prepush" in calls) == (changed_after == 2)
+    assert not runner.LOCK.exists()
