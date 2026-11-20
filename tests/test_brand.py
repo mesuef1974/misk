@@ -297,7 +297,13 @@ def test_old_logo_shape_is_gone_from_the_frontend():
     for path in [*FRONTEND_SRC.rglob("*.vue"), *FRONTEND_SRC.rglob("*.css")]:
         assert "65.85071" not in path.read_text(encoding="utf-8"), path.name
     components = {p.name for p in (FRONTEND_SRC / "components").glob("Brand*.vue")}
-    assert components == {"BrandIcon.vue", "BrandLockup.vue", "BrandMark.vue", "BrandPanel.vue"}
+    assert components == {
+        "BrandIcon.vue",
+        "BrandLockup.vue",
+        "BrandLockupRibbon.vue",
+        "BrandMark.vue",
+        "BrandPanel.vue",
+    }
 
 
 def test_spa_links_the_identity_icons(client):

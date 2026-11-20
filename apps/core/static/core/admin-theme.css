@@ -15,10 +15,11 @@ html:root {
   --body-medium-color: var(--ink);
   --body-loud-color: var(--ink);
 
-  --header-color: var(--bg);
-  --header-branding-color: var(--bg);
-  --header-bg: var(--accent);
-  --header-link-color: var(--bg);
+  /* الترويسة بلون سطح المنصة لا بلون السمة: الشعار بحبر السمة يذوب في خلفية بلونه. */
+  --header-color: var(--ink);
+  --header-branding-color: var(--accent);
+  --header-bg: var(--surface);
+  --header-link-color: var(--accent);
 
   --breadcrumbs-fg: var(--muted);
   --breadcrumbs-link-fg: var(--accent);
@@ -62,3 +63,32 @@ html:root {
 div.breadcrumbs { border-block-end: 1px solid var(--line); }
 .button, input[type="submit"], input[type="button"], a.button { border-radius: var(--radius); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* شعار اللوحة: قفل «مسك» بإكساء الشريط بنسخة السمة الجارية في الوضعين (brand/misk/lockup-ribbon).
+   الصورة 1600×571 بهامش شفاف يُطوى؛ المتصفح ينزّل نسخة السمة الجارية وحدها. الافتراضية عودي كما في theme-init.js. */
+#header { border-block-end: 1px solid var(--line); }
+#site-name a.brand-logo {
+  display: block;
+  inline-size: 224px;
+  aspect-ratio: 1600 / 571;
+  margin-block: -14px;
+  background: url("../brand/logo/misk-lockup-ribbon-oud.png") center / contain no-repeat;
+}
+html[data-palette="navy"] #site-name a.brand-logo { background-image: url("../brand/logo/misk-lockup-ribbon-navy.png"); }
+html[data-palette="royal-blue"] #site-name a.brand-logo { background-image: url("../brand/logo/misk-lockup-ribbon-royal-blue.png"); }
+html[data-palette="teal"] #site-name a.brand-logo { background-image: url("../brand/logo/misk-lockup-ribbon-teal.png"); }
+html[data-palette="emerald"] #site-name a.brand-logo { background-image: url("../brand/logo/misk-lockup-ribbon-emerald.png"); }
+html[data-palette="olive"] #site-name a.brand-logo { background-image: url("../brand/logo/misk-lockup-ribbon-olive.png"); }
+html[data-palette="purple"] #site-name a.brand-logo { background-image: url("../brand/logo/misk-lockup-ribbon-purple.png"); }
+html[data-palette="rose"] #site-name a.brand-logo { background-image: url("../brand/logo/misk-lockup-ribbon-rose.png"); }
+html[data-palette="chocolate"] #site-name a.brand-logo { background-image: url("../brand/logo/misk-lockup-ribbon-chocolate.png"); }
+html[data-palette="black"] #site-name a.brand-logo { background-image: url("../brand/logo/misk-lockup-ribbon-black.png"); }
+html[data-palette="oud"] #site-name a.brand-logo { background-image: url("../brand/logo/misk-lockup-ribbon-oud.png"); }
+#site-name .brand-name {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
