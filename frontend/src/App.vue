@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { errorMessage } from "@/api/client";
 import BrandIcon from "@/components/BrandIcon.vue";
+import BrandLockup from "@/components/BrandLockup.vue";
 import BrandMark from "@/components/BrandMark.vue";
 import LiveNotice from "@/components/LiveNotice.vue";
 import ThemePicker from "@/components/ThemePicker.vue";
@@ -57,8 +58,8 @@ async function logout(): Promise<void> {
 <template>
   <div class="shell">
     <aside class="side">
-      <!-- الشعار مسارات بلا نص حي: الاسم المقروء على الرابط نفسه. وهو رابط الرئيسية. -->
-      <RouterLink class="brand" to="/" :aria-label="store.siteTitle"><BrandMark class="sima-mark-intro" :size="36" /></RouterLink>
+      <!-- القفل (الرمز وكلمة «مسك») مسارات بلا نص حي: الاسم المقروء على الرابط نفسه. وهو رابط الرئيسية. -->
+      <RouterLink class="brand" to="/" :aria-label="store.siteTitle"><BrandLockup class="sima-mark-intro" :height="36" /></RouterLink>
       <nav class="main" aria-label="أقسام المنصة">
         <RouterLink class="nav-item" to="/orders"><BrandIcon name="order" /><span>الطلبات</span></RouterLink>
         <RouterLink class="nav-item" to="/production"><BrandIcon name="laser-engrave" /><span>الإنتاج</span></RouterLink>
