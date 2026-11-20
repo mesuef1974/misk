@@ -453,13 +453,12 @@ describe("اللوحة الرئيسية", () => {
   it("تعرض الاسم شعارًا بلون السمة لا نصًّا", async () => {
     const page = await show(HomePage, "/");
     const heading = page.get("h1");
-    // الشعار قفل v10 بإكساء الشريط: صورة السمة الجارية زخرفية (alt فارغ)، والقفل المسطّح بحبر العلامة
-    // (--color-mark-ink) احتياط الوضع الداكن؛ لا نص ظاهر بجوارهما والاسم المقروء في aria-label.
+    // الشعار قفل v10 بإكساء الشريط: صورة السمة الجارية في الوضعين، زخرفية (alt فارغ)، والاسم المقروء في aria-label.
     expect(heading.text().trim()).toBe("");
     expect(heading.attributes("aria-label")).toBeDefined();
-    expect(heading.get("img.ribbon").attributes("src")).toMatch(/misk-lockup-ribbon-[\w-]+\.png/);
-    expect(heading.get("img.ribbon").attributes("alt")).toBe("");
-    expect(heading.get("svg.brand-lockup").get("path").attributes("fill")).toContain("--color-mark-ink");
+    expect(heading.get("img.brand-lockup-ribbon").attributes("src")).toMatch(/misk-lockup-ribbon-[\w-]+\.png/);
+    expect(heading.get("img.brand-lockup-ribbon").attributes("alt")).toBe("");
+    expect(heading.find("svg").exists()).toBe(false);
   });
 
   it("تحمّل البيانات مرة واحدة عند أول فتح", async () => {

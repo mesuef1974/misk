@@ -18,14 +18,13 @@ describe("BrandLockupRibbon", () => {
     for (const { id } of PALETTES) {
       theme.setPalette(id);
       await lockup.vm.$nextTick();
-      expect(lockup.find("img.ribbon").attributes("src")).toContain(`misk-lockup-ribbon-${id}.png`);
+      expect(lockup.get("img").attributes("src")).toContain(`misk-lockup-ribbon-${id}.png`);
     }
   });
 
-  it("الصورة زخرفية والقفل المسطّح احتياط الوضع الداكن", () => {
+  it("الصورة زخرفية بلا نص بديل يكرّر الاسم", () => {
     const lockup = mount(BrandLockupRibbon, { props: { height: 88 } });
-    expect(lockup.find("img.ribbon").attributes("alt")).toBe("");
-    expect(lockup.find("svg.brand-lockup").attributes("aria-hidden")).toBe("true");
+    expect(lockup.get("img").attributes("alt")).toBe("");
     expect(lockup.text()).toBe("");
   });
 });

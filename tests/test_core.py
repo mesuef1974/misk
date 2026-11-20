@@ -571,6 +571,38 @@ def test_admin_inherits_platform_identity(client, staff_user, settings):
     assert finders.find("core/admin-theme.css")
 
 
+@pytest.mark.django_db
+def test_admin_header_shows_ribbon_lockup_for_each_palette(client, staff_user, settings):
+    import re
+
+    from django.contrib.staticfiles import finders
+
+    # شعار اللوحة قفل الشريط بنسخة السمة الجارية لا اسمًا نصيًّا؛ الاسم باقٍ لقارئ الشاشة.
+    client.force_login(staff_user)
+    index = client.get("/" + settings.ADMIN_URL).content.decode()
+    assert re.search(r'<a class="brand-logo" href="[^"]+"><span class="brand-name">', index)
+    css = open(finders.find("core/admin-theme.css"), encoding="utf-8").read()
+    palettes = [
+        "navy",
+        "royal-blue",
+        "teal",
+        "emerald",
+        "olive",
+        "purple",
+        "rose",
+        "chocolate",
+        "black",
+        "oud",
+    ]
+    for palette in palettes:
+        name = f"misk-lockup-ribbon-{palette}.png"
+        assert (
+            f'html[data-palette="{palette}"] #site-name a.brand-logo {{ background-image: url("../brand/logo/{name}"); }}'
+            in css
+        )
+        assert finders.find(f"brand/logo/{name}")
+
+
 def test_spa_applies_stored_theme_before_paint(client):
     from django.contrib.staticfiles import finders
 
