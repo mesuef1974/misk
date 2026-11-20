@@ -711,3 +711,50 @@ def test_media_rejects_traversal_missing_and_dirs(staff_client, media_files, pat
 @pytest.mark.django_db
 def test_media_rejects_writes(staff_client, media_files):
     assert staff_client.post("/media/designs/files/a.svg").status_code == 405
+
+
+@pytest.mark.django_db
+def test_media_served_through_storage_not_local_disk(staff_client, settings):
+    # في الإنتاج المخزن S3 لا قرص: العرض يمرّ بواجهة المخزن، فيعمل مع أي مخزن لا مع MEDIA_ROOT وحده.
+    from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
+
+    settings.STORAGES = {
+        **settings.STORAGES,
+        "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
+    }
+    default_storage.save("designs/files/b.png", ContentFile(b"\x89PNG"))
+    res = staff_client.get("/media/designs/files/b.png")
+    assert res.status_code == 200
+    assert res["Content-Type"] == "image/png"
+    assert b"".join(res.streaming_content) == b"\x89PNG"
+    assert staff_client.get("/media/designs/files/missing.png").status_code == 404
+
+
+def test_media_bucket_selects_private_s3_storage(monkeypatch):
+    from django.core.exceptions import ImproperlyConfigured
+
+    base = importlib.import_module("config.settings.base")
+    monkeypatch.setenv("MEDIA_S3_BUCKET", "misk-media")
+    try:
+        with pytest.raises(ImproperlyConfigured, match="MEDIA_S3_ACCESS_KEY_ID"):
+            importlib.reload(base)
+        monkeypatch.setenv("MEDIA_S3_ACCESS_KEY_ID", "test-id")
+        monkeypatch.setenv("MEDIA_S3_SECRET_ACCESS_KEY", "test-secret")
+        monkeypatch.setenv("MEDIA_S3_ENDPOINT", "https://storage.example.test")
+        options = importlib.reload(base).STORAGES["default"]["OPTIONS"]
+        assert importlib.reload(base).STORAGES["default"]["BACKEND"] == "storages.backends.s3.S3Storage"
+        assert options["bucket_name"] == "misk-media"
+        assert options["endpoint_url"] == "https://storage.example.test"
+        assert options["default_acl"] is None  # الدلو خاص: لا public-read
+        assert options["file_overwrite"] is False
+    finally:
+        for name in (
+            "MEDIA_S3_BUCKET",
+            "MEDIA_S3_ACCESS_KEY_ID",
+            "MEDIA_S3_SECRET_ACCESS_KEY",
+            "MEDIA_S3_ENDPOINT",
+        ):
+            monkeypatch.delenv(name, raising=False)
+        importlib.reload(base)
+    assert base.STORAGES["default"]["BACKEND"] == "django.core.files.storage.FileSystemStorage"
