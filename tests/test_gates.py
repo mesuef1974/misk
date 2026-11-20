@@ -644,6 +644,74 @@ def test_deploy_guard_blocks_the_bypasses_review_d1_found(command, rule):
 
 
 @pytest.mark.parametrize(
+    ("command", "rule"),
+    [
+        # علم عام بين gh والأمر الفرعي.
+        ("gh -R o/r pr merge 5", "gh-pr-merge"),
+        ("gh --repo o/r pr merge 5", "gh-pr-merge"),
+        ("gh --repo=o/r pr merge 5 --squash", "gh-pr-merge"),
+        ("gh -R o/r api -X PUT repos/o/r/pulls/5/merge", "gh-api-merge"),
+        ("gh -R o/r alias set m 'pr merge'", "gh-alias"),
+        ("gh api --method POST graphql -f query=@q", "gh-api-graphql"),
+        # تنصيص وهروب داخل الكلمة.
+        ('gh pr "merge" 5', "gh-pr-merge"),
+        ("gh pr mer\\ge 5", "gh-pr-merge"),
+        ('gh api -X PUT repos/o/r/pulls/5/me"rg"e', "gh-api-merge"),
+        ("rail\\way up", "railway-cli"),
+        ("'rail'way up", "railway-cli"),
+        # متغيّر ملتصق بحروف بلا أقواس.
+        ('r=rail; "$r"way up', "glued-expansion"),
+        ("w=way; rail$w up", "glued-expansion"),
+        ('w=way; rail"$w" up', "glued-expansion"),
+        # الرمز نفسه.
+        ('curl -X PUT -H "Authorization: token $(gh auth token)" https://api.github.com/x', "token-read"),
+        ("gh auth status --show-token", "token-read"),
+        ("gh auth status -t", "token-read"),
+        ("gh auth git-credential get", "token-read"),
+        ("printf 'protocol=https\\nhost=github.com\\n\\n' | git credential fill", "token-read"),
+        ("git-credential-manager.exe get", "token-read"),
+        # شيفرة مفسّر تستدعي عملية فرعية باسم مبني بالجمع.
+        ("node -e \"require('child_process').execSync('g'+'h pr mer'+'ge 5')\"", "inline-interpreter"),
+        ("python -c \"import subprocess as s; s.run(['g'+'h', 'pr'])\"", "inline-interpreter"),
+        ("pwsh -Command \"Start-Process ('g'+'h')\"", "inline-interpreter"),
+        # heredoc غير منصَّص يوسّع $(…)، وheredoc يُمرَّر إلى صدفة: كلاهما أمر لا بيانات.
+        ("cat > x.md <<EOF\n$(gh pr merge 5)\nEOF", "gh-pr-merge"),
+        ("cat <<'EOF' | bash\ngh pr merge 5\nEOF", "gh-pr-merge"),
+    ],
+)
+def test_deploy_guard_blocks_the_bypasses_review_z1_found(command, rule):
+    """ز1 (مراجعة 2026-11-20): التفافات خرجت بـ0 بعد تخفيف د1."""
+    assert rule in _deploy_guard().hits(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # كلمة مركَّبة في وسيط لا في موضع الأمر، ولا كلمة نشر.
+        "for f in a b; do cp ${f}.txt ${f}bak; done",
+        'echo "x$(git rev-parse HEAD)"',
+        'echo "build-$(date +%s)" > stamp',
+        # ملفات المستودع التي يحمل اسمها rail.
+        "bash -c 'bash scripts/railway-worker.sh'",
+        'bash -c "sed -n 1,20p .railway/railway.ts"',
+        "sh -c 'grep -rn version frontend/node_modules/railway/package.json'",
+        # نص heredoc حرفي يُكتب إلى ملف: بيانات لا أمر.
+        "cat > \"$S/pr.md\" <<'EOF'\nكان التوثيق يقول إن المكشوف SSH وإعداد railway وحدهما، و- `gh pr merge` محجوب.\nEOF\n"
+        'gh pr create --title t --body-file "$S/pr.md"',
+        'tee notes.md >/dev/null <<"EOF"\nrailway up\nEOF',
+        # مفسّر بلا عملية فرعية ولا كلمة نشر.
+        "python -c \"import json; print(json.dumps({'a': 1}))\"",
+        # قراءة حالة gh لا تطبع الرمز.
+        "gh auth status",
+        "gh pr view 70 --repo o/r --json headRefOid --jq .headRefOid",
+    ],
+)
+def test_deploy_guard_allows_what_review_z5_found_blocked(command):
+    """ز5 (مراجعة 2026-11-20): إيجابيات كاذبة حجبت عملًا مشروعًا."""
+    assert _deploy_guard().hits(command) == []
+
+
+@pytest.mark.parametrize(
     "command",
     [
         "cat .railway/railway.ts",
