@@ -244,6 +244,12 @@ LINE = "اعتُمد من المالك — 2026-11-20 — الرأس 7e3477d3"
         f"  {LINE}  ",
         f"<!-- مخفي -->\n{LINE}",
         f"```\nشيفرة\n```\n{LINE}",
+        # ز6: محارف الاتجاه والمسافة التي لا تنكسر تُدرجها محررات العربية ولا تُرى.
+        f"{LINE}‏",
+        f"‏{LINE}‎\n",
+        f" {LINE}",
+        "اعتُمد من المالك — 2026-11-20 — الرأس 7e3477d3",
+        f"⁧{LINE}⁩",
     ],
 )
 def test_approval_line_on_its_own_visible_line_counts(body):
@@ -264,6 +270,12 @@ def test_approval_line_on_its_own_visible_line_counts(body):
         f"[{LINE}](https://example.com)",
         f"<span>{LINE}</span>",
         f"> {LINE}",
+        # ز6: السطر المزاح بأربع مسافات أو بجدولة تعرضه الصفحة كتلة شيفرة.
+        f"وصف\n\n    {LINE}",
+        f"    {LINE}",
+        f"\t{LINE}",
+        f"  \t{LINE}",
+        f"‏    {LINE}",
     ],
 )
 def test_approval_line_hidden_or_embedded_does_not_count(body, gate):
