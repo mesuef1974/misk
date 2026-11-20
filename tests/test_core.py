@@ -537,3 +537,29 @@ def test_webmanifest_is_served_as_manifest_json(settings):
 
     types = MediaTypes(extra_types=settings.WHITENOISE_MIMETYPES)
     assert types.get_type("static/site.webmanifest") == "application/manifest+json"
+
+
+@pytest.mark.django_db
+def test_pending_migrations_exits_zero_when_all_are_applied(capsys):
+    from django.core.management import call_command
+
+    call_command("pending_migrations")
+    assert "مطبَّقة" in capsys.readouterr().out
+
+
+@pytest.mark.django_db
+def test_pending_migrations_exits_three_and_names_them(monkeypatch, capsys):
+    """د8: رمز الانتظار 3 لا 1، فلا يختلط بعطل القاعدة أو الإعداد."""
+    from django.core.management import call_command
+    from django.db.migrations.executor import MigrationExecutor
+
+    from apps.core.management.commands.pending_migrations import PENDING_EXIT
+
+    class Pending:
+        app_label, name = "orders", "0099_later"
+
+    monkeypatch.setattr(MigrationExecutor, "migration_plan", lambda self, targets: [(Pending, False)])
+    with pytest.raises(SystemExit) as stop:
+        call_command("pending_migrations")
+    assert stop.value.code == PENDING_EXIT
+    assert "orders.0099_later" in capsys.readouterr().out
