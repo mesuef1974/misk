@@ -41,6 +41,8 @@ async function settled(job: PlanJob, alive: () => boolean): Promise<PlanOutcome>
       if (!(error instanceof ApiError && TRANSIENT.has(error.status))) throw error;
     }
   }
+  // أُوقف أثناء آخر رد: لا 504 ولا 422 تعيد الصفحة المُزالة إلى التحميل.
+  if (!alive()) throw new PlanCancelled();
   if (job.status === "failed") throw new ApiError(422, job.error);
   if (job.status === "pending") throw new ApiError(504, PLAN_TIMEOUT_MESSAGE);
   return { sheets: job.sheets, waiting: job.waiting };
@@ -134,7 +136,7 @@ export const useProductionStore = defineStore("production", () => {
 
   /** الألواح الجديدة في أول القائمة (الأحدث أولًا كترتيب الخادم)، فارغة حين لا جديد، مع عدد ألواح المادة التي تنتظر القصّ.
    *  الخادم يخطّط في الطلب نفسه أو في عامل خلفي؛ في الثاني تُستطلع المهمة حتى تنتهي.
-   *  إن بدأ تحميل أثناء التخطيط فقد يحمل الألواح الجديدة أو لا يحملها، وسيكتب فوق القائمة والأعداد:
+   *  إن بدأ تحميل (أو تحميل المزيد) أثناء التخطيط فقد يحمل الألواح الجديدة أو لا يحملها، وسيكتب فوق القائمة والأعداد:
    *  دمجها هنا يعدّها مرتين أو يضيع، فيُعاد التحميل بالتصفية المطلوبة بعد التثبيت ليحكم وحده. */
   async function plan(materialId: number): Promise<PlanOutcome> {
     const generation = planGeneration;
@@ -145,7 +147,7 @@ export const useProductionStore = defineStore("production", () => {
     const outcome = await settled(job, alive);
     const planned = outcome.sheets;
     if (!alive()) throw new PlanCancelled();
-    if (planned.length > 0 && (ticket !== latest || loading.value)) {
+    if (planned.length > 0 && (ticket !== latest || loading.value || loadingMore.value)) {
       await load(requested);
       return outcome;
     }

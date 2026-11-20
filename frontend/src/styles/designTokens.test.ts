@@ -46,6 +46,10 @@ describe("رموز الهوية في الواجهة", () => {
     for (const text of [mark, favicon]) expect(text).not.toContain("<rect");
   });
 
+  it("أيقونة المتصفح تبيضّ على شريط التبويب الداكن كحبر العلامة ليلًا", () => {
+    expect(favicon).toMatch(/@media \(prefers-color-scheme: dark\) \{ path \{ fill: #ffffff; \} \}/);
+  });
+
   it("لا يبقى شعار الهوية السابقة في مكوّن ولا قناع", () => {
     const names = Object.keys(components).filter((file) => /\/Brand\w+\.vue$/.test(file)).sort();
     expect(names).toEqual(["BrandIcon", "BrandLockup", "BrandMark", "BrandPanel"].map((name) => `../components/${name}.vue`));

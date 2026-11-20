@@ -73,7 +73,7 @@ code { background: var(--surface); border: 1px solid var(--line); border-radius:
   -webkit-mask: url("../static/brand/motif-mono.svg") top center / 130px auto repeat;
   mask: url("../static/brand/motif-mono.svg") top center / 130px auto repeat;
 }
-/* الرمز المولَّد (BrandMark.vue) يضع size عرضًا وارتفاعًا والرمز أعرض من ارتفاعه: size ارتفاعه والعرض بنسبته. */
+/* الرمز المولَّد (BrandMark.vue) مربع ويضع size عرضًا وارتفاعًا؛ العرض يتبع النسبة ولا يتجاوز حاويته. */
 .brand-mark { inline-size: auto; max-inline-size: 100%; }
 
 @media (max-width: 860px) {

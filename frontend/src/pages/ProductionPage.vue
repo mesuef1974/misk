@@ -135,11 +135,21 @@ async function focusFirst(ids: string[]): Promise<void> {
   }
 }
 
+const sheetCard = (sheetId: number) => document.getElementById(sheetTitleId(sheetId))?.closest(".sheet-card") ?? null;
+
+/** يُنقل التركيز فقط إن كان في البطاقة أو سقط إلى body باختفاء ما فيها.
+ *  تركيز في مكان آخر (رقاقة تصفية أبدلت القائمة مثلًا) اختيار المستخدم فلا يُسرق. */
+function focusBelongsTo(card: Element | null): boolean {
+  const active = document.activeElement;
+  return !active || active === document.body || (card?.contains(active) ?? false);
+}
+
 /** النموذج يُغلق: يعود التركيز إلى زر فتحه، أو إلى البطاقة إن أُغلق اللوح بتشغيل ناجح. */
 function closeRunForm(sheetId: number): Promise<void> {
+  const move = focusBelongsTo(sheetCard(sheetId));
   const targets = focusFallbacks(sheetId, `run-${sheetId}`);
   running.value = null;
-  return focusFirst(targets);
+  return move ? focusFirst(targets) : Promise.resolve();
 }
 
 // تشغيل ناجح يرفع اللوح من تصفية «مخطَّط» فيُزال النموذج معه، وVue لا يوصل `recorded` من مكوّن أُزيل.
@@ -165,6 +175,7 @@ async function scrap(sheetId: number): Promise<void> {
   }
   // زرّا التأكيد يختفيان: عند الرفض يعود زر الإتلاف، وعند النجاح تبقى البطاقة بلا أزرار أو تخرج من التصفية.
   const targets = focusFallbacks(sheetId, `scrap-${sheetId}`);
+  const card = sheetCard(sheetId);
   confirmingScrap.value = null;
   delete scrapError.value[sheetId];
   scrapping.value = true;
@@ -175,7 +186,8 @@ async function scrap(sheetId: number): Promise<void> {
   } finally {
     scrapping.value = false;
   }
-  await focusFirst(targets);
+  // أثناء الطلب قد ينقل المستخدم التركيز إلى غير البطاقة: لا يُعاد منه.
+  if (focusBelongsTo(card)) await focusFirst(targets);
 }
 </script>
 
