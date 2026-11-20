@@ -65,7 +65,9 @@ PROMPT = """أنت تنفّذ بطاقة عمل واحدة في مستودع Dja
 {success}
 
 القواعد:
-- لا تعدّل ملفات .github/ أو scripts/ أو security/ أو lockfiles أو requirements*.txt أو Dockerfile أو .railway/.
+- لا تعدّل ملفات .github/ أو scripts/ أو security/ أو lockfiles أو requirements*.txt أو Dockerfile أو .railway/،
+  ولا ملفات إعداد الاختبار والبناء (conftest.py، pytest.ini، setup.cfg، ruff.toml، manage.py، frontend/*.config.*، tsconfig):
+  الفرق الذي يمسّها يُحجب ولا يُفحص.
 - كل تغيير في النماذج يرافقه makemigrations، وكل منطق في services.py لا في النماذج أو العروض.
 - أضف اختبارًا يفشل قبل تغييرك وينجح بعده.
 - في النهاية شغّل: python scripts/prepush_check.py --allow-missing، وأصلح ما يفشل.
