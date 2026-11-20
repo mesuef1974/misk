@@ -1,5 +1,6 @@
 """البوابات والمشغّل تفشل مغلقة: ما لم يُقَس لا يمرّ (docs/review-2026-11-16.md، القسم د)."""
 
+import fnmatch
 import json
 import os
 import subprocess
@@ -119,6 +120,51 @@ def test_gate_blocks_when_no_files_can_be_read(gate):
 def test_gate_forbids_paths_the_review_found_uncovered(gate, path):
     """ج6: تعليمات الوكلاء، وسكربتات npm، والمسارات والعامل، والهجرات في الجذر."""
     assert not gate(files=({"filename": path},))[0]
+
+
+TEST_AND_BUILD_CONFIG = [
+    "conftest.py",
+    "apps/orders/tests/conftest.py",
+    "pytest.ini",
+    "setup.cfg",
+    "setup.py",
+    "tox.ini",
+    "ruff.toml",
+    "apps/core/.ruff.toml",
+    "mypy.ini",
+    "sitecustomize.py",
+    "apps/core/evil.pth",
+    "manage.py",
+    "config/wsgi.py",
+    "config/asgi.py",
+    "frontend/vite.config.ts",
+    "frontend/vitest.config.ts",
+    "frontend/eslint.config.js",
+    "frontend/playwright.config.ts",
+    "frontend/.eslintrc.cjs",
+    "frontend/tsconfig.json",
+    "frontend/tsconfig.node.json",
+    "frontend/.npmrc",
+]
+
+
+@pytest.mark.parametrize("path", TEST_AND_BUILD_CONFIG)
+def test_gate_forbids_config_that_ci_executes(gate, path):
+    """د3: الطلب يشغّل إعداده في CI (conftest يُنجح كل اختبار، وvite.config يُنفَّذ في البناء)، فلا دمج آلي له."""
+    assert not gate(files=({"filename": path},))[0]
+
+
+@pytest.mark.parametrize("path", TEST_AND_BUILD_CONFIG)
+def test_sensitive_paths_workflow_asks_for_review_of_config_that_ci_executes(path):
+    """د3: فحص sensitive-paths يطابق `mandatory_review_when_diff_touches` بـfnmatch كما في سير العمل."""
+    categories = json.loads(RULES_TEXT)["mandatory_review_when_diff_touches"]
+    assert any(fnmatch.fnmatch(path, glob) for glob in categories["test_and_build_config"])
+
+
+@pytest.mark.parametrize("path", ["apps/orders/tests/test_api.py", "frontend/src/main.ts", "docs/setup.md"])
+def test_gate_still_allows_ordinary_code_and_tests(gate, path):
+    """الحظر على ملفات الإعداد لا يمتدّ إلى الشيفرة والاختبارات العادية."""
+    assert merge_gate.path_forbidden(path, merge_gate.forbidden_globs(RULES_TEXT)) is None
 
 
 def test_gate_stops_when_the_file_list_is_cut_short(gate):
