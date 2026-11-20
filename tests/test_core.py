@@ -654,3 +654,60 @@ def test_pending_migrations_exits_three_and_names_them(monkeypatch, capsys):
         call_command("pending_migrations")
     assert stop.value.code == PENDING_EXIT
     assert "orders.0099_later" in capsys.readouterr().out
+
+
+@pytest.fixture
+def media_files(settings, tmp_path):
+    root = tmp_path / "media"
+    (root / "designs" / "files").mkdir(parents=True)
+    (root / "designs" / "files" / "a.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"/>', "utf-8")
+    (root / "designs" / "files" / "a.pdf").write_bytes(b"%PDF-1.4")
+    (tmp_path / "secret.txt").write_text("x", "utf-8")
+    settings.MEDIA_ROOT = root
+    return root
+
+
+@pytest.fixture
+def staff_client(client, django_user_model):
+    client.force_login(django_user_model.objects.create_user("staff", password="x", is_staff=True))
+    return client
+
+
+@pytest.mark.django_db
+def test_media_hidden_from_anonymous_and_non_staff(client, django_user_model, media_files):
+    # أصول التصاميم مرخّصة: غير المشرف لا يراها ولا يعرف أنها موجودة.
+    assert client.get("/media/designs/files/a.svg").status_code == 404
+    client.force_login(django_user_model.objects.create_user("user", password="x"))
+    assert client.get("/media/designs/files/a.svg").status_code == 404
+
+
+@pytest.mark.django_db
+def test_media_svg_inline_sandboxed_for_staff(staff_client, media_files):
+    res = staff_client.get("/media/designs/files/a.svg")
+    assert res.status_code == 200
+    assert res["Content-Type"] == "image/svg+xml"
+    assert res["Content-Disposition"].startswith("inline")
+    assert "sandbox" in res["Content-Security-Policy"]
+    assert "script-src" not in res["Content-Security-Policy"]
+    assert res["Cache-Control"] == "private, max-age=3600"
+    assert b"<svg" in b"".join(res.streaming_content)
+
+
+@pytest.mark.django_db
+def test_media_non_image_downloads_as_attachment(staff_client, media_files):
+    res = staff_client.get("/media/designs/files/a.pdf")
+    assert res.status_code == 200
+    assert res["Content-Disposition"].startswith("attachment")
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "path", ["../secret.txt", "designs/../../secret.txt", "designs/files/missing.svg", "designs"]
+)
+def test_media_rejects_traversal_missing_and_dirs(staff_client, media_files, path):
+    assert staff_client.get(f"/media/{path}").status_code == 404
+
+
+@pytest.mark.django_db
+def test_media_rejects_writes(staff_client, media_files):
+    assert staff_client.post("/media/designs/files/a.svg").status_code == 405
