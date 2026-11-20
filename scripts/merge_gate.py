@@ -59,6 +59,8 @@ ALWAYS_FORBIDDEN = (
     "railway.json",
 )
 PASSING = {"SUCCESS", "NEUTRAL", "SKIPPED"}
+# الفحص الإلزامي لا يمرّ إلا بنجاح فعلي: تخطّيه بشرط `if` أو انتهاؤه محايدًا ليس نجاحًا.
+REQUIRED_PASSING = {"SUCCESS"}
 PENDING = {"PENDING", "IN_PROGRESS", "QUEUED", "EXPECTED", "REQUESTED", "WAITING"}
 
 
@@ -165,7 +167,8 @@ def evaluate(pr: str, repo: str | None) -> tuple[bool, list[str], str]:
     for c in checks:
         state = (c.get("conclusion") or c.get("state") or "").upper()
         name = c.get("name") or c.get("context") or "؟"
-        if state in PASSING:
+        passing = REQUIRED_PASSING if name in REQUIRED_CHECKS else PASSING
+        if state in passing:
             continue
         if state in PENDING or not state:
             reasons.append(f"فحص لم يكتمل: {name}")

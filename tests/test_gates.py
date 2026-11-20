@@ -71,6 +71,19 @@ def test_gate_blocks_any_state_it_does_not_know_as_passing(gate, state):
     assert any("scan" in reason for reason in reasons)
 
 
+@pytest.mark.parametrize("required", merge_gate.REQUIRED_CHECKS)
+@pytest.mark.parametrize("state", ["SKIPPED", "NEUTRAL"])
+def test_gate_does_not_count_a_skipped_mandatory_check_as_passing(gate, required, state):
+    checks = [c for c in GREEN if c["name"] != required] + [{"name": required, "conclusion": state}]
+    ok, reasons, _ = gate(checks=checks)
+    assert not ok
+    assert any(required in reason for reason in reasons)
+
+
+def test_gate_still_accepts_a_skipped_optional_check(gate):
+    assert gate(checks=[*GREEN, {"name": "معاينة اختيارية", "conclusion": "SKIPPED"}])[0]
+
+
 def test_gate_blocks_pending_and_missing_checks(gate):
     assert not gate(checks=[{"name": "scan", "state": "PENDING"}])[0]
     assert not gate(checks=[{"name": "scan"}])[0]
