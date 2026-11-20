@@ -15,6 +15,7 @@ ROOT = Path(settings.BASE_DIR)
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "automation"))
 
+import approval  # noqa: E402
 import check_migration_collisions as collisions  # noqa: E402
 import merge_gate  # noqa: E402
 import prepush_check  # noqa: E402
@@ -213,6 +214,45 @@ def test_gate_refuses_abbreviated_enable(monkeypatch, gate, flag):
 def test_gate_blocks_without_approval_or_on_a_stale_head(gate):
     assert not gate(body="")[0]
     assert not gate(body="اعتُمد من المالك — 2026-11-18 — الرأس aaaaaaaa")[0]
+
+
+LINE = "اعتُمد من المالك — 2026-11-20 — الرأس 7e3477d3"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        f"وصف\n\n{LINE}\n",
+        f"وصف\r\n\r\n{LINE}\r\n",
+        f"  {LINE}  ",
+        f"<!-- مخفي -->\n{LINE}",
+        f"```\nشيفرة\n```\n{LINE}",
+    ],
+)
+def test_approval_line_on_its_own_visible_line_counts(body):
+    assert approval.approved_heads(body) == ["7e3477d3"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        f"وصف\n<!-- {LINE} -->",
+        f"وصف\n<!--\n{LINE}\n-->",
+        f"وصف\n<!--\n{LINE}",
+        f"```\n{LINE}\n```",
+        f"~~~text\n{LINE}\n~~~",
+        f"```\n{LINE}",
+        f"`{LINE}`",
+        f"لا تكتب {LINE} قبل المراجعة",
+        f"[{LINE}](https://example.com)",
+        f"<span>{LINE}</span>",
+        f"> {LINE}",
+    ],
+)
+def test_approval_line_hidden_or_embedded_does_not_count(body, gate):
+    """د4: تعليق HTML وكتلة الشيفرة لا تعرضهما الصفحة سطرًا، والسطر داخل جملة أو وسم ليس اعتمادًا."""
+    assert approval.approved_heads(body) == []
+    assert not gate(body=body)[0]
 
 
 @pytest.mark.parametrize("content", ["", "{", "{}", '{"forbidden_for_auto_merge": []}'])

@@ -1,6 +1,6 @@
 """مصدر واحد لتعبير سطر الاعتماد؛ يستورده merge_gate.py وpr_approval_head_check.py فلا منطق ثانٍ.
 
-الصيغة في وصف الطلب:
+الصيغة في وصف الطلب، سطرًا وحده ظاهرًا في الصفحة:
     اعتُمد من المالك — 2026-11-07 — الرأس 1a2b3c4d
 الربط بالرأس إلزامي: دفعٌ بعد الاعتماد يُبطل السطر (الفحص يقارن البادئة بالـ SHA الحالي).
 """
@@ -9,12 +9,29 @@ from __future__ import annotations
 
 import re
 
-APPROVAL = re.compile(r"اعتُمد من المالك — (?P<date>\d{4}-\d{2}-\d{2}) — الرأس (?P<sha>[0-9a-f]{7,40})")
+# السطر كله ولا شيء غيره (د4 من مراجعة 2026-11-19 الثانية): لا يُقبل داخل رابط أو وسم أو جملة أطول.
+APPROVAL = re.compile(
+    r"^[ \t]*اعتُمد من المالك — (?P<date>\d{4}-\d{2}-\d{2}) — الرأس (?P<sha>[0-9a-f]{7,40})[ \t\r]*$",
+    re.MULTILINE,
+)
 MIN_HEAD = 7
+
+# ما لا تعرضه صفحة الطلب سطرًا عاديًّا: تعليق HTML (وغير المغلق يخفي ما بعده)، وكتلة شيفرة مسوّرة
+# (وغير المغلقة تمتدّ إلى النهاية)، وشيفرة سطرية. السطر هناك لا يراه المالك قرارًا فلا يُعدّ اعتمادًا.
+HIDDEN = re.compile(
+    r"<!--.*?(?:-->|\Z)"
+    r"|^[ \t]{0,3}(?P<fence>`{3,}|~{3,}).*?(?:^[ \t]{0,3}(?P=fence)[`~]*[ \t\r]*$|\Z)"
+    r"|`[^`\n]*`",
+    re.DOTALL | re.MULTILINE,
+)
+
+
+def visible_text(body: str) -> str:
+    return HIDDEN.sub("\n", body or "")
 
 
 def approved_heads(body: str) -> list[str]:
-    return [m.group("sha") for m in APPROVAL.finditer(body or "")]
+    return [m.group("sha") for m in APPROVAL.finditer(visible_text(body))]
 
 
 def same_head(written: str, head: str) -> bool:
