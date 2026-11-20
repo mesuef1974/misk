@@ -119,7 +119,7 @@ code { background: var(--surface); border: 1px solid var(--line); border-radius:
   border: 1px solid var(--line); border-radius: calc(var(--radius) * 2);
 }
 .empty .mark {
-  inline-size: 56px; aspect-ratio: 100 / 47.09756; margin: 0 auto 12px; background: var(--color-mark-ink);
+  inline-size: 56px; aspect-ratio: 100 / 100; margin: 0 auto 12px; background: var(--color-mark-ink);
   -webkit-mask: url("../static/brand/mark.svg") center / contain no-repeat;
   mask: url("../static/brand/mark.svg") center / contain no-repeat;
 }
