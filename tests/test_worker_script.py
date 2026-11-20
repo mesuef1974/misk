@@ -43,8 +43,11 @@ def worker(tmp_path):
   *) echo "{last_text}" >&2; exit {last_code} ;;
   esac ;;
 *collectstatic*) echo collected ;;
+*worker_health.py*) echo "health ready_file=$([ -e "$WORKER_READY_FILE" ] && echo stale || echo clean)" > "{(tmp_path / "health").as_posix()}" ;;
 esac""",
         )
+        ready = tmp_path / "ready"
+        ready.touch()  # بقية تشغيل سابق: لا تُنجح فحص الصحة قبل أن يجهز هذا العامل.
         stub(bin_dir, "celery", 'echo "celery started"')
         stub(bin_dir, "sleep", ":")
         env = {
@@ -53,6 +56,7 @@ esac""",
             "REDIS_URL": "redis://x",
             "DATABASE_URL": "postgres://x",
             "WORKER_MIGRATION_WAIT_S": str(wait_s),
+            "WORKER_READY_FILE": ready.as_posix(),
         }
         assert SHELL is not None
         return subprocess.run(
@@ -72,6 +76,14 @@ def test_worker_waits_for_pending_migrations_then_starts(worker):
     assert done.returncode == 0
     assert "celery started" in done.stdout
     assert "هجرات غير مطبَّقة: 1 هجرة غير مطبَّقة: orders.0003" in done.stderr
+
+
+def test_health_check_starts_first_without_a_stale_ready_file(worker, tmp_path):
+    """د8: فحص الصحة يبدأ قبل انتظار الهجرات، وجاهزية تشغيل سابق لا تُحسب لهذا العامل."""
+    done = worker([(PENDING_EXIT, "1 هجرة غير مطبَّقة: orders.0003")], wait_s=20)
+    assert done.returncode == 1
+    assert (tmp_path / "health").read_text(encoding="utf-8").strip() == "health ready_file=clean"
+    assert not (tmp_path / "ready").exists()
 
 
 def test_database_error_is_reported_as_an_error_not_as_pending_migrations(worker):

@@ -35,11 +35,15 @@ export default defineRailway(() => {
     },
   });
 
-  // عامل Celery: المستودع نفسه بأمر بدء آخر، بلا healthcheck HTTP ولا هجرات (الهجرات في preDeploy الويب وحده).
+  // عامل Celery: المستودع نفسه بأمر بدء آخر، بلا هجرات (الهجرات في preDeploy الويب وحده).
   const worker = service("worker", {
     source: github(REPO, { checkSuites: true }),
     // ينتظر هجرات preDeploy الويب قبل أن يأخذ مهمة (scripts/railway-worker.sh).
     start: "sh scripts/railway-worker.sh",
+    // لا يُسقَط العامل السابق قبل أن يجهز الجديد (scripts/worker_health.py): إن فشل preDeploy الويب
+    // فلم تُطبَّق الهجرات، فشل نشر العامل وبقي السابق (د8). المهلة فوق انتظار الهجرات (600 ث) والبدء.
+    healthcheck: "/health/",
+    healthcheckTimeout: 900,
     replicas: { [REGION]: 1 },
     env: {
       ALLOWED_HOSTS: misk.env.ALLOWED_HOSTS,

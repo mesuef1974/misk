@@ -1,9 +1,14 @@
 #!/bin/sh
-# أمر بدء خدمة العامل (Celery) على Railway: خدمة ثانية من المستودع نفسه، بلا healthcheck HTTP.
+# أمر بدء خدمة العامل (Celery) على Railway: خدمة ثانية من المستودع نفسه، فحص صحتها scripts/worker_health.py.
 set -eu
 [ -n "${REDIS_URL:-}" ] || { echo "::error:: REDIS_URL مطلوب للعامل" >&2; exit 1; }
 [ -n "${DATABASE_URL:-}" ] || { echo "::error:: DATABASE_URL مطلوب للعامل" >&2; exit 1; }
 export DJANGO_SETTINGS_MODULE=config.settings.production
+# فحص الصحة يبدأ أولًا ويردّ 503 حتى يكتب Celery ملف الجاهزية (config/celery.py). فإن لم يجهز العامل
+# (هجرات preDeploy فشلت فلم تُطبَّق) فشل نشره، ويبقى العامل السابق يعمل بدل أن يحلّ محلّه عامل ميت (د8).
+export WORKER_READY_FILE="${WORKER_READY_FILE:-/tmp/misk-worker-ready}"
+rm -f "$WORKER_READY_FILE"
+python scripts/worker_health.py &
 # الهجرات في preDeploy الويب، والعامل يبدأ بالتوازي معه: لا يأخذ مهمة بشيفرة تسبق مخطط القاعدة.
 # pending_migrations: 0 مطبَّقة، 3 معلّقة (ينتظر)، وغيرهما عطل (قاعدة أو إعداد) يُطبع سببه ولا يُسمّى «هجرات معلّقة» (د8).
 # بعد المهلة يخرج العامل فتعيده سياسة الإعادة، ومعه آخر سبب.
