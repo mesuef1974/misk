@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
 import BrandIcon from "@/components/BrandIcon.vue";
-import BrandMark from "@/components/BrandMark.vue";
+import BrandLockup from "@/components/BrandLockup.vue";
 import BrandPanel from "@/components/BrandPanel.vue";
 import StatusCard from "@/components/StatusCard.vue";
 import { ORDER_STATUSES, STATUS_LABELS } from "@/domain/orders";
@@ -44,8 +44,8 @@ watch(
 <template>
   <template v-if="session.isStaff">
     <div class="page-head">
-      <!-- الاسم رمزَ الهوية بلون السمة المختارة لا نصًّا؛ الاسم المقروء في aria-label. -->
-      <h1 class="home-logo" :aria-label="store.siteTitle"><BrandMark :size="104" /></h1>
+      <!-- الاسم قفلَ الهوية (الرمز والكلمة) بلون السمة المختارة لا نصًّا؛ الاسم المقروء في aria-label. -->
+      <h1 class="home-logo" :aria-label="store.siteTitle"><BrandLockup :height="88" /></h1>
       <RouterLink class="btn primary" :to="{ name: 'order-new' }">طلب جديد</RouterLink>
     </div>
 
