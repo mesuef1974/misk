@@ -444,12 +444,14 @@ def test_runner_finds_forbidden_paths_committed_or_not(monkeypatch, diff, untrac
     assert runner.touched_forbidden(ROOT) == expected
 
 
-def test_runner_does_not_check_or_push_a_diff_touching_forbidden_paths(monkeypatch):
+def test_runner_does_not_check_or_push_a_diff_touching_forbidden_paths(monkeypatch, tmp_path):
     events = []
     monkeypatch.setattr(runner, "pick_card", lambda: "c1")
     monkeypatch.setattr(runner, "acquire_lock", lambda: True)
     monkeypatch.setattr(runner, "release_lock", lambda: None)
-    monkeypatch.setattr(runner, "make_worktree", lambda card: (ROOT, "card/c1"))
+    monkeypatch.setattr(runner, "make_worktree", lambda card, env=None: (ROOT, "card/c1"))
+    monkeypatch.setattr(runner, "STATE", tmp_path / "state")
+    monkeypatch.setattr(runner, "baseline_drift", lambda: None)
     monkeypatch.setattr(runner, "run_model", lambda *a, **k: 0)
     monkeypatch.setattr(runner.ledger, "append", lambda card, event, **data: events.append((event, data)))
     monkeypatch.setattr(runner, "touched_forbidden", lambda path, env=None: ["scripts/prepush_check.py"])

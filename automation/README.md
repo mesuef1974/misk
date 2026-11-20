@@ -20,7 +20,12 @@ python automation/ledger.py list
 python automation/ledger.py show <card_id>
 python automation/runner.py --once            # يلتقط بطاقة واحدة
 python automation/runner.py --dry-run         # يعرض ما سيفعله دون تنفيذ
+python automation/runner.py --approve-baseline # المالك وحده: يطبع إعداد git وخطّافاته ويعتمده ويرفع الإيقاف
 ```
+
+قبل أول تشغيل يعتمد المالك بصمة إعداد git (`--approve-baseline`)، وتُحفظ خارج المستودع في `MISK_RUNNER_STATE`
+(افتراضًا `~/.misk-runner`). أي تغيّر عنها، أو في أثناء تشغيل بطاقة، يكتب ملف `halt` هناك فيقف المشغّل حتى يراجع المالك
+الإعداد ويعتمده من جديد. أسطر التتبّع `branch.<x>.remote/merge` التي يكتبها `git push -u` لا توقفه.
 
 ## قواعد التصميم (من دروس مشروع المدرسة)
 

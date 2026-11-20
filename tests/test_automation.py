@@ -121,6 +121,9 @@ def test_ledger_cli_refuses_an_unknown_event(book):
 def run(book, tmp_path, monkeypatch):
     """مشغّل ببطاقة ready واحدة وكل ما يلمس git والنموذج والشبكة مستبدَل. يعيد (أحداث البطاقة، الاستدعاءات)."""
     monkeypatch.setattr(runner, "LOCK", tmp_path / ".lock")
+    monkeypatch.setattr(runner, "STATE", tmp_path / "state")
+    runner.STATE.mkdir()
+    (runner.STATE / "git-baseline").write_text("same\n", encoding="utf-8")
     ledger.append("card1", "created", title="عنوان", body="المطلوب", success="ينجح")
     ledger.append("card1", "ready")
     calls: list[str] = []
@@ -139,7 +142,7 @@ def run(book, tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "prepush", record("prepush", True))
     monkeypatch.setattr(runner, "unpushable", record("unpushable", None))
     monkeypatch.setattr(runner, "push_and_open_pr", record("push", "https://github.com/o/r/pull/9"))
-    monkeypatch.setattr(runner, "git_fingerprint", lambda path, env: "same")
+    monkeypatch.setattr(runner, "git_fingerprint", lambda path, env, ignore_tracking=False: "same")
     monkeypatch.setattr(runner, "sh", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, HEAD + "\n", ""))
     return (lambda: [e["event"] for e in ledger.events("card1")]), calls
 
@@ -357,10 +360,89 @@ def test_runner_stops_before_credentials_when_git_config_changes(run, monkeypatc
     """البصمة تُقاس بعد النموذج (1) وبعد الفحص (2)، فكلاهما ينفّذ شيفرة البطاقة."""
     trail, calls = run
     readings = iter(["before"] + ["before"] * (changed_after - 1) + ["planted"] * 3)
-    monkeypatch.setattr(runner, "git_fingerprint", lambda path, env: next(readings))
+    monkeypatch.setattr(
+        runner,
+        "git_fingerprint",
+        lambda path, env, ignore_tracking=False: "same" if ignore_tracking else next(readings),
+    )
     assert runner.main([]) == 1
     assert trail()[-1] == "blocked"
     assert ledger.state("card1")["reason"] == "git_config_changed"
     assert "push" not in calls
     assert ("prepush" in calls) == (changed_after == 2)
     assert not runner.LOCK.exists()
+    assert (runner.STATE / "halt").read_text(encoding="utf-8").startswith("git_config_changed card1")
+
+
+# ز3 من مراجعة 2026-11-20: الحجب يدوم، والأساس يعتمده المالك
+
+
+def test_runner_halt_outlives_the_run_that_saw_the_plant(run, monkeypatch, capsys):
+    """الزرع الذي حُجب لا يصير أساس التشغيل التالي: الإيقاف يمنع حتى البطاقة الجديدة قبل أن تُلتقط."""
+    trail, calls = run
+    readings = iter(["before", "planted", "planted"])
+    monkeypatch.setattr(
+        runner,
+        "git_fingerprint",
+        lambda path, env, ignore_tracking=False: "same" if ignore_tracking else next(readings),
+    )
+    assert runner.main([]) == 1
+    ledger.append("card2", "created", title="ب", body="ب", success="ب")
+    ledger.append("card2", "ready")
+    calls.clear()
+    monkeypatch.setattr(runner, "git_fingerprint", lambda path, env, ignore_tracking=False: "same")
+    assert runner.main([]) == 1
+    assert "موقَف" in capsys.readouterr().out
+    assert calls == [] and [e["event"] for e in ledger.events("card2")][-1] == "ready"
+    assert not runner.LOCK.exists()
+
+
+@pytest.mark.parametrize(("baseline", "halts"), [("other", True), (None, False)])
+def test_runner_refuses_before_fetch_when_git_config_is_not_the_approved_baseline(run, baseline, halts):
+    trail, calls = run
+    approved = runner.STATE / "git-baseline"
+    if baseline is None:
+        approved.unlink()
+    else:
+        approved.write_text(baseline, encoding="utf-8")
+    assert runner.main([]) == 1
+    assert calls == [] and trail()[-1] == "ready"
+    assert (runner.STATE / "halt").exists() == halts
+    assert not runner.LOCK.exists()
+
+
+def test_make_worktree_fetches_isolated_and_writes_no_tracking_config(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(runner, "WORKTREES", tmp_path / "wts")
+    monkeypatch.setattr(runner, "sh", lambda cmd, **kw: seen.append((cmd, kw.get("env"))))
+    env = {"marker": "isolated"}
+    runner.make_worktree("card1", env=env)
+    assert [cmd[1] for cmd, _ in seen] == ["fetch", "worktree"]
+    assert all(used is env for _, used in seen)
+    assert "--no-track" in seen[1][0]
+
+
+def test_baseline_ignores_owner_tracking_lines_but_not_a_planted_helper(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    monkeypatch.setattr(runner, "ROOT", repo)
+    monkeypatch.setattr(runner, "STATE", tmp_path / "state")
+    runner.halt("git_config_changed", "card1")
+    assert runner.approve_baseline() == 0
+    assert runner.halted() is None and runner.baseline_drift() is None
+    env = dict(runner.os.environ)
+    strict = runner.git_fingerprint(repo, env)
+    _git(repo, "config", "branch.feature.remote", "origin")
+    _git(repo, "config", "branch.feature.merge", "refs/heads/feature")
+    assert runner.baseline_drift() is None
+    assert runner.git_fingerprint(repo, env) != strict
+    _git(repo, "config", "credential.helper", "!steal-tokens")
+    assert runner.baseline_drift() == "git_config_drift"
+
+
+def test_halt_keeps_the_first_reason(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "STATE", tmp_path / "state")
+    runner.halt("git_config_drift")
+    runner.halt("git_config_changed", "card9")
+    assert runner.halted().startswith("git_config_drift -")

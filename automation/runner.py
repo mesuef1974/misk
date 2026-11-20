@@ -14,7 +14,15 @@ prepush_check.py، والدمج بوابة CI وطابور الدمج. حارس�
 والدفع يدفع الإيداع المفحوص بالـSHA لا اسم الفرع، بلا خطّافات، فعملية متروكة لا تبدّل ما يُدفع.
 الباقي خارج المستودع: مستخدم نظام مستقل للمشغّل، فمفاتيح SSH وإعداد railway في المنزل تبقى في متناول خطوة النموذج.
 
+البصمة عبر التشغيلات (ز3 من مراجعة 2026-11-20): مقارنة قبل/بعد في التشغيل نفسه لا تكفي، فالزرع الذي حُجب يصير أساس
+التشغيل التالي. لذا يعتمد المالك بصمة أساس تُحفظ خارج المستودع (`MISK_RUNNER_STATE`، افتراضًا ~/.misk-runner)،
+ويُقارَن بها إعداد ROOT قبل أي أمر git ببيئة حقيقية. وأي تغيّر (عن الأساس أو بعد النموذج أو بعد الفحص) يكتب ملف
+إيقاف لا يرفعه إلا `--approve-baseline` بيد المالك بعد مراجعة الإعداد. والجلب وإنشاء الـ worktree في بيئة معزولة،
+و`--no-track` فلا يكتب كل worktree فرعًا في .git/config. أسطر التتبّع branch.<x>.remote/merge وحدها لا تدخل بصمة
+الأساس (يكتبها `git push -u` للمالك، والدفع هنا صريح بـ origin والـSHA)، وتبقى في مقارنة قبل/بعد.
+
     python automation/runner.py --once [--dry-run] [--max-turns 40] [--model <id>]
+    python automation/runner.py --approve-baseline   # المالك وحده: يعتمد إعداد git الحالي ويرفع الإيقاف
 يُجدوَل كل N دقائق؛ قفل automation/.lock يمنع تشغيلين متوازيين.
 """
 
@@ -24,6 +32,7 @@ import argparse
 import hashlib
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -40,6 +49,9 @@ ROOT = ledger.ROOT
 WORKTREES = ROOT / ".worktrees"
 LOCK = ROOT / "automation" / ".lock"
 LOCK_STALE_SECONDS = 3 * 60 * 60
+# حالة يملكها المالك خارج المستودع: الـ worktree وإيداعاته لا تصل إليها، ولا يعيدها `git clean`.
+STATE = Path(os.environ.get("MISK_RUNNER_STATE") or Path.home() / ".misk-runner")
+TRACKING_KEY = re.compile(r"^branch\..+\.(remote|merge)$", re.IGNORECASE)
 
 DISALLOWED_TOOLS = [
     "Bash(git push*)",
@@ -119,11 +131,12 @@ def isolated_env(scratch: Path, keep: frozenset[str] = frozenset(), home: bool =
     return env
 
 
-def git_fingerprint(path: Path, env: dict[str, str]) -> str:
+def git_fingerprint(path: Path, env: dict[str, str], ignore_tracking: bool = False) -> str:
     """بصمة ما ينفّذه git بصلاحيات من يستدعيه: الإعداد بكل نطاقاته وما يضمّه، وخطّافات المستودع المشترك.
 
     تُؤخذ بالبيئة الحقيقية (لا المعزولة) فترى ~/.gitconfig الذي سيقرؤه الدفع. تغيّرها بعد النموذج يعني أنه زرع
     مساعد اعتماد أو fsmonitor أو مرشّحًا أو pushurl أو خطّافًا يعمل حين يدفع المشغّل أو حين يعمل المالك في ROOT.
+    `ignore_tracking` يُسقط branch.<x>.remote/merge وحدها، لبصمة الأساس التي تدوم بين التشغيلات.
     """
     digest = hashlib.sha256()
     listing = sh(
@@ -131,8 +144,15 @@ def git_fingerprint(path: Path, env: dict[str, str]) -> str:
         cwd=path,
         capture_output=True,
         env=env,
-    )
-    digest.update(listing.stdout.encode("utf-8", "surrogateescape"))
+    ).stdout
+    if ignore_tracking:
+        # -z مع --show-origin: «الأصل\0المفتاح\nالقيمة\0» لكل مدخل.
+        fields = listing.split("\0")
+        pairs = zip(fields[0::2], fields[1::2], strict=False)
+        listing = "\0".join(
+            f"{origin}\0{entry}" for origin, entry in pairs if not TRACKING_KEY.match(entry.split("\n", 1)[0])
+        )
+    digest.update(listing.encode("utf-8", "surrogateescape"))
     common = sh(
         ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
         cwd=path,
@@ -144,6 +164,64 @@ def git_fingerprint(path: Path, env: dict[str, str]) -> str:
         if hook.is_file():
             digest.update(b"\0" + hook.relative_to(hooks).as_posix().encode() + b"\0" + hook.read_bytes())
     return digest.hexdigest()
+
+
+def halt(reason: str, card: str | None = None) -> None:
+    """إيقاف ثابت: يبقى بعد هذا التشغيل، والسبب الأول لا يُكتب فوقه."""
+    STATE.mkdir(parents=True, exist_ok=True)
+    stop = STATE / "halt"
+    if not stop.exists():
+        stop.write_text(f"{reason} {card or '-'} {time.strftime('%Y-%m-%dT%H:%M:%S')}\n", encoding="utf-8")
+
+
+def halted() -> str | None:
+    stop = STATE / "halt"
+    if not stop.exists():
+        return None
+    return stop.read_text(encoding="utf-8").strip() or "halt"
+
+
+def baseline_drift() -> str | None:
+    """سبب يمنع التشغيل قبل أي git ببيئة حقيقية، أو None: إعداد ROOT يطابق ما اعتمده المالك."""
+    approved = STATE / "git-baseline"
+    if not approved.exists():
+        return "no_baseline"
+    if (
+        git_fingerprint(ROOT, dict(os.environ), ignore_tracking=True)
+        != approved.read_text(encoding="utf-8").strip()
+    ):
+        return "git_config_drift"
+    return None
+
+
+def approve_baseline() -> int:
+    """للمالك وحده بعد مراجعة ما يُطبع: يعتمد إعداد git الحالي أساسًا ويرفع الإيقاف."""
+    trusted = dict(os.environ)
+    print(
+        sh(
+            ["git", "config", "--list", "--show-origin", "--includes"],
+            cwd=ROOT,
+            capture_output=True,
+            env=trusted,
+        ).stdout
+    )
+    common = sh(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=ROOT,
+        capture_output=True,
+        env=trusted,
+    )
+    hooks = Path(common.stdout.strip()) / "hooks"
+    active = [h.name for h in sorted(hooks.iterdir()) if h.is_file() and not h.name.endswith(".sample")]
+    print(f"خطّافات {hooks}: {', '.join(active) or 'لا شيء غير العيّنات'}")
+    STATE.mkdir(parents=True, exist_ok=True)
+    (STATE / "git-baseline").write_text(
+        git_fingerprint(ROOT, trusted, ignore_tracking=True) + "\n", encoding="utf-8"
+    )
+    previous = halted()
+    (STATE / "halt").unlink(missing_ok=True)
+    print(f"اعتُمدت البصمة في {STATE}" + (f"، ورُفع الإيقاف ({previous})" if previous else ""))
+    return 0
 
 
 def acquire_lock() -> bool:
@@ -177,14 +255,15 @@ def pick_card() -> str | None:
     return ready[0] if ready else None
 
 
-def make_worktree(card: str) -> tuple[Path, str]:
+def make_worktree(card: str, env: dict[str, str] | None = None) -> tuple[Path, str]:
+    """بالبيئة المعزولة (المستودع عام فالجلب لا يحتاج اعتمادًا)، و--no-track فلا يُكتب في .git/config شيء."""
     WORKTREES.mkdir(exist_ok=True)
     branch = f"card/{card}"
     path = WORKTREES / card
-    sh(["git", "fetch", "origin", "main"], check=False)
+    sh(["git", "fetch", "origin", "main"], check=False, env=env)
     if path.exists():
         return path, branch
-    sh(["git", "worktree", "add", "-b", branch, str(path), "origin/main"])
+    sh(["git", "worktree", "add", "--no-track", "-b", branch, str(path), "origin/main"], env=env)
     return path, branch
 
 
@@ -300,7 +379,22 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--model")
     ap.add_argument("--max-turns", type=int, default=40)
+    ap.add_argument("--approve-baseline", action="store_true")
     args = ap.parse_args(argv)
+
+    if args.approve_baseline:
+        if not acquire_lock():
+            return 1
+        try:
+            return approve_baseline()
+        finally:
+            release_lock()
+    stopped = halted()
+    if stopped:
+        print(
+            f"المشغّل موقَف ({stopped}). راجع `git config --list --show-origin` و.git/hooks ثم: --approve-baseline"
+        )
+        return 1
 
     card = pick_card()
     if not card:
@@ -313,8 +407,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     scratch = Path(tempfile.mkdtemp(prefix="misk-runner-"))
     try:
+        drift = baseline_drift()
+        if drift:
+            # قبل الجلب والدفتر: البطاقة تبقى ready، ولا يعمل git ببيئة حقيقية على إعداد لم يُعتمد.
+            if drift != "no_baseline":
+                halt(drift)
+            print(f"لا تشغيل ({drift}): راجع إعداد git ثم: --approve-baseline")
+            return 1
         ledger.append(card, "claimed", pid=os.getpid())
-        path, branch = make_worktree(card)
+        path, branch = make_worktree(card, env=isolated_env(scratch / "fetch", home=True))
         trusted = dict(os.environ)
         sealed = isolated_env(scratch / "model", keep=MODEL_KEEP)
         checking = isolated_env(scratch / "check", home=True)
@@ -324,6 +425,7 @@ def main(argv: list[str] | None = None) -> int:
         rc = run_model(path, card, args.model, args.max_turns, env=sealed)
         # بعد النموذج لا يمسّ git ببيئة فيها رموز إلا بعد أن تطابق البصمة.
         if git_fingerprint(path, trusted) != before:
+            halt("git_config_changed", card)
             ledger.append(card, "blocked", reason="git_config_changed")
             print(
                 "النموذج غيّر إعداد git أو خطّافاته — لا فحص ولا دفع؛ راجع `git config --list --show-origin` و.git/hooks"
@@ -348,6 +450,7 @@ def main(argv: list[str] | None = None) -> int:
         if not blocker and git_fingerprint(path, trusted) != before:
             # الفحص نفّذ شيفرة البطاقة أيضًا: تُقاس البصمة ثانيةً قبل أول أمر يرى الرموز.
             blocker = "git_config_changed"
+            halt(blocker, card)
         if blocker:
             # الدفتر يقبل الحالات المعروفة وحدها؛ السبب حقل لا حالة.
             ledger.append(card, "blocked", reason=blocker, head=head)
