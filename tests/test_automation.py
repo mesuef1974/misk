@@ -142,6 +142,7 @@ def run(book, tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "prepush", record("prepush", True))
     monkeypatch.setattr(runner, "unpushable", record("unpushable", None))
     monkeypatch.setattr(runner, "push_and_open_pr", record("push", "https://github.com/o/r/pull/9"))
+    monkeypatch.setattr(runner, "stored_credentials", lambda: [])
     monkeypatch.setattr(runner, "git_fingerprint", lambda path, env, ignore_tracking=False: "same")
     monkeypatch.setattr(runner, "sh", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, HEAD + "\n", ""))
     return (lambda: [e["event"] for e in ledger.events("card1")]), calls
@@ -190,6 +191,66 @@ def test_runner_push_blocker_is_recorded_as_blocked_with_its_reason(run, monkeyp
     assert ledger.state("card1")["reason"] == "head_moved"
     assert "push" not in calls
     assert not runner.LOCK.exists()
+
+
+def test_runner_warns_about_a_stored_credential_records_its_source_and_carries_on(run, monkeypatch, capsys):
+    trail, calls = run
+    monkeypatch.setattr(runner, "stored_credentials", lambda: ["gh keyring"])
+    assert runner.main([]) == 0
+    assert "اعتماد GitHub محفوظ في هذا الحساب (gh keyring)" in capsys.readouterr().out
+    claimed = next(e for e in ledger.events("card1") if e["event"] == "claimed")
+    assert claimed["exposed_credentials"] == ["gh keyring"]
+    assert trail()[-1] == "pr_opened" and calls[-1] == "push"
+
+
+def test_runner_records_no_exposure_field_when_nothing_is_stored(run):
+    runner.main([])
+    claimed = next(e for e in ledger.events("card1") if e["event"] == "claimed")
+    assert "exposed_credentials" not in claimed
+
+
+def test_stored_credentials_names_sources_without_keeping_the_secret(monkeypatch):
+    monkeypatch.setenv("GH_TOKEN", "env-token")
+    seen = []
+
+    def fake_run(cmd, **kw):
+        seen.append((cmd, kw))
+        if cmd[0] == "gh":
+            return subprocess.CompletedProcess(cmd, 0, "gho_stored\n", "")
+        return subprocess.CompletedProcess(
+            cmd, 0, "protocol=https\nhost=github.com\nusername=u\npassword=p\n", ""
+        )
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    found = runner.stored_credentials()
+    assert found == ["gh keyring", "git credential helper"]
+    assert "gho_stored" not in repr(found) and "password" not in repr(found)
+    for _cmd, kw in seen:
+        # متغير الرمز يُحذف: ما يجده gh محفوظ في الحساب لا ممرَّر في البيئة.
+        assert "GH_TOKEN" not in kw["env"]
+        assert (kw["env"]["GIT_TERMINAL_PROMPT"], kw["env"]["GCM_INTERACTIVE"]) == ("0", "never")
+    assert seen[1][1]["input"].startswith("protocol=https\nhost=github.com\n")
+
+
+def test_stored_credentials_ignores_missing_tools_failures_and_empty_answers(monkeypatch):
+    def fake_run(cmd, **kw):
+        if cmd[0] == "gh":
+            raise FileNotFoundError("gh")
+        return subprocess.CompletedProcess(cmd, 0, "protocol=https\nhost=github.com\n", "")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    assert runner.stored_credentials() == []
+
+    def timeout(cmd, **kw):
+        raise subprocess.TimeoutExpired(cmd, 20)
+
+    monkeypatch.setattr(runner.subprocess, "run", timeout)
+    assert runner.stored_credentials() == []
+
+    monkeypatch.setattr(
+        runner.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "x", "")
+    )
+    assert runner.stored_credentials() == []
 
 
 def test_runner_releases_the_lock_when_a_step_raises(run, monkeypatch):

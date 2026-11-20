@@ -12,7 +12,12 @@ prepush_check.py، والدمج بوابة CI وطابور الدمج. حارس�
 بمجلد منزل مؤقت فوق ذلك. وكل أمر git بعد النموذج معزول أيضًا، فإعداد git يزرعه النموذج (fsmonitor، مرشّحات) لا يرث
 الرموز. الرموز لا تظهر إلا في الدفع وفتح الطلب، وبعد التحقق من أن إعداد git وخطّافاته كما كانت قبل النموذج.
 والدفع يدفع الإيداع المفحوص بالـSHA لا اسم الفرع، بلا خطّافات، فعملية متروكة لا تبدّل ما يُدفع.
-الباقي خارج المستودع: مستخدم نظام مستقل للمشغّل، فمفاتيح SSH وإعداد railway في المنزل تبقى في متناول خطوة النموذج.
+حدود هذا العزل (ز2 من مراجعة 2026-11-20): كل ما سبق متغيرات بيئة تستطيع العملية المعزولة نفسها تغييرها. فما يحفظه
+حساب النظام خارج البيئة يبقى في متناول شيفرة البطاقة: رمز gh في keyring (مدير اعتمادات Windows) يصله `gh` بعد حذف
+`GH_CONFIG_DIR`، واعتماد git-credential-manager يصله استدعاؤه مباشرةً، وخطوة الفحص تستطيع إعادة APPDATA، وخطوة
+النموذج ترى المنزل الحقيقي بمفاتيح SSH وإعداد railway. العزل هنا يمنع الوصول العَرَضي لا المتعمَّد. الحل التشغيلي: حساب
+Windows مستقل للمشغّل لا يحفظ اعتماد GitHub في keyring، ويأخذ الرمز من `GH_TOKEN` في بيئته وحدها (يُحذف من بيئة
+النموذج والفحص). وحتى ذلك يفحص المشغّل في بدايته هل يجد اعتمادًا محفوظًا، فيحذّر ويسجّله في حدث claimed ولا يقف.
 
 البصمة عبر التشغيلات (ز3 من مراجعة 2026-11-20): مقارنة قبل/بعد في التشغيل نفسه لا تكفي، فالزرع الذي حُجب يصير أساس
 التشغيل التالي. لذا يعتمد المالك بصمة أساس تُحفظ خارج المستودع (`MISK_RUNNER_STATE`، افتراضًا ~/.misk-runner)،
@@ -110,6 +115,8 @@ def isolated_env(scratch: Path, keep: frozenset[str] = frozenset(), home: bool =
 
     `credential.helper` الفارغ في نطاق البيئة (يُقرأ آخرًا) يصفّر قائمة المساعدين كلها (manager من إعداد النظام).
     `home=True` يحوّل مجلدات المنزل إلى مجلد مؤقت فارغ: لا ~/.ssh ولا إعداد railway ولا ~/.gitconfig.
+    هذا يحجب الوصول العَرَضي وحده: العملية تستطيع إعادة ما حُذف، والاعتماد المحفوظ في keyring يبقى في متناولها
+    (انظر `stored_credentials`).
     """
     env = {name: value for name, value in os.environ.items() if name in keep or not is_secret(name)}
     gh_dir = scratch / "gh"
@@ -129,6 +136,41 @@ def isolated_env(scratch: Path, keep: frozenset[str] = frozenset(), home: bool =
         home_dir.mkdir(parents=True, exist_ok=True)
         env.update(dict.fromkeys(HOME_VARS, str(home_dir)))
     return env
+
+
+def stored_credentials() -> list[str]:
+    """اعتماد GitHub يحفظه حساب النظام خارج البيئة، فلا يعزله `isolated_env` عن شيفرة البطاقة (ز2).
+
+    يُسأل gh بلا متغيرات الرموز، فما يجده محفوظ في keyring أو إعداده، وgit بلا سؤال ولا نافذة، فما يجده محفوظ عند
+    مساعد الاعتماد. الرمز نفسه لا يُطبع ولا يُحفظ: يُعاد اسم المصدر وحده. وغياب الأداة أو مهلتها ليس اعتمادًا.
+    """
+    env = {name: value for name, value in os.environ.items() if not is_secret(name)}
+    env.update(GH_PROMPT_DISABLED="1", GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
+    probes = (
+        (
+            "gh keyring",
+            ["gh", "auth", "token", "--hostname", "github.com"],
+            None,
+            lambda out: bool(out.strip()),
+        ),
+        (
+            "git credential helper",
+            ["git", "credential", "fill"],
+            "protocol=https\nhost=github.com\n\n",
+            lambda out: "\npassword=" in "\n" + out,
+        ),
+    )
+    found = []
+    for name, cmd, stdin, holds in probes:
+        try:
+            done = subprocess.run(
+                cmd, cwd=ROOT, env=env, input=stdin, capture_output=True, text=True, timeout=20, check=False
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if done.returncode == 0 and holds(done.stdout):
+            found.append(name)
+    return found
 
 
 def git_fingerprint(path: Path, env: dict[str, str], ignore_tracking: bool = False) -> str:
@@ -414,7 +456,16 @@ def main(argv: list[str] | None = None) -> int:
                 halt(drift)
             print(f"لا تشغيل ({drift}): راجع إعداد git ثم: --approve-baseline")
             return 1
-        ledger.append(card, "claimed", pid=os.getpid())
+        exposed = stored_credentials()
+        if exposed:
+            # قرار المالك 2026-11-20: تحذير لا إيقاف حتى يُنقل المشغّل إلى حساب نظام مستقل.
+            print(
+                f"تحذير: اعتماد GitHub محفوظ في هذا الحساب ({'، '.join(exposed)})، وشيفرة البطاقة تستطيع الوصول إليه."
+                " شغّل المشغّل من حساب نظام مستقل يأخذ الرمز من GH_TOKEN (automation/README.md)."
+            )
+        ledger.append(
+            card, "claimed", pid=os.getpid(), **({"exposed_credentials": exposed} if exposed else {})
+        )
         path, branch = make_worktree(card, env=isolated_env(scratch / "fetch", home=True))
         trusted = dict(os.environ)
         sealed = isolated_env(scratch / "model", keep=MODEL_KEEP)
