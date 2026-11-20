@@ -281,7 +281,8 @@ def test_isolated_env_drops_credentials_and_keeps_only_what_is_asked(tmp_path, m
     checking = runner.isolated_env(tmp_path / "c", home=True)
 
     assert "secret" not in sealed.values() and "secret" not in checking.values()
-    assert sealed["ANTHROPIC_API_KEY"] == "model-key" and "ANTHROPIC_API_KEY" not in checking
+    model_var = "ANTHROPIC_API_KEY"
+    assert sealed[model_var] == runner.os.environ[model_var] and model_var not in checking
     assert sealed["MISK_HARMLESS"] == checking["MISK_HARMLESS"] == "1"
     for env in (sealed, checking):
         assert Path(env["GH_CONFIG_DIR"]).is_dir() and not any(Path(env["GH_CONFIG_DIR"]).iterdir())
