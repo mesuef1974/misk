@@ -1,6 +1,6 @@
 // وجهة ما بعد تسجيل الدخول تأتي من عنوان الصفحة، فلا تُقبل إلا مسارًا داخل الموقع (لا إعادة توجيه مفتوحة).
 
-export const DEFAULT_AFTER_LOGIN = "/orders";
+export const DEFAULT_AFTER_LOGIN = "/";
 
 export function safeNext(next: unknown): string {
   if (typeof next !== "string") return DEFAULT_AFTER_LOGIN;

@@ -41,7 +41,7 @@ describe("وجهة ما بعد الدخول", () => {
   it("تقبل المسار الداخلي وحده", () => {
     expect(safeNext("/orders/5?x=1")).toBe("/orders/5?x=1");
     for (const bad of ["https://evil.example", "//evil.example", "/\\evil.example", "orders", "/login", "/login?next=/a", undefined, ["/a"]]) {
-      expect(safeNext(bad)).toBe("/orders");
+      expect(safeNext(bad)).toBe("/");
     }
   });
 });
@@ -141,8 +141,8 @@ describe("صفحة الدخول", () => {
     const page = await open("/login?next=//evil.example");
     await fill(page, "staff", "correct horse");
     await page.get("form").trigger("submit");
-    await flushPromises();
-    expect(router.currentRoute.value.fullPath).toBe("/orders");
+    // الرئيسية تُحمَّل كسولًا، فالتنقّل إليها قد يتجاوز دورة وعود واحدة.
+    await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe("/"));
   });
 
   it("تعرض الرفض وتمسح كلمة المرور", async () => {
