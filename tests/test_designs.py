@@ -1,0 +1,314 @@
+import math
+from datetime import date
+from decimal import Decimal
+
+import pytest
+from django.core.management import call_command
+
+from apps.catalog import services as catalog_services
+from apps.catalog.models import ProductTemplate
+from apps.core.models import AuditLog
+from apps.designs import estimate, services, svg
+from apps.designs.models import Design, DesignFile, DesignSource, VariantEstimate
+
+KEY = {
+    "#e30613": {"operation": "cut", "material": "wood"},
+    "#009640": {"operation": "score", "material": "wood"},
+    "#000": {"operation": "engrave", "material": "wood"},
+    "#36a9e1": {"operation": "cut", "material": "acrylic"},
+}
+U = 25.4 / 72  # مليمتر لكل وحدة في ملف Illustrator بـ 72 نقطة في البوصة
+
+# 720×360 وحدة بعرض 254 مم: ملف Illustrator؛ قراءته بـ 96 نقطة في البوصة كانت ستعطي 190.5 مم.
+SAMPLE = b"""<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="25.4cm" height="12.7cm" viewBox="0 0 720 360">
+  <rect x="0" y="0" width="72" height="72" fill="#e94e1b"/>
+  <rect x="72" y="72" width="288" height="144" fill="none" stroke="#e30613"/>
+  <circle cx="216" cy="144" r="36" fill="none" stroke="#E30613"/>
+  <g transform="translate(10,0)"><line x1="100" y1="300" x2="200" y2="300" stroke="#009640"/></g>
+  <path d="M400,72h144v72h-144z" fill="none" style="stroke:#000000"/>
+  <rect x="400" y="200" width="72" height="72" fill="none" stroke="#36a9e1"/>
+  <line x1="0" y1="350" x2="72" y2="350" stroke="#ff00ff"/>
+</svg>
+"""
+
+
+def _length(d: str) -> float:
+    return sum(
+        math.dist(a, b) for line in svg.path_polylines(d) for a, b in zip(line, line[1:], strict=False)
+    )
+
+
+# ——— قراءة SVG ———
+
+
+def test_size_follows_declared_units_not_96_dpi():
+    result = svg.analyze(SAMPLE, KEY)
+    assert result.width_mm == pytest.approx(254)
+    assert result.height_mm == pytest.approx(127)
+    assert result.mm_per_unit == pytest.approx(U)
+
+
+def test_operations_lengths_and_counts():
+    ops = svg.analyze(SAMPLE, KEY).operations
+    assert ops["cut:wood"]["count"] == 2
+    assert ops["cut:wood"]["length_mm"] == pytest.approx(304.8 + 2 * math.pi * 12.7, abs=0.1)
+    assert ops["score:wood"]["length_mm"] == pytest.approx(100 * U, abs=0.05)
+    assert ops["engrave:wood"]["bbox_area_mm2"] == pytest.approx(50.8 * 25.4, abs=0.1)
+    assert ops["cut:acrylic"]["length_mm"] == pytest.approx(101.6, abs=0.05)
+
+
+def test_reference_square_detected_and_unknown_colors_reported():
+    result = svg.analyze(SAMPLE, KEY)
+    assert result.reference_mm == pytest.approx((25.4, 25.4))
+    assert result.unknown_colors == {"#ff00ff": 1}
+
+
+def test_outer_area_skips_parts_inside_others():
+    result = svg.analyze(SAMPLE, KEY)
+    assert svg.outer_area_mm2(result, "wood") == pytest.approx(101.6 * 50.8, abs=0.1)
+
+
+def test_ready_to_cut_drops_reference_and_states_millimetres():
+    ready = svg.ready_to_cut(SAMPLE, KEY)
+    assert b'width="254.000mm"' in ready
+    again = svg.analyze(ready, KEY)
+    assert again.reference_mm is None
+    assert again.operations == svg.analyze(SAMPLE, KEY).operations
+
+
+@pytest.mark.parametrize(
+    ("d", "expected"),
+    [
+        ("M0,0H10V10H0Z", 40),
+        ("m0,0 10,0 0,10z", 20 + math.sqrt(200)),
+        ("M0,0A5,5 0 0 1 10,0", 5 * math.pi),
+        ("M0,0a5,5 0 1 0 10,0", 5 * math.pi),
+        ("M0 0C0 0 10 0 10 0", 10),
+        ("M0,0 1e1,0", 10),
+        ("M0-5.5.5.5", math.dist((0, -5.5), (0.5, 0.5))),
+    ],
+)
+def test_path_lengths(d, expected):
+    assert _length(d) == pytest.approx(expected, rel=5e-4)
+
+
+def test_smooth_curves_reflect_previous_control():
+    assert _length("M0,0Q5,5 10,0T20,0") == pytest.approx(_length("M0,0Q5,5 10,0Q15,-5 20,0"))
+    assert _length("M0,0C0,5 10,5 10,0S20,-5 20,0") == pytest.approx(
+        _length("M0,0C0,5 10,5 10,0C10,-5 20,-5 20,0")
+    )
+
+
+def test_transforms_apply_to_lengths():
+    data = (
+        b'<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100">'
+        b'<g transform="scale(2) rotate(90)"><line x1="0" y1="0" x2="10" y2="0" stroke="#e30613"/></g></svg>'
+    )
+    assert svg.analyze(data, KEY).operations["cut:wood"]["length_mm"] == pytest.approx(20)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b'<!DOCTYPE svg [<!ENTITY x "y">]><svg xmlns="http://www.w3.org/2000/svg"/>',
+        b"<svg",
+        b'<html xmlns="http://www.w3.org/1999/xhtml"/>',
+        b'<svg xmlns="http://www.w3.org/2000/svg"/>',
+    ],
+)
+def test_rejects_unsafe_or_unsized_files(data):
+    with pytest.raises(svg.SvgError):
+        svg.analyze(data, KEY)
+
+
+# ——— التقدير ———
+
+
+def test_estimate_marks_missing_calibration_incomplete():
+    ops = svg.analyze(SAMPLE, KEY).operations
+    result = estimate.estimate(
+        operations=ops,
+        material_kind="wood",
+        settings={
+            "cut": estimate.Setting(Decimal("10"), 2, None, 1),
+            "engrave": estimate.Setting(Decimal("200"), 1, 100, 2),
+        },
+        material_area_mm2=5000,
+        sheet_area_mm2=Decimal("100000"),
+        sheet_cost=Decimal("20"),
+    )
+    assert result.seconds["cut"] == pytest.approx(ops["cut:wood"]["length_mm"] / 10 * 2, abs=0.1)
+    assert result.seconds["engrave"] == pytest.approx(
+        ops["engrave:wood"]["bbox_area_mm2"] / 0.1 / 200, abs=0.1
+    )
+    assert result.seconds["score"] is None
+    assert result.complete is False
+    assert result.material_cost == Decimal("1.00")
+    assert result.calibration_ids == [1, 2]
+
+
+def test_estimate_none_without_operations_on_material():
+    ops = svg.analyze(SAMPLE, KEY).operations
+    assert (
+        estimate.estimate(
+            operations=ops,
+            material_kind="leather",
+            settings={},
+            material_area_mm2=0,
+            sheet_area_mm2=Decimal("1"),
+            sheet_cost=Decimal("1"),
+        )
+        is None
+    )
+
+
+# ——— الاستيراد والتحليل ———
+
+
+@pytest.fixture
+def media(settings, tmp_path):
+    settings.MEDIA_ROOT = tmp_path / "media"
+    return settings.MEDIA_ROOT
+
+
+@pytest.fixture
+def source(db):
+    return DesignSource.objects.create(name="Test Store", color_key=KEY)
+
+
+@pytest.fixture
+def pack_folder(tmp_path):
+    variant = tmp_path / "incoming" / "Baby-Bank-Laser-Cut-1234567" / "Baby Bank-02"
+    variant.mkdir(parents=True)
+    (variant / "Baby Bank-02.svg").write_bytes(SAMPLE)
+    (variant / "Baby Bank-02.png").write_bytes(b"png-layout")
+    (variant / "Baby Bank-2.jpg").write_bytes(b"jpg-cover")
+    (variant / "Size Preview-2.png").write_bytes(b"png-size")
+    (variant / "Size Check & LightBurn Fixes.jpg").write_bytes(b"jpg-help")
+    (variant / "Baby Bank-02.dxf").write_bytes(b"dxf")
+    (variant / "desktop.ini").write_bytes(b"ini")
+    return variant.parent
+
+
+@pytest.fixture
+def wood(db):
+    material = catalog_services.upsert_material(
+        name="بتولا",
+        kind="wood",
+        thickness_mm=Decimal("3"),
+        sheet_width_mm=Decimal("600"),
+        sheet_height_mm=Decimal("400"),
+        sheet_cost=Decimal("24.00"),
+    )
+    for operation, speed, lines in (("cut", "10", None), ("score", "100", None), ("engrave", "300", 100)):
+        catalog_services.record_calibration(
+            material=material,
+            operation=operation,
+            power_pct=60,
+            speed_mm_s=Decimal(speed),
+            min_line_mm=Decimal("0.3"),
+            measured_on=date(2026, 11, 20),
+            lines_per_cm=lines,
+        )
+    return material
+
+
+def test_split_variant_name():
+    assert services.split_variant_name("Personalised Baby Milestone Bank-03") == (
+        "Personalised Baby Milestone Bank",
+        "03",
+    )
+    assert services.split_variant_name("Stroller") == ("Stroller", "")
+
+
+def test_import_classifies_files_and_is_idempotent(media, source, pack_folder):
+    report = services.import_folder(root=pack_folder, source=source)
+    assert len(report.created) == 1 and not report.skipped
+    variant = report.created[0]
+    design = variant.design
+    assert (design.name_original, variant.code) == ("Baby Bank", "02")
+    assert design.pack.listing_id == "1234567"
+    assert design.status == Design.Status.DRAFT
+    roles = {f.name: f.role for f in variant.files.all()}
+    assert roles == {
+        "Baby Bank-02.svg": DesignFile.Role.ORIGINAL,
+        "Baby Bank-02.png": DesignFile.Role.CUT_LAYOUT,
+        "Baby Bank-2.jpg": DesignFile.Role.COVER,
+        "Size Preview-2.png": DesignFile.Role.SIZE_REFERENCE,
+        "Baby Bank-02.dxf": DesignFile.Role.ALTERNATE,
+    }
+    dxf = variant.files.get(role=DesignFile.Role.ALTERNATE)
+    assert not dxf.file and dxf.external_path.endswith("Baby Bank-02.dxf")
+    source.refresh_from_db()
+    assert source.instructions
+
+    again = services.import_folder(root=pack_folder, source=source)
+    assert not again.created and "مستورد من قبل" in again.skipped[0]
+    assert AuditLog.objects.filter(action="designs.variant.import").count() == 1
+
+
+def test_command_imports_analyzes_and_estimates(media, source, pack_folder, wood):
+    call_command("import_designs", str(pack_folder), source="Test Store")
+    variant = source.designs.get().variants.get()
+    assert variant.analysis_error == ""
+    assert variant.sheet_width_mm == Decimal("254.0")
+    assert variant.analysis["unknown_colors"] == {"#ff00ff": 1}
+    ready = variant.files.get(role=DesignFile.Role.READY_CUT)
+    with ready.file.open("rb") as handle:
+        assert b"e94e1b" not in handle.read()
+
+    est = VariantEstimate.objects.get(variant=variant, material=wood)
+    assert est.complete is True
+    assert est.seconds["cut"] == pytest.approx(
+        variant.analysis["operations"]["cut:wood"]["length_mm"] / 10, abs=0.1
+    )
+    assert est.material_cost == Decimal("0.52")  # 101.6×50.8 من لوح 600×400 بسعر 24
+
+    services.analyze_variant(variant)  # إعادة التحليل تستبدل ولا تضاعف
+    assert variant.files.filter(role=DesignFile.Role.READY_CUT).count() == 1
+    assert variant.estimates.count() == 1
+
+
+def test_broken_svg_records_error(media, source, pack_folder):
+    (pack_folder / "Baby Bank-02" / "Baby Bank-02.svg").write_bytes(b"<svg")
+    variant = services.import_folder(root=pack_folder, source=source).created[0]
+    services.analyze_variant(variant)
+    assert variant.analysis_error and variant.analysis == {}
+
+
+def test_approve_and_license_guard(media, source, pack_folder, staff_user):
+    variant = services.import_folder(root=pack_folder, source=source).created[0]
+    design = variant.design
+    with pytest.raises(services.DesignError, match="الاسم العربي"):
+        services.approve(design)
+    design.name_ar, design.category = "حصّالة إنجازات الطفل", "مواليد"
+    with pytest.raises(services.DesignError, match="محلَّلة"):
+        services.approve(design)
+    services.analyze_variant(variant)
+    design.personalization = [{"name": "child_name", "type": "text", "max_length": 20}]
+    services.approve(design, actor=staff_user)
+    assert design.status == Design.Status.APPROVED
+
+    template = ProductTemplate.objects.create(
+        slug="bank", name="حصّالة", generator="none", width_mm=178, height_mm=250
+    )
+    with pytest.raises(services.DesignError, match="ليس تجاريًّا"):
+        services.link_template(design, template)
+    source.license_kind = DesignSource.License.COMMERCIAL
+    source.save()
+    services.link_template(design, template)
+    assert design.product_template == template
+
+
+def test_admin_pages_render(media, source, pack_folder, admin_client):
+    variant = services.import_folder(root=pack_folder, source=source).created[0]
+    services.analyze_variant(variant)
+    for url in (
+        "/admin/designs/design/",
+        f"/admin/designs/design/{variant.design.pk}/change/",
+        "/admin/designs/designvariant/",
+        f"/admin/designs/designvariant/{variant.pk}/change/",
+        "/admin/designs/designsource/",
+    ):
+        assert admin_client.get(url).status_code == 200, url
