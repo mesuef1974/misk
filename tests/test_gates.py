@@ -146,6 +146,10 @@ TEST_AND_BUILD_CONFIG = [
     "ruff.toml",
     "apps/core/.ruff.toml",
     "mypy.ini",
+    # ز4: coverage يقف عند أول .coveragerc فيُسقط fail_under، وruff يأخذ بأقرب pyproject.toml.
+    ".coveragerc",
+    ".coveragerc.toml",
+    "apps/x/pyproject.toml",
     "sitecustomize.py",
     "apps/core/evil.pth",
     "manage.py",
