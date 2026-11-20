@@ -360,7 +360,7 @@ def test_mark_intro_motion_is_applied():
     base = (ROOT / "frontend" / "src" / "styles" / "base.css").read_text(encoding="utf-8")
     app = (ROOT / "frontend" / "src" / "App.vue").read_text(encoding="utf-8")
     assert '@import "../static/brand/motion.css"' in base
-    assert re.search(r'<BrandMark[^>]*class="sima-mark-intro"', app)
+    assert re.search(r'<BrandLockup[^>]*class="sima-mark-intro"', app)
 
 
 def test_spa_shows_splash_until_app_boots(client):
