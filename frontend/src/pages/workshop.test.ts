@@ -549,6 +549,51 @@ describe("مخزن الإنتاج", () => {
       vi.useRealTimers();
     }
   });
+
+  it("إيقاف التخطيط أثناء آخر رد لا يعيد الصفحة إلى التحميل: لا 422 ولا 504", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      // الفشل يصل في أول رد، والمهلة في آخر رد؛ كلاهما بعد الإيقاف.
+      for (const [polls, last] of [
+        [1, job({ id: "j1", status: "failed", error: "لا مادة" })],
+        [PLAN_POLL_MS.length, job({ id: "j1", status: "pending" })],
+      ] as const) {
+        let finish: (value: PlanJob) => void = () => {};
+        vi.mocked(productionService.planJob).mockReset();
+        for (let poll = 1; poll < polls; poll += 1)
+          vi.mocked(productionService.planJob).mockResolvedValueOnce(job({ id: "j1", status: "pending" }));
+        vi.mocked(productionService.planJob).mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+        vi.mocked(productionService.plan).mockResolvedValueOnce(job({ id: "j1", status: "pending" }));
+        const store = useProductionStore();
+        const planning = store.plan(7).catch((error: unknown) => error);
+        await vi.advanceTimersByTimeAsync(PLAN_POLL_MS.slice(0, polls).reduce((sum, delay) => sum + delay, 0));
+        expect(productionService.planJob).toHaveBeenCalledTimes(polls);
+        store.stopPlanning();
+        finish(last);
+        expect(await planning).toBeInstanceOf(PlanCancelled);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("تخطيط انتهى أثناء «تحميل المزيد» يعيد التحميل ولا يكتب أعداده فوقه", async () => {
+    vi.mocked(productionService.sheets).mockResolvedValueOnce(sheetsPage([sheet({ id: 1 })], 2));
+    const store = useProductionStore();
+    await store.load();
+    let more: (value: ReturnType<typeof sheetsPage>) => void = () => {};
+    vi.mocked(productionService.sheets).mockReturnValueOnce(new Promise((resolve) => (more = resolve)));
+    const loadingMore = store.loadMore();
+    vi.mocked(productionService.plan).mockResolvedValueOnce(job({ sheets: [sheet({ id: 3 })] }));
+    const fresh = sheetsPage([sheet({ id: 3 }), sheet({ id: 1 }), sheet({ id: 2 })]);
+    vi.mocked(productionService.sheets).mockResolvedValueOnce(fresh);
+    await store.plan(7);
+    more(sheetsPage([sheet({ id: 2 })], 2));
+    await loadingMore;
+    expect(productionService.sheets).toHaveBeenLastCalledWith({ status: "" });
+    expect(store.sheets.map((candidate) => candidate.id)).toEqual([3, 1, 2]);
+    expect(store.countByStatus).toEqual({ planned: 3 });
+  });
 });
 
 describe("التخطيط والتصفية بعد الإيقاف والمسح", () => {
@@ -721,6 +766,22 @@ describe("الوصول في صفحة الإنتاج", () => {
       await flushPromises();
       expect(page.findAll(".sheet-card")).toHaveLength(1);
       expect(focused()).toBe("لوح 2");
+    } finally {
+      page.unmount();
+    }
+  });
+  it("لا يسرق إغلاقُ نموذج التشغيل التركيزَ من رقاقة التصفية", async () => {
+    const page = await attached([sheet({ id: 1 }), sheet({ id: 2 })], "مخطَّط");
+    try {
+      await page.findAll("button").filter((candidate) => candidate.text() === "تسجيل تشغيل")[0].trigger("click");
+      await flushPromises();
+      vi.mocked(productionService.sheets).mockResolvedValue(sheetsPage([sheet({ id: 5, status: "done" })]));
+      const chip = page.findAll(".chip").find((candidate) => candidate.text().startsWith("نُفِّذ"))!;
+      (chip.element as HTMLElement).focus();
+      await chip.trigger("click");
+      await flushPromises();
+      expect(page.find(".run").exists()).toBe(false);
+      expect(document.activeElement).toBe(chip.element);
     } finally {
       page.unmount();
     }
