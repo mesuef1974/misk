@@ -78,8 +78,7 @@ def scan(tmp_path, monkeypatch):
 def test_content_scan_sees_added_lines_in_arabic_and_spaced_names(scan, name):
     """د6: git يقتبس الأسماء العربية افتراضًا ("b/\\330...")، فكان فحص المحتوى يتخطّاها."""
     comment = scan({name: "token = SECRET_ABC_X\n"})
-    assert "secrets" in comment
-    assert name in comment
+    assert f"- secrets: {name}" in comment.splitlines()
 
 
 def test_clean_change_gets_no_comment(scan):

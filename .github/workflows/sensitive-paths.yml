@@ -39,7 +39,8 @@ jobs:
 
           def target(line):
               # ما بقي مقتبسًا (تنصيص أو محرف تحكّم في الاسم) يُفكّ ولا يُتخطّى؛ /dev/null وحده بلا هدف.
-              name = line[4:]
+              # git يُلحق TAB بالاسم ذي المسافة غير المقتبس؛ الاسم الذي فيه TAB فعلًا يُقتبس فلا يُمسّ.
+              name = line[4:].removesuffix("\t")
               if len(name) > 1 and name[0] == name[-1] == '"':
                   raw = name[1:-1]
                   try:
