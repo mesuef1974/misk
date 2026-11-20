@@ -33,12 +33,25 @@ jobs:
           hits = {cat: [p for p in changed if any(fnmatch.fnmatch(p, g) for g in globs)]
                   for cat, globs in rules["mandatory_review_when_diff_touches"].items()}
           # الأسطر المضافة وحدها تُطابَق بأنماط المحتوى (أسرار، Django غير آمن)، وكل نمط يوسم ملفه.
-          patch = subprocess.check_output(["git", "diff", "--no-renames", "--no-color", "-U0", f"origin/{base}...HEAD"], text=True, encoding="utf-8", errors="replace")
+          # core.quotePath=false: لا يقتبس git الأسماء العربية بالثماني، فلا يتخطّاها فحص المحتوى (د6).
+          patch = subprocess.check_output(["git", "-c", "core.quotePath=false", "diff", "--no-renames", "--no-color", "-U0", f"origin/{base}...HEAD"], text=True, encoding="utf-8", errors="replace")
           content = {cat: [re.compile(p) for p in pats] for cat, pats in rules.get("mandatory_review_when_diff_content_matches", {}).items()}
+
+          def target(line):
+              # ما بقي مقتبسًا (تنصيص أو محرف تحكّم في الاسم) يُفكّ ولا يُتخطّى؛ /dev/null وحده بلا هدف.
+              name = line[4:]
+              if len(name) > 1 and name[0] == name[-1] == '"':
+                  raw = name[1:-1]
+                  try:
+                      name = raw.encode("utf-8").decode("unicode_escape").encode("latin-1").decode("utf-8")
+                  except (UnicodeError, ValueError):
+                      name = raw
+              return name[2:] if name.startswith("b/") else None
+
           current = None
           for line in patch.splitlines():
               if line.startswith("+++ "):
-                  current = line[6:] if line.startswith("+++ b/") else None
+                  current = target(line)
               elif line.startswith("+") and current:
                   for cat, pats in content.items():
                       if any(p.search(line[1:]) for p in pats) and current not in hits.setdefault(cat, []):
