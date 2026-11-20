@@ -494,6 +494,39 @@ def test_deploy_guard_blocks_merge_and_deploy_in_any_form(command, rule):
 
 
 @pytest.mark.parametrize(
+    ("command", "rule"),
+    [
+        # الاسم المستعار يُحفظ في إعداد gh فيبقى للجلسات التالية.
+        ("gh alias set m 'pr merge'", "gh-alias"),
+        ("gh alias import aliases.yml", "gh-alias"),
+        # الاستعلام من ملف لا يُرى نصّه في الأمر.
+        ("gh api graphql -F query=@q.graphql", "gh-api-graphql"),
+        ("gh api graphql --input body.json", "gh-api-graphql"),
+        # مسار يُبنى بمتغيّر أو جسم من ملف.
+        ("m=mer; gh api -X PUT repos/o/r/pulls/5/${m}ge", "gh-api-indirect"),
+        ("gh api -X PUT repos/o/r/pulls/5/$(echo merge)", "gh-api-indirect"),
+        ("gh api repos/o/r/pulls/5 --input body.json", "gh-api-indirect"),
+        ("gh api repos/o/r/pulls/5 -F x=@f", "gh-api-indirect"),
+        # كلمة تُركَّب من متغيّر أو أقواس تلتصق بحروف.
+        ("r=rail; ${r}way up", "glued-expansion"),
+        ("$(echo rail)way up", "glued-expansion"),
+        ("rail''way up", "glued-expansion"),
+        ('g""h pr merge 5', "glued-expansion"),
+        # شيفرة تُمرَّر إلى مفسّر وتذكر gh أو railway.
+        ("python -c \"import subprocess; subprocess.run(['gh','pr','mer'+'ge','5'])\"", "inline-interpreter"),
+        ("node -e \"require('child_process').execSync('gh pr mer'+'ge 5')\"", "inline-interpreter"),
+        ("bash -c 'g=gh; $g pr view 5'", "inline-interpreter"),
+        ("pwsh -Command \"& ('rail'+'way') up\"", "inline-interpreter"),
+        ("python - <<'EOF'\nimport os; os.system('gh pr mer' + 'ge 5')\nEOF", "inline-interpreter"),
+        ("iex \"gh pr mer$('ge') 5\"", "inline-interpreter"),
+    ],
+)
+def test_deploy_guard_blocks_the_bypasses_review_d1_found(command, rule):
+    """د1 (مراجعة 2026-11-19 الثانية): التفافات خرجت بـ0 من الحارس."""
+    assert rule in _deploy_guard().hits(command)
+
+
+@pytest.mark.parametrize(
     "command",
     [
         "cat .railway/railway.ts",
@@ -504,6 +537,14 @@ def test_deploy_guard_blocks_merge_and_deploy_in_any_form(command, rule):
         "python scripts/merge_gate.py 39",
         "git merge --ff-only origin/main",
         "python -m pytest tests/test_gates.py",
+        # ما تشغّله الجلسة عادةً ولا يذكر gh ولا railway في شيفرة مفسّر.
+        "gh pr view 52 --repo o/r --json body --jq .body",
+        'gh pr edit 52 --body-file "$S/b52.md"',
+        "python -c \"print('ok')\"",
+        "python - <<'EOF'\nprint(open('README.md').read())\nEOF",
+        'PATH="/d/misk/.venv/Scripts:$PATH" python scripts/prepush_check.py --frontend',
+        'cp "$S/pp.vue" frontend/src/pages/ProductionPage.vue',
+        "echo ${HOME}/x",
     ],
 )
 def test_deploy_guard_allows_reading_and_checking(command):
