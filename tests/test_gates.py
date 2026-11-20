@@ -335,10 +335,10 @@ def test_runner_does_not_check_or_push_a_diff_touching_forbidden_paths(monkeypat
     monkeypatch.setattr(runner, "acquire_lock", lambda: True)
     monkeypatch.setattr(runner, "release_lock", lambda: None)
     monkeypatch.setattr(runner, "make_worktree", lambda card: (ROOT, "card/c1"))
-    monkeypatch.setattr(runner, "run_model", lambda *a: 0)
+    monkeypatch.setattr(runner, "run_model", lambda *a, **k: 0)
     monkeypatch.setattr(runner.ledger, "append", lambda card, event, **data: events.append((event, data)))
-    monkeypatch.setattr(runner, "touched_forbidden", lambda path: ["scripts/prepush_check.py"])
-    monkeypatch.setattr(runner, "prepush", lambda path: pytest.fail("لا فحص بفاحص عدّله النموذج"))
+    monkeypatch.setattr(runner, "touched_forbidden", lambda path, env=None: ["scripts/prepush_check.py"])
+    monkeypatch.setattr(runner, "prepush", lambda path, env=None: pytest.fail("لا فحص بفاحص عدّله النموذج"))
     monkeypatch.setattr(runner, "push_and_open_pr", lambda *a: pytest.fail("لا دفع"))
     monkeypatch.setattr(runner, "sh", lambda cmd, **k: done(HEAD))
     assert runner.main([]) == 1
