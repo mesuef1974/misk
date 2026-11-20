@@ -85,12 +85,15 @@ async function plan(): Promise<void> {
   planResult.value = "";
   planning.value = true;
   try {
-    const planned = await production.plan(planMaterial.value);
+    const { sheets: planned, waiting } = await production.plan(planMaterial.value);
     const pieces = planned.reduce((sum, sheet) => sum + sheet.placements.length, 0);
+    // لا جديد لا يعني لا قطع: نقرة ثانية أو إعادة بعد المهلة تجد القطع على ألواح خُطِّطت قبلها.
     planResult.value =
-      planned.length === 0
-        ? "لا قطع تنتظر التخطيط لهذه المادة. تُخطَّط بنود الطلبات المؤكَّدة وقيد التنفيذ فقط."
-        : `خُطِّطت ${pieces} قطعة على ${planned.length} لوح.`;
+      planned.length > 0
+        ? `خُطِّطت ${pieces} قطعة على ${planned.length} لوح.`
+        : waiting > 0
+          ? `لا جديد للتخطيط: قطع هذه المادة مخطَّطة سلفًا على ${waiting} لوح ينتظر القصّ.`
+          : "لا قطع تنتظر التخطيط لهذه المادة. تُخطَّط بنود الطلبات المؤكَّدة وقيد التنفيذ فقط.";
     // الألواح الجديدة مخطَّطة: تصفية بحالة أخرى تخفيها، فنعود إلى الكل.
     if (planned.length > 0 && filter.value !== "" && filter.value !== "planned") await choose("");
   } catch (error) {

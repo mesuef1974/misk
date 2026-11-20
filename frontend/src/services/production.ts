@@ -49,6 +49,14 @@ export interface PlanJob {
   status: "pending" | "done" | "failed";
   sheets: Sheet[];
   error: string;
+  /** ألواح المادة المخطَّطة التي لم تُقصّ بعد التخطيط: تميّز «لا قطع للمادة» من «قطعها على ألواح قائمة». */
+  waiting: number;
+}
+
+/** ما يخرج من التخطيط: الألواح الجديدة وعدد ألواح المادة التي تنتظر القصّ. */
+export interface PlanOutcome {
+  sheets: Sheet[];
+  waiting: number;
 }
 
 export const productionService = {

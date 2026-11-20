@@ -2,7 +2,14 @@ import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import { ApiError, errorMessage } from "@/api/client";
 import { appendPage } from "@/api/paging";
-import { productionService, type PlanJob, type Run, type RunDraft, type Sheet } from "@/services/production";
+import {
+  productionService,
+  type PlanJob,
+  type PlanOutcome,
+  type Run,
+  type RunDraft,
+  type Sheet,
+} from "@/services/production";
 
 /** فترات استطلاع مهمة التخطيط: سريعة أولًا ثم كل ثلاث ثوانٍ، ودقيقتان حدًّا (مهلة العامل خمس دقائق). */
 export const PLAN_POLL_MS = [500, 1000, 1000, 2000, 2000, ...Array<number>(38).fill(3000)];
@@ -23,7 +30,7 @@ export class PlanCancelled extends Error {
 
 /** ينتظر مهمة التخطيط حتى تنتهي. معرّف مجهول يبقى `pending` في الخادم، فالحدّ هنا لا هناك.
  *  `alive` يُسأل بعد كل انتظار وكل رد: إن صار كاذبًا توقّف الاستطلاع. */
-async function settled(job: PlanJob, alive: () => boolean): Promise<Sheet[]> {
+async function settled(job: PlanJob, alive: () => boolean): Promise<PlanOutcome> {
   for (const delay of PLAN_POLL_MS) {
     if (job.status !== "pending") break;
     await wait(delay);
@@ -36,7 +43,7 @@ async function settled(job: PlanJob, alive: () => boolean): Promise<Sheet[]> {
   }
   if (job.status === "failed") throw new ApiError(422, job.error);
   if (job.status === "pending") throw new ApiError(504, PLAN_TIMEOUT_MESSAGE);
-  return job.sheets;
+  return { sheets: job.sheets, waiting: job.waiting };
 }
 
 export const useProductionStore = defineStore("production", () => {
@@ -125,21 +132,22 @@ export const useProductionStore = defineStore("production", () => {
 
   // الكتابة ترمي الخطأ للصفحة لتعرضه بجانب الإجراء الذي سبّبه.
 
-  /** الألواح الجديدة في أول القائمة (الأحدث أولًا كترتيب الخادم). قائمة فارغة حين لا قطع تنتظر.
+  /** الألواح الجديدة في أول القائمة (الأحدث أولًا كترتيب الخادم)، فارغة حين لا جديد، مع عدد ألواح المادة التي تنتظر القصّ.
    *  الخادم يخطّط في الطلب نفسه أو في عامل خلفي؛ في الثاني تُستطلع المهمة حتى تنتهي.
    *  إن بدأ تحميل أثناء التخطيط فقد يحمل الألواح الجديدة أو لا يحملها، وسيكتب فوق القائمة والأعداد:
    *  دمجها هنا يعدّها مرتين أو يضيع، فيُعاد التحميل بالتصفية المطلوبة بعد التثبيت ليحكم وحده. */
-  async function plan(materialId: number): Promise<Sheet[]> {
+  async function plan(materialId: number): Promise<PlanOutcome> {
     const generation = planGeneration;
     const alive = () => generation === planGeneration;
     const ticket = latest;
     const job = await productionService.plan(materialId);
     if (!alive()) throw new PlanCancelled();
-    const planned = await settled(job, alive);
+    const outcome = await settled(job, alive);
+    const planned = outcome.sheets;
     if (!alive()) throw new PlanCancelled();
     if (planned.length > 0 && (ticket !== latest || loading.value)) {
       await load(requested);
-      return planned;
+      return outcome;
     }
     moved(null, "planned", planned.length);
     // الجديد مخطَّط: تصفية بحالة أخرى لا تعرضه.
@@ -149,7 +157,7 @@ export const useProductionStore = defineStore("production", () => {
       sheets.value = [...planned, ...sheets.value.filter((sheet) => !fresh.has(sheet.id))];
       total.value += added.length;
     }
-    return planned;
+    return outcome;
   }
 
   /** يوقف استطلاع التخطيط الجاري؛ الصفحة تستدعيه عند مغادرتها. */

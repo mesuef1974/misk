@@ -113,7 +113,7 @@ def test_plan_sheets_rejects_oversized_template_and_saves_nothing(material, name
 def test_plan_task_runs_eagerly(material, name_tag, calibration):
     _confirmed_order(material, 2)
     outcome = tasks.plan_sheets_async.delay(material_id=material.pk).get()
-    assert outcome == {"sheets": list(Sheet.objects.values_list("pk", flat=True))}
+    assert outcome == {"sheets": list(Sheet.objects.values_list("pk", flat=True)), "waiting": 1}
 
 
 @pytest.mark.django_db
@@ -123,12 +123,13 @@ def test_redelivered_plan_task_returns_the_sheets_it_already_planned(material, n
     task_id = str(uuid.uuid4())
     first = tasks.plan_sheets_async.apply(kwargs={"material_id": material.pk}, task_id=task_id).get()
     again = tasks.plan_sheets_async.apply(kwargs={"material_id": material.pk}, task_id=task_id).get()
-    assert first == again == {"sheets": list(Sheet.objects.values_list("pk", flat=True))}
+    assert first == again == {"sheets": list(Sheet.objects.values_list("pk", flat=True)), "waiting": 1}
     assert first["sheets"]
     assert Sheet.objects.count() == 1 and AuditLog.objects.filter(action="production.plan").count() == 1
-    # مهمة أخرى (نقرة ثانية) لم تنشئ شيئًا: تبقى قائمتها فارغة كي لا تُحسب ألواح غيرها جديدة.
+    # مهمة أخرى (نقرة ثانية) لم تنشئ شيئًا: تبقى قائمتها فارغة كي لا تُحسب ألواح غيرها جديدة،
+    # و`waiting` يقول إن قطع المادة على ألواح قائمة لا إن لا قطع لها (هـ3).
     other = tasks.plan_sheets_async.apply(kwargs={"material_id": material.pk}, task_id=str(uuid.uuid4()))
-    assert other.get() == {"sheets": []}
+    assert other.get() == {"sheets": [], "waiting": 1}
 
 
 @pytest.mark.django_db
@@ -144,7 +145,7 @@ def test_redelivered_plan_task_that_finds_new_pieces_audits_them_and_returns_all
     again = tasks.plan_sheets_async.apply(kwargs={"material_id": material.pk}, task_id=task_id).get()
     every = list(Sheet.objects.order_by("id").values_list("pk", flat=True))
     assert len(every) > len(first["sheets"])
-    assert again == {"sheets": every}
+    assert again == {"sheets": every, "waiting": len(every)}
     rows = AuditLog.objects.filter(action="production.plan").order_by("id")
     assert [row.request_id for row in rows] == [task_id, f"{task_id}+{every[len(first['sheets'])]}"]
     assert [pk for row in rows for pk in row.payload["sheets"]] == every
@@ -193,6 +194,21 @@ def test_plan_api_async_returns_job_and_polls_it(
 
 
 @pytest.mark.django_db
+def test_plan_api_second_click_reports_sheets_already_waiting(
+    client, staff_user, material, name_tag, calibration
+):
+    """هـ3: النقرة الثانية لا تنشئ ألواحًا، والرد يقول إن قطع المادة مخطَّطة سلفًا على ألواح لم تُقصّ."""
+    _confirmed_order(material, 2)
+    client.force_login(staff_user)
+    first = _plan(client, material.pk).json()
+    assert len(first["sheets"]) == 1 and first["waiting"] == 1
+    again = _plan(client, material.pk).json()
+    assert (again["status"], again["sheets"], again["waiting"]) == ("done", [], 1)
+    Sheet.objects.update(status=Sheet.Status.DONE)
+    assert _plan(client, material.pk).json()["waiting"] == 0
+
+
+@pytest.mark.django_db
 def test_plan_api_async_reports_business_error_as_failed_job(
     client, staff_user, material, name_tag, calibration, settings
 ):
@@ -227,6 +243,8 @@ def test_plan_job_pending_while_worker_has_not_answered(monkeypatch):
         (None, {"sheets": ["1"]}),
         (None, {"sheets": "1"}),
         (None, {"error": {"x": 1}}),
+        (None, {"sheets": [1], "waiting": "1"}),
+        (None, {"sheets": [], "waiting": -1}),
         ("apps.core.tasks.other", {"sheets": [1]}),
     ],
 )

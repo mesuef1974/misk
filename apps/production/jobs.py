@@ -13,7 +13,7 @@ from django.conf import settings
 
 from apps.catalog.models import Material
 
-from . import services, tasks
+from . import selectors, services, tasks
 
 PENDING, DONE, FAILED = "pending", "done", "failed"
 WORKER_FAILED = "تعذّر التخطيط في الخلفية؛ أعد المحاولة"
@@ -25,6 +25,8 @@ class PlanJob:
     status: str
     sheet_ids: list[int] = field(default_factory=list)
     error: str = ""
+    # ألواح المادة المخطَّطة التي لم تُقصّ، بعد التخطيط: تميّز «لا قطع للمادة» من «قطعها على ألواح قائمة».
+    waiting: int = 0
 
 
 def start_plan(*, material_id: int, actor=None) -> PlanJob:
@@ -32,7 +34,12 @@ def start_plan(*, material_id: int, actor=None) -> PlanJob:
     Material.objects.only("pk").get(pk=material_id)
     if not settings.PLANNING_ASYNC:
         sheets = services.plan_sheets(material_id=material_id, actor=actor)
-        return PlanJob(id="", status=DONE, sheet_ids=[sheet.pk for sheet in sheets])
+        return PlanJob(
+            id="",
+            status=DONE,
+            sheet_ids=[sheet.pk for sheet in sheets],
+            waiting=selectors.waiting_sheets(material_id),
+        )
     result = tasks.plan_sheets_async.delay(material_id=material_id, actor_id=getattr(actor, "pk", None))
     return plan_job(result.id) or PlanJob(id=result.id, status=PENDING)
 
@@ -54,9 +61,11 @@ def plan_job(job_id: str) -> PlanJob | None:
     outcome = result.result
     if not isinstance(outcome, dict):
         return None
-    error, sheet_ids = outcome.get("error"), outcome.get("sheets", [])
+    error, sheet_ids, waiting = outcome.get("error"), outcome.get("sheets", []), outcome.get("waiting", 0)
     if error:
         return PlanJob(id=job_id, status=FAILED, error=error) if isinstance(error, str) else None
     if not isinstance(sheet_ids, list) or not all(type(pk) is int for pk in sheet_ids):
         return None
-    return PlanJob(id=job_id, status=DONE, sheet_ids=sheet_ids)
+    if type(waiting) is not int or waiting < 0:
+        return None
+    return PlanJob(id=job_id, status=DONE, sheet_ids=sheet_ids, waiting=waiting)
