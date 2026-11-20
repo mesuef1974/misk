@@ -5,13 +5,23 @@ set -eu
 [ -n "${DATABASE_URL:-}" ] || { echo "::error:: DATABASE_URL مطلوب للعامل" >&2; exit 1; }
 export DJANGO_SETTINGS_MODULE=config.settings.production
 # الهجرات في preDeploy الويب، والعامل يبدأ بالتوازي معه: لا يأخذ مهمة بشيفرة تسبق مخطط القاعدة.
-# `migrate --check` يخرج بغير الصفر ما بقيت هجرة غير مطبَّقة؛ بعد المهلة يخرج العامل فتعيده سياسة الإعادة.
+# pending_migrations: 0 مطبَّقة، 3 معلّقة (ينتظر)، وغيرهما عطل (قاعدة أو إعداد) يُطبع سببه ولا يُسمّى «هجرات معلّقة» (د8).
+# بعد المهلة يخرج العامل فتعيده سياسة الإعادة، ومعه آخر سبب.
 waited=0
-until python manage.py migrate --check >/dev/null 2>&1; do
+while :; do
+  rc=0
+  out=$(python manage.py pending_migrations 2>&1) || rc=$?
+  [ "$rc" -eq 0 ] && break
+  if [ "$rc" -eq 3 ]; then
+    reason="هجرات غير مطبَّقة: $out"
+  else
+    reason="تعذّر فحص الهجرات (رمز $rc): $(printf '%s\n' "$out" | tail -n 5)"
+  fi
   if [ "$waited" -ge "${WORKER_MIGRATION_WAIT_S:-600}" ]; then
-    echo "::error:: هجرات غير مطبَّقة بعد ${waited} ث — العامل لا يبدأ" >&2
+    echo "::error:: العامل لا يبدأ بعد ${waited} ث — $reason" >&2
     exit 1
   fi
+  echo "انتظار ${waited} ث — $reason" >&2
   sleep 10
   waited=$((waited + 10))
 done

@@ -492,7 +492,7 @@ def test_prepush_counts_only_the_tool_itself_as_missing(stderr, missing):
 def test_worker_script_waits_for_migrations_and_parses():
     """ج4: العامل لا يبدأ قبل أن تُطبَّق هجرات preDeploy الويب."""
     script = (ROOT / "scripts" / "railway-worker.sh").read_text(encoding="utf-8")
-    assert script.index("migrate --check") < script.index("exec celery")
+    assert script.index("manage.py pending_migrations") < script.index("exec celery")
     shell = __import__("shutil").which("sh")
     if shell:
         assert subprocess.run([shell, "-n", str(ROOT / "scripts" / "railway-worker.sh")]).returncode == 0
