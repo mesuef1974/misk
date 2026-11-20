@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // لوح الواجهة في صفحتَي الزائر والدخول: نصف الصفحة بلون السمة وعليه نقش الهوية، وفي وسطه بطاقة عاجية
-// تحمل رمز الهوية بلون السمة والشعار اللفظي. زينة لا محتوى: مخفي عن قارئ الشاشة وعن الجوال.
-import BrandMark from "@/components/BrandMark.vue";
+// تحمل قفل «مسك» بإكساء الشريط بنسخة السمة الجارية والشعار اللفظي. زينة لا محتوى: مخفي عن قارئ الشاشة وعن الجوال.
+import BrandLockupRibbon from "@/components/BrandLockupRibbon.vue";
 </script>
 
 <template>
   <div class="brand-panel" aria-hidden="true">
     <div class="card">
-      <BrandMark :size="150" />
+      <BrandLockupRibbon :height="80" />
       <p>يُرسم اسمك ثم يُحفر</p>
     </div>
   </div>
@@ -29,8 +29,6 @@ import BrandMark from "@/components/BrandMark.vue";
 .card {
   display: grid; justify-items: center; gap: 14px; inline-size: min(100%, 380px); padding: 40px 28px 30px;
   border-radius: calc(var(--radius) * 4); background: var(--ivory);
-  /* البطاقة عاجية في الوضعين: الرمز عليها بلون السمة النهاري لا أبيض الوضع الليلي. */
-  --color-mark-ink: var(--day-color);
   box-shadow: 0 18px 48px color-mix(in srgb, var(--day-ink) 35%, transparent);
 }
 .card p { margin: 0; color: var(--day-accent); font-family: var(--font-heading); font-size: 18px; font-weight: 500; }
