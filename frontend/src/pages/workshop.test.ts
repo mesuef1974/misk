@@ -372,12 +372,15 @@ describe("صفحة الإنتاج", () => {
       await vi.runAllTimersAsync();
       await flushPromises();
       expect(page.get('.plan [role="alert"]').text()).toContain("أكبر من اللوح");
+      const listed = vi.mocked(productionService.sheets).mock.calls.length;
 
       await page.get(".plan").trigger("submit");
       await vi.runAllTimersAsync();
       await flushPromises();
       expect(productionService.planJob).toHaveBeenCalledTimes(1 + PLAN_POLL_MS.length);
       expect(page.get('.plan [role="alert"]').text()).toContain(PLAN_TIMEOUT_MESSAGE);
+      // عند المهلة تُعاد القائمة من الخادم: العامل قد ثبّت ألواحًا لم يصل ردّها.
+      expect(productionService.sheets).toHaveBeenCalledTimes(listed + 1);
     } finally {
       vi.useRealTimers();
     }
@@ -439,10 +442,12 @@ describe("اللوحة الرئيسية", () => {
   it("تعرض الاسم شعارًا بلون السمة لا نصًّا", async () => {
     const page = await show(HomePage, "/");
     const heading = page.get("h1");
-    expect(heading.text()).toBe("");
+    // الشعار رمز v8 مسارًا واحدًا بلون السمة (--color-mark-ink)، لا صورة ولا نص ظاهر بجواره؛ وصف SVG ليس نصًّا ظاهرًا.
+    const loose = [...heading.element.childNodes].filter((node) => node.nodeType === Node.TEXT_NODE);
+    expect(loose.map((node) => node.textContent?.trim()).join("")).toBe("");
     expect(heading.attributes("aria-label")).toBeDefined();
-    // العودي السمة الافتراضية: ملف PNG لها، ولكل سمة ملفها.
-    expect(heading.get("img").attributes("src")).toContain("misk-oud.png");
+    expect(heading.get("svg.brand-mark").get("path").attributes("fill")).toContain("--color-mark-ink");
+    expect(heading.find("img").exists()).toBe(false);
   });
 
   it("تحمّل البيانات مرة واحدة عند أول فتح", async () => {
@@ -489,6 +494,31 @@ describe("مخزن الإنتاج", () => {
       await vi.runAllTimersAsync();
       expect((await planning).map((candidate) => candidate.id)).toEqual([2]);
       expect(productionService.planJob).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("لا يعدّ ألواح التخطيط مرتين إن حملها تحميل جرى أثناء الاستطلاع", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      vi.mocked(productionService.sheets).mockResolvedValueOnce(sheetsPage([sheet({ id: 1 })]));
+      const store = useProductionStore();
+      await store.load();
+      vi.mocked(productionService.plan).mockResolvedValueOnce(job({ id: "j1", status: "pending" }));
+      vi.mocked(productionService.planJob).mockResolvedValueOnce(job({ id: "j1", sheets: [sheet({ id: 2 })] }));
+      const planning = store.plan(7);
+      // تصفية أثناء الاستطلاع، وردّها يصل بعد أن ثبّت العامل وقبل أن يراه الاستطلاع.
+      const afterPlan = sheetsPage([sheet({ id: 2 }), sheet({ id: 1 })]);
+      vi.mocked(productionService.sheets).mockResolvedValue(afterPlan);
+      await store.load("planned");
+      expect(store.countByStatus).toEqual({ planned: 2 });
+      await vi.runAllTimersAsync();
+      expect((await planning).map((candidate) => candidate.id)).toEqual([2]);
+      expect(productionService.sheets).toHaveBeenLastCalledWith({ status: "planned" });
+      expect(store.sheets.map((candidate) => candidate.id)).toEqual([2, 1]);
+      expect(store.countByStatus).toEqual({ planned: 2 });
+      expect(store.total).toBe(2);
     } finally {
       vi.useRealTimers();
     }
@@ -601,6 +631,85 @@ describe("الوصول في صفحة الإنتاج", () => {
       await button(page, "تسجيل تشغيل").trigger("click");
       await flushPromises();
       expect(document.activeElement).toBe(page.get(".run input").element);
+    } finally {
+      page.unmount();
+    }
+  });
+
+  async function attached(sheets: Sheet[], filterLabel = "") {
+    vi.mocked(productionService.sheets).mockResolvedValue(sheetsPage(sheets));
+    await router.push("/production");
+    await router.isReady();
+    const page = mount(ProductionPage, { global: { plugins: [router] }, attachTo: document.body });
+    await flushPromises();
+    if (filterLabel) {
+      await page.findAll(".chip").find((chip) => chip.text().startsWith(filterLabel))!.trigger("click");
+      await flushPromises();
+    }
+    return page;
+  }
+
+  const focused = () => document.activeElement?.textContent?.trim();
+
+  it("لا يُسقط التركيز بعد الإتلاف: زر الإتلاف عند الرفض، والبطاقة عند النجاح", async () => {
+    vi.mocked(productionService.scrap)
+      .mockRejectedValueOnce(new ApiError(409, "اللوح 1 ليس مخطَّطًا (نُفِّذ)"))
+      .mockResolvedValueOnce(sheet({ status: "scrapped", placements: [] }));
+    const page = await attached([sheet()]);
+    try {
+      for (const expected of ["إتلاف اللوح", "لوح 1"]) {
+        await button(page, "إتلاف اللوح").trigger("click");
+        await button(page, "تأكيد الإتلاف").trigger("click");
+        await flushPromises();
+        expect(focused()).toBe(expected);
+      }
+    } finally {
+      page.unmount();
+    }
+  });
+
+  it("ينقل التركيز إلى البطاقة التالية إن خرج اللوح التالف من التصفية، ثم إلى عنوان الصفحة", async () => {
+    vi.mocked(productionService.scrap)
+      .mockResolvedValueOnce(sheet({ id: 1, status: "scrapped", placements: [] }))
+      .mockResolvedValueOnce(sheet({ id: 2, status: "scrapped", placements: [] }));
+    const page = await attached([sheet({ id: 1 }), sheet({ id: 2 })], "مخطَّط");
+    try {
+      await page.findAll("button").filter((candidate) => candidate.text() === "إتلاف اللوح")[0].trigger("click");
+      await button(page, "تأكيد الإتلاف").trigger("click");
+      await flushPromises();
+      expect(page.findAll(".sheet-card")).toHaveLength(1);
+      expect(focused()).toBe("لوح 2");
+
+      await button(page, "إتلاف اللوح").trigger("click");
+      await button(page, "تأكيد الإتلاف").trigger("click");
+      await flushPromises();
+      expect(focused()).toBe("الإنتاج");
+    } finally {
+      page.unmount();
+    }
+  });
+
+  it("يعيد التركيز بعد إغلاق نموذج التشغيل: إلى زره عند الإلغاء، وإلى التالية إن أغلق التشغيلُ اللوح", async () => {
+    vi.mocked(productionService.recordRun).mockResolvedValueOnce(okRun);
+    const page = await attached([sheet({ id: 1 }), sheet({ id: 2 })], "مخطَّط");
+    try {
+      await page.findAll("button").filter((candidate) => candidate.text() === "تسجيل تشغيل")[0].trigger("click");
+      await flushPromises();
+      await button(page, "إلغاء").trigger("click");
+      await flushPromises();
+      expect(document.activeElement?.id).toBe("run-1");
+
+      await button(page, "تسجيل تشغيل").trigger("click");
+      await flushPromises();
+      const form = page.get(".run");
+      const inputs = form.findAll("input");
+      await inputs[0].setValue("3");
+      await inputs[1].setValue("20");
+      await form.findAll("select")[1].setValue("3");
+      await form.trigger("submit");
+      await flushPromises();
+      expect(page.findAll(".sheet-card")).toHaveLength(1);
+      expect(focused()).toBe("لوح 2");
     } finally {
       page.unmount();
     }

@@ -1,4 +1,4 @@
-release: misk/v7
+release: misk/v8
 concept: a1
 purpose: ما في دليل الهوية، وما طُبّق منه آليًا في هذا المشروع، وما تبقّى على جلسة المشروع. مولَّد من سِمة؛ لا يُعدَّل يدويًا.
 applied_by_delivery:
@@ -41,8 +41,8 @@ sections:
   files:
   - icons/acrylic.svg
   - icons/delivery.svg
-  - icons/giveaways.svg
-  - icons/laser.svg
+  - icons/favors.svg
+  - icons/laser-engrave.svg
   - icons/leather.svg
   - icons/name.svg
   - icons/order.svg
@@ -198,15 +198,18 @@ checks:
 - id: icons-used
   section: icons
   ok: false
-  detail: '9 من 10 أيقونة مستعملة في الواجهة؛ غير المستعملة: portrait'
+  detail: '0 من 9 أيقونة مستعملة في الواجهة؛ غير المستعملة: acrylic، delivery، favors، laser-engrave، leather، name، order،
+    phone-case، portrait'
   action: استعمل أيقونات identity/icons كما هي حيث تعرض الواجهة معناها؛ ما لا موضع له في التطبيق يُذكر للمالك ولا يُحشر.
 - id: pattern-used
   section: pattern
-  ok: true
-  detail: النمط مستعمل في frontend/src/components/BrandPanel.vue، frontend/src/styles/base.css
+  ok: false
+  detail: النمط غير مستعمل في الواجهة
+  action: ضع identity/patterns/motif-*.svg في الصفحات حيث تضعه شاشات identity/screens.
 - id: screens-compared
   section: applications
   ok: true
   detail: اختبار يقارن صفحات المشروع بشاشات الدليل موجود
 gaps:
 - icons-used
+- pattern-used

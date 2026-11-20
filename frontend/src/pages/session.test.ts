@@ -236,7 +236,7 @@ describe("شعار الشريط العلوي", () => {
     useAppStore().siteTitle = "مسك";
     await flushPromises();
     const brand = app.find("a.brand");
-    expect(brand.find("svg.brand-logo").exists()).toBe(true);
+    expect(brand.find("svg.brand-mark").exists()).toBe(true);
     expect(brand.attributes("aria-label")).toBe("مسك");
   });
 });

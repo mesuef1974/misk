@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
-import { errorMessage } from "@/api/client";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { ApiError, errorMessage } from "@/api/client";
 import LiveNotice from "@/components/LiveNotice.vue";
 import SheetDiagram from "@/components/SheetDiagram.vue";
 import SheetRunForm from "@/components/SheetRunForm.vue";
@@ -94,14 +94,13 @@ async function plan(): Promise<void> {
     // الألواح الجديدة مخطَّطة: تصفية بحالة أخرى تخفيها، فنعود إلى الكل.
     if (planned.length > 0 && filter.value !== "" && filter.value !== "planned") await choose("");
   } catch (error) {
-    if (!(error instanceof PlanCancelled)) planError.value = errorMessage(error);
+    if (error instanceof PlanCancelled) return;
+    planError.value = errorMessage(error);
+    // انتهت المهلة والمهمة قد تكون ثبّتت ألواحها أو تثبّتها الآن: القائمة من الخادم لا من رد لم يصل.
+    if (error instanceof ApiError && error.status === 504) await production.load(filter.value);
   } finally {
     planning.value = false;
   }
-}
-
-function recorded(): void {
-  running.value = null;
 }
 
 /** الزر الذي ضُغط يختفي مع تبدّل الأزرار؛ ينتقل التركيز إلى بديله كي لا يسقط إلى أول الصفحة. */
@@ -109,6 +108,45 @@ async function focusById(id: string): Promise<void> {
   await nextTick();
   document.getElementById(id)?.focus();
 }
+
+const sheetTitleId = (sheetId: number) => `sheet-${sheetId}-title`;
+
+/** أين يذهب التركيز إن اختفى ما في البطاقة: الزر المفضَّل إن بقي، ثم عنوان البطاقة،
+ *  فإن خرجت من التصفية فعنوان التالية ثم السابقة. الجيران من DOM كما رُسم الآن. */
+function focusFallbacks(sheetId: number, preferred?: string): string[] {
+  const titles = Array.from(document.querySelectorAll<HTMLElement>("[data-sheet-title]"), (element) => element.id);
+  const index = titles.indexOf(sheetTitleId(sheetId));
+  const neighbours = index === -1 ? [] : [titles[index + 1], titles[index - 1]].filter(Boolean);
+  return [...(preferred ? [preferred] : []), sheetTitleId(sheetId), ...neighbours];
+}
+
+/** أول ما بقي من المرشّحين بعد الرسم، وإلا فعنوان الصفحة. */
+async function focusFirst(ids: string[]): Promise<void> {
+  await nextTick();
+  for (const id of [...ids, "production-title"]) {
+    const element = document.getElementById(id);
+    if (element) {
+      element.focus();
+      return;
+    }
+  }
+}
+
+/** النموذج يُغلق: يعود التركيز إلى زر فتحه، أو إلى البطاقة إن أُغلق اللوح بتشغيل ناجح. */
+function closeRunForm(sheetId: number): Promise<void> {
+  const targets = focusFallbacks(sheetId, `run-${sheetId}`);
+  running.value = null;
+  return focusFirst(targets);
+}
+
+// تشغيل ناجح يرفع اللوح من تصفية «مخطَّط» فيُزال النموذج معه، وVue لا يوصل `recorded` من مكوّن أُزيل.
+// المراقب يجري قبل الرسم، فالبطاقة ما زالت في DOM ويُعرف جيرانها.
+watch(
+  () => running.value !== null && !production.sheets.some((sheet) => sheet.id === running.value),
+  (gone) => {
+    if (gone && running.value !== null) void closeRunForm(running.value);
+  },
+);
 
 function cancelScrap(sheetId: number): Promise<void> {
   confirmingScrap.value = null;
@@ -122,6 +160,8 @@ async function scrap(sheetId: number): Promise<void> {
     await focusById(`scrap-cancel-${sheetId}`);
     return;
   }
+  // زرّا التأكيد يختفيان: عند الرفض يعود زر الإتلاف، وعند النجاح تبقى البطاقة بلا أزرار أو تخرج من التصفية.
+  const targets = focusFallbacks(sheetId, `scrap-${sheetId}`);
   confirmingScrap.value = null;
   delete scrapError.value[sheetId];
   scrapping.value = true;
@@ -132,12 +172,13 @@ async function scrap(sheetId: number): Promise<void> {
   } finally {
     scrapping.value = false;
   }
+  await focusFirst(targets);
 }
 </script>
 
 <template>
   <div class="page-head">
-    <h1>الإنتاج</h1>
+    <h1 id="production-title" tabindex="-1">الإنتاج</h1>
   </div>
 
   <form class="panel plan" @submit.prevent="plan">
@@ -184,7 +225,7 @@ async function scrap(sheetId: number): Promise<void> {
   <ul v-if="!production.loadError && cards.length > 0" class="cards" :aria-busy="production.loading">
     <li v-for="card in cards" :key="card.sheet.id" class="panel sheet-card">
       <div class="head">
-        <strong>لوح {{ card.sheet.id }}</strong>
+        <strong :id="sheetTitleId(card.sheet.id)" data-sheet-title tabindex="-1">لوح {{ card.sheet.id }}</strong>
         <span class="muted">{{ card.material }}</span>
         <span class="state" :class="`is-${card.sheet.status}`">{{ sheetStatusLabel(card.sheet.status) }}</span>
         <span class="muted num used">
@@ -220,11 +261,11 @@ async function scrap(sheetId: number): Promise<void> {
       <SheetRunForm
         v-if="running === card.sheet.id"
         :sheet="card.sheet"
-        @recorded="recorded"
-        @cancel="running = null"
+        @recorded="closeRunForm(card.sheet.id)"
+        @cancel="closeRunForm(card.sheet.id)"
       />
       <div v-else-if="card.sheet.status === 'planned'" class="form-actions">
-        <button type="button" class="btn" @click="running = card.sheet.id">تسجيل تشغيل</button>
+        <button :id="`run-${card.sheet.id}`" type="button" class="btn" @click="running = card.sheet.id">تسجيل تشغيل</button>
         <template v-if="confirmingScrap === card.sheet.id">
           <span class="muted">تُرفع قطع اللوح لتُخطَّط على لوح جديد، ولا رجعة.</span>
           <button type="button" class="btn danger" :disabled="scrapping" @click="scrap(card.sheet.id)">
