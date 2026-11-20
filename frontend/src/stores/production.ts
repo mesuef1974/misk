@@ -53,6 +53,8 @@ export const useProductionStore = defineStore("production", () => {
   const loaded = ref(false);
   const loadError = ref("");
   let latest = 0;
+  /** التصفية التي طلبها آخر تحميل، وإن لم يصل رده بعد. */
+  let requested = "";
   /** يزيد عند إيقاف التخطيط أو المسح: تخطيط بدأ قبله لا يستطلع ولا يكتب في القائمة. */
   let planGeneration = 0;
 
@@ -72,6 +74,7 @@ export const useProductionStore = defineStore("production", () => {
   /** الصفحة الأولى بتصفية الحالة. رد طلب أقدم يُهمل إن سبقه طلب أحدث. */
   async function load(forStatus = ""): Promise<void> {
     const ticket = ++latest;
+    requested = forStatus;
     loading.value = true;
     loadError.value = "";
     try {
@@ -123,14 +126,21 @@ export const useProductionStore = defineStore("production", () => {
   // الكتابة ترمي الخطأ للصفحة لتعرضه بجانب الإجراء الذي سبّبه.
 
   /** الألواح الجديدة في أول القائمة (الأحدث أولًا كترتيب الخادم). قائمة فارغة حين لا قطع تنتظر.
-   *  الخادم يخطّط في الطلب نفسه أو في عامل خلفي؛ في الثاني تُستطلع المهمة حتى تنتهي. */
+   *  الخادم يخطّط في الطلب نفسه أو في عامل خلفي؛ في الثاني تُستطلع المهمة حتى تنتهي.
+   *  إن بدأ تحميل أثناء التخطيط فقد يحمل الألواح الجديدة أو لا يحملها، وسيكتب فوق القائمة والأعداد:
+   *  دمجها هنا يعدّها مرتين أو يضيع، فيُعاد التحميل بالتصفية المطلوبة بعد التثبيت ليحكم وحده. */
   async function plan(materialId: number): Promise<Sheet[]> {
     const generation = planGeneration;
     const alive = () => generation === planGeneration;
+    const ticket = latest;
     const job = await productionService.plan(materialId);
     if (!alive()) throw new PlanCancelled();
     const planned = await settled(job, alive);
     if (!alive()) throw new PlanCancelled();
+    if (planned.length > 0 && (ticket !== latest || loading.value)) {
+      await load(requested);
+      return planned;
+    }
     moved(null, "planned", planned.length);
     // الجديد مخطَّط: تصفية بحالة أخرى لا تعرضه.
     if (matches("planned")) {
