@@ -1,11 +1,12 @@
 <script setup lang="ts">
 // أيقونات الهوية كما هي من brand/misk/identity/icons (نسخة في static/brand/icons يطابقها tests/test_brand.py).
 // تُحقن نصًّا لترث لون النص (stroke="currentColor")؛ المصدر ملفات ثابتة في المستودع لا مدخل مستخدم.
+// الأيقونة زخرفية (aria-hidden)، فيُنزع <title> عند الحقن: لا يدخل نص العنصر ولا يظهر تلميحًا.
 import { computed } from "vue";
 
 const sources = import.meta.glob<string>("../static/brand/icons/*.svg", { query: "?raw", import: "default", eager: true });
 const ICONS: Record<string, string> = Object.fromEntries(
-  Object.entries(sources).map(([path, svg]) => [path.slice(path.lastIndexOf("/") + 1, -4), svg]),
+  Object.entries(sources).map(([path, svg]) => [path.slice(path.lastIndexOf("/") + 1, -4), svg.replace(/<title>[\s\S]*?<\/title>/g, "")]),
 );
 
 const props = defineProps<{ name: string }>();
