@@ -249,14 +249,22 @@ def test_lockout_behind_proxy_keys_on_forwarded_client(client, staff_user, setti
 
 @pytest.mark.django_db
 def test_rotating_addresses_cannot_keep_guessing_one_name(client, staff_user, django_user_model, settings):
-    """قفل الزوج وحده يتيح خمس محاولات من كل عنوان؛ الحدّ الثاني يوقف التخمين على الاسم مهما تبدّل العنوان."""
+    """قفل الزوج وحده يتيح خمس محاولات من كل عنوان؛ الحدّ الثاني يبطّئ التخمين على الاسم مهما تبدّل العنوان:
+    بعده تُجرَّب كلمة مرور واحدة في كل فترة، وما سواها يُرفض بلا تجربة ولو كان صحيحًا."""
     settings.AXES_ENABLED = True
     django_user_model.objects.create_user(username="second", password="x" * 12, is_staff=True)
     for index in range(services.NAME_FAILURE_LIMIT):
         _fail_logins(client, 1, REMOTE_ADDR=f"203.0.113.{index + 1}")
+    guess = client.post(
+        "/api/auth/login",
+        {"username": "staff", "password": "y" * 12},
+        content_type="application/json",
+        REMOTE_ADDR="203.0.113.200",
+    )
+    assert (guess.status_code, guess.json()["detail"]) == (429, services.NAME_LOCKED)  # أخذ فرصة الفترة
     body = {"username": "staff", "password": "x" * 12}
     fresh = client.post("/api/auth/login", body, content_type="application/json", REMOTE_ADDR="198.51.100.4")
-    assert fresh.status_code == 429
+    assert fresh.status_code == 429  # لم تُجرَّب: الفرصة مأخوذة
     assert fresh.json()["detail"] == services.NAME_LOCKED
     assert client.get("/api/me").status_code == 401
     other = client.post(
@@ -301,7 +309,7 @@ def test_name_limit_spares_a_device_that_signed_in_before(client, staff_user, se
     cookie = first.cookies[services.DEVICE_COOKIE]
     assert cookie["httponly"] and cookie["samesite"] == "Strict" and cookie["path"] == "/api/auth/"
     client.post("/api/auth/logout")
-    _guess_from_many_addresses(services.NAME_FAILURE_LIMIT)
+    _guess_from_many_addresses(services.NAME_FAILURE_LIMIT + 1)  # الأخيرة تأخذ فرصة الفترة
     assert _login(Client()).status_code == 429  # جهاز لم يُدخَل منه
     assert _login(client).status_code == 200  # جهاز المشرف
     # كوكي مُعبث به أو لاسم آخر لا يعفي.
@@ -312,11 +320,11 @@ def test_name_limit_spares_a_device_that_signed_in_before(client, staff_user, se
 
 @pytest.mark.django_db
 def test_device_failures_are_limited_per_device(client, staff_user, settings):
-    """كوكي جهاز مسروق لا يفتح تخمينًا بلا حدّ: فشله يُعدّ عليه، ويُقفل وحده دون الاسم."""
+    """كوكي جهاز مسروق لا يفتح تخمينًا بلا حدّ: فشله يُعدّ عليه، ويُبطَّأ وحده دون الاسم."""
     settings.AXES_ENABLED = True
     assert _login(client).status_code == 200
     client.post("/api/auth/logout")
-    for index in range(services.NAME_FAILURE_LIMIT):
+    for index in range(services.NAME_FAILURE_LIMIT + 1):  # الأخيرة تأخذ فرصة الفترة
         client.post(
             "/api/auth/login",
             {"username": "staff", "password": "y" * 12},
@@ -327,6 +335,57 @@ def test_device_failures_are_limited_per_device(client, staff_user, settings):
     from django.test import Client
 
     assert _login(Client()).status_code == 200  # الاسم لم يُحجب على غيره
+
+
+@pytest.mark.django_db
+def test_owner_on_a_new_device_gets_in_once_the_slow_slot_frees(client, staff_user, settings):
+    """ح1: بلوغ الحدّ لا يقفل صاحب الحساب على جهاز جديد: الفرصة التالية تجرّب كلمته فيدخل، ويُصفَّر العدّاد."""
+    from django.core.cache import cache
+    from django.test import Client
+
+    settings.AXES_ENABLED = True
+    _guess_from_many_addresses(services.NAME_FAILURE_LIMIT + 1)
+    owner = Client()
+    assert _login(owner, REMOTE_ADDR="198.51.100.4").status_code == 429
+    cache.delete(services._slow_slot_key(services._name_failures_key("staff")))  # انقضت الفترة
+    assert _login(owner, REMOTE_ADDR="198.51.100.4").status_code == 200
+    assert cache.get(services._name_failures_key("staff")) is None
+    owner.post("/api/auth/logout")
+    _guess_from_many_addresses(1)
+    assert _login(Client(), REMOTE_ADDR="198.51.100.5").status_code == 200  # لا حجب بعد خطأ واحد
+
+
+@pytest.mark.django_db
+def test_a_locked_pair_cannot_hog_the_slow_slot(client, staff_user, settings):
+    """عنوان قفله axes لا يأخذ فرصة الفترة، فلا يحجب به المهاجم صاحب الحساب."""
+    from django.core.cache import cache
+    from django.test import Client
+
+    settings.AXES_ENABLED = True
+    locked = {"REMOTE_ADDR": "203.0.113.250"}
+    _fail_logins(client, settings.AXES_FAILURE_LIMIT, **locked)  # يُقفل الزوج قبل بلوغ حدّ الاسم
+    _guess_from_many_addresses(services.NAME_FAILURE_LIMIT)
+    cache.delete(services._slow_slot_key(services._name_failures_key("staff")))  # انقضت الفترة
+    _fail_logins(client, 10, **locked)  # إغراق من الزوج المقفول
+    assert _login(Client(), REMOTE_ADDR="198.51.100.4").status_code == 200
+
+
+@pytest.mark.django_db
+def test_sign_in_resets_the_device_counter(client, staff_user, settings):
+    """ح2: مشرف أخطأ حتى قُبيل الحدّ ثم دخل لا يُحجب بعد خطأ واحد لاحق."""
+    settings.AXES_ENABLED = True
+    assert _login(client).status_code == 200
+    client.post("/api/auth/logout")
+    for round_ in range(2):
+        for index in range(services.NAME_FAILURE_LIMIT - 1):
+            client.post(
+                "/api/auth/login",
+                {"username": "staff", "password": "y" * 12},
+                content_type="application/json",
+                REMOTE_ADDR=f"198.51.{round_}.{index + 1}",
+            )
+        assert _login(client, REMOTE_ADDR="198.51.100.250").status_code == 200
+        client.post("/api/auth/logout")
 
 
 @pytest.mark.django_db

@@ -23,11 +23,13 @@ REQUEST_ID_LENGTH = column_length(AuditLog, "request_id")
 # على اسم واحد في النافذة. يحجب الأجهزة التي لم يُدخَل منها بهذا الاسم وحدها: الجهاز الذي دخل منه
 # صاحب الحساب يحمل كوكي موقَّعًا (نمط «كوكي الجهاز» في OWASP) فيُعدّ فشله عليه لا على الاسم،
 # ولا يقفله غريبٌ يعرف الاسم.
+# بلوغ الحدّ يبطّئ ولا يقفل (ح1 من مراجعة 2026-11-20): تُجرَّب كلمة مرور واحدة كل NAME_SLOW_INTERVAL_S
+# للعدّاد، وما سواها يُرفض بلا تجربة. فالتخمين الموزَّع يبقى نحو 180 في الساعة، والمشرف على جهاز جديد
+# يدخل حين يصيب الفرصة، ودخوله يصفّر العدّاد.
 NAME_FAILURE_LIMIT = 30
 NAME_FAILURE_WINDOW_S = 60 * 60
-NAME_LOCKED = (
-    "محاولات كثيرة على هذا الحساب من أجهزة لم يُدخَل منها؛ ادخل من جهاز دخلت منه سابقًا أو أعد المحاولة بعد ساعة"
-)
+NAME_SLOW_INTERVAL_S = 20
+NAME_LOCKED = "محاولات كثيرة على هذا الحساب من أجهزة لم يُدخَل منها؛ ادخل من جهاز دخلت منه سابقًا أو أعد المحاولة بعد نصف دقيقة"
 DEVICE_COOKIE = "misk_signin_device"
 DEVICE_MAX_AGE_S = 60 * 60 * 24 * 90
 _DEVICE_SALT = "apps.core.services.signin-device"
@@ -96,15 +98,23 @@ def sign_in(request: HttpRequest, *, username: str, password: str) -> AbstractBa
     throttled = getattr(settings, "AXES_ENABLED", True)
     device = _known_device(request, username)
     failures_key = _device_failures_key(device) if device else _name_failures_key(username)
-    if throttled and cache.get(failures_key, 0) >= NAME_FAILURE_LIMIT:
-        raise SignInError(429, NAME_LOCKED)
+    slowed = throttled and cache.get(failures_key, 0) >= NAME_FAILURE_LIMIT
     # ما يرفضه axes لقفل الزوج لا يجرّب كلمة المرور، فلا يُعدّ: عدّه كان يتيح لعنوان واحد قفل الاسم.
     pair_locked = throttled and AxesProxyHandler.is_locked(request, {"username": username})
+    # `add` ذرّي: طلب واحد يأخذ الفرصة في كل فترة، وما سواه لا يجرّب كلمة المرور. والزوج المقفول
+    # لا يأخذها، وإلا احتكر عنوان واحد كل الفرص بلا كلفة فحجب صاحب الحساب.
+    if slowed and (pair_locked or not cache.add(_slow_slot_key(failures_key), 1, NAME_SLOW_INTERVAL_S)):
+        raise SignInError(429, NAME_LOCKED)
     user = authenticate(request, username=username, password=password)
     if user is None or not user.is_staff:
         if throttled and not pair_locked:
             _count_failure(failures_key)
+        if slowed:
+            raise SignInError(429, NAME_LOCKED)
         raise SignInError(401, "اسم المستخدم أو كلمة المرور غير صحيحة")
+    if throttled:
+        # ح2: دخول صاحب الحساب يصفّر ما عُدّ على هذا الجهاز أو على الاسم، فلا يُحجب بعد خطأ واحد لاحق.
+        cache.delete_many([failures_key, _slow_slot_key(failures_key)])
     login(request, user)
     record_audit(action="auth.login", actor=user, target=f"user:{user.pk}")
     return user
@@ -142,6 +152,10 @@ def _name_failures_key(username: str) -> str:
 
 def _device_failures_key(device: str) -> str:
     return f"signin-failures:device:{hashlib.sha256(device.encode()).hexdigest()}"
+
+
+def _slow_slot_key(failures_key: str) -> str:
+    return f"{failures_key}:slot"
 
 
 def _count_failure(key: str) -> None:
