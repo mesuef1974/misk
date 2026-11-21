@@ -92,6 +92,9 @@ code { background: var(--surface); border: 1px solid var(--line); border-radius:
     border-radius: 0; font-size: 13px; text-align: center;
   }
   .side nav.main .nav-item.router-link-active { background: none; color: var(--accent); }
+  /* عدّاد السلة شارة على زاوية أيقونتها، لا عنصرًا ثالثًا يزيح التسمية. */
+  .side nav.main .nav-item { position: relative; }
+  .side nav.main .nav-item .count { position: absolute; inset-block-start: 8px; inset-inline-start: calc(50% + 8px); margin: 0; padding: 0 7px; font-size: 12px; }
   .side .aux { margin-block-start: 0; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0 4px; }
   .side .aux .nav-item { padding-inline: 8px; }
   /* التنبيه لا يقسم صف الروابط: سطر كامل في آخره. */
@@ -180,6 +183,16 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--ri
 }
 a.list-row:hover { border-color: var(--accent); }
 .num { font-variant-numeric: tabular-nums; }
+/* واجهة المتجر: شبكة بطاقات المنتجات (الرئيسية وصفحة المنتجات)، وروابط الثقة في تذييل صفحات الزائر. */
+.product-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.product-grid > li { display: grid; min-inline-size: 0; }
+.nav-item .count { margin-inline-start: auto; }
+.store-foot {
+  display: flex; flex-wrap: wrap; gap: 6px 20px; margin-block-start: auto; padding-block-start: 20px;
+  border-block-start: 1px solid var(--line); font-size: 14px;
+}
+.store-foot a { color: var(--muted); }
+.store-foot a:hover, .store-foot a.router-link-active { color: var(--ink); }
 .hint { font-size: 14px; color: var(--muted); }
 
 /* الطباعة على print.html: حبر أسود على ورق أبيض، الشعار في الرأس فوق خط ثقيل، والشعار اللفظي في التذييل. */
@@ -196,7 +209,7 @@ a.list-row:hover { border-color: var(--accent); }
     --accent: var(--print-ink); --color-mark-ink: var(--print-ink);
   }
   body { background: none; color: var(--print-ink); font-size: 12pt; }
-  .side, .btn, .filters, .more { display: none !important; }
+  .side, .btn, .filters, .more, .store-foot { display: none !important; }
   .shell { display: block; }
   .wrap { padding: 0; gap: 12pt; }
   .wrap::before, .wrap > .page-head::before, .wrap > h1::before { display: none; }

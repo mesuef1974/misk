@@ -152,12 +152,12 @@ describe("القشرة بالإنجليزية", () => {
     const toArabic = app.find('a[lang="ar"]');
     expect(toArabic.text()).toBe("العربية");
     expect(toArabic.attributes("href")).toBe("/about");
-    expect(app.find("h1").text()).toBe("About");
+    expect(app.find("h1").text()).toBe("About us");
     expect(document.title).toBe("Misk");
 
     await toArabic.trigger("click");
     await flushPromises();
-    expect(app.find("h1").text()).toBe("عن المنصة");
+    expect(app.find("h1").text()).toBe("من نحن");
     const toEnglish = app.find('a[lang="en"]');
     expect(toEnglish.text()).toBe("English");
     expect(toEnglish.attributes("href")).toBe("/en/about");

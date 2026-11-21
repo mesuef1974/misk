@@ -23,6 +23,35 @@ export const routes: RouteRecordRaw[] = [
       { path: "", name: "home", component: () => import("@/pages/HomePage.vue") },
       { path: "about", name: "about", component: () => import("@/pages/AboutPage.vue") },
       { path: "login", name: "login", component: () => import("@/pages/LoginPage.vue") },
+      // واجهة المتجر العامة: بلا دخول.
+      { path: "products", name: "products", component: () => import("@/pages/ProductsPage.vue") },
+      {
+        path: "products/:slug",
+        name: "product",
+        component: () => import("@/pages/ProductPage.vue"),
+        props: (route) => ({ slug: String(route.params.slug) }),
+      },
+      { path: "cart", name: "cart", component: () => import("@/pages/CartPage.vue") },
+      { path: "checkout", name: "checkout", component: () => import("@/pages/CheckoutPage.vue") },
+      {
+        // رابط الدفع الذي يعيده مزوّد الاختبار (apps/checkout/providers.py).
+        path: "checkout/test-pay/:sessionId",
+        name: "test-pay",
+        component: () => import("@/pages/TestPayPage.vue"),
+        props: (route) => ({ sessionId: String(route.params.sessionId) }),
+      },
+      {
+        path: "track/:token",
+        name: "track",
+        component: () => import("@/pages/TrackPage.vue"),
+        props: (route) => ({ token: String(route.params.token) }),
+      },
+      ...(["faq", "returns", "privacy", "terms"] as const).map((topic) => ({
+        path: topic,
+        name: topic,
+        component: () => import("@/pages/PolicyPage.vue"),
+        props: { topic },
+      })),
       { path: "orders", name: "orders", meta: staffOnly, component: () => import("@/pages/OrdersPage.vue") },
       { path: "orders/new", name: "order-new", meta: staffOnly, component: () => import("@/pages/OrderNewPage.vue") },
       {

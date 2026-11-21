@@ -2,7 +2,7 @@
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
-const STEPS = ["catalog", "orders", "production"] as const;
+const STEPS = ["design", "make", "receive"] as const;
 </script>
 
 <template>

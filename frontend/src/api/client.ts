@@ -2,14 +2,17 @@
 
 import { i18n } from "@/i18n";
 
-/** خطأ من الخادم أو من الشبكة. `status` صفر حين لا يصل الطلب أصلًا. */
+/** خطأ من الخادم أو من الشبكة. `status` صفر حين لا يصل الطلب أصلًا.
+ *  `body` جسم الرد كما أرسله الخادم إن كان JSON: مسارات المتجر تحمل فيه رمز الخطأ وأخطاء الحقول. */
 export class ApiError extends Error {
   readonly status: number;
+  readonly body: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, body: unknown = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -50,19 +53,24 @@ interface ValidationIssue {
 }
 
 /** Ninja يعيد `detail` نصًّا لأخطاء العمل، وقائمة لأخطاء التحقق من المخطط. */
-async function serverDetail(res: Response): Promise<string> {
-  try {
-    const detail = ((await res.json()) as { detail?: unknown }).detail;
-    if (typeof detail === "string") return detail;
-    if (Array.isArray(detail)) {
-      return (detail as ValidationIssue[])
-        .map((issue) => [(issue.loc ?? []).slice(1).join("."), issue.msg ?? ""].filter(Boolean).join(": "))
-        .join("؛ ");
-    }
-  } catch {
-    // جسم غير JSON: تكفي رسالة الحالة.
+function serverDetail(body: unknown): string {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return (detail as ValidationIssue[])
+      .map((issue) => [(issue.loc ?? []).slice(1).join("."), issue.msg ?? ""].filter(Boolean).join(": "))
+      .join("؛ ");
   }
   return "";
+}
+
+async function errorBody(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    // جسم غير JSON: تكفي رسالة الحالة.
+    return null;
+  }
 }
 
 async function request<T>(
@@ -90,9 +98,10 @@ async function request<T>(
   if (!res.ok) {
     if (res.status === 401 && !SESSION_URLS.some((prefix) => url.startsWith(prefix))) onUnauthorized?.();
     // 401 من Ninja نصّه «Unauthorized»؛ رسالتنا العربية أوضح. رسالة رفض تسجيل الدخول عربية فتُنقل.
-    const raw = await serverDetail(res);
+    const body = await errorBody(res);
+    const raw = serverDetail(body);
     const detail = raw === "Unauthorized" ? "" : raw;
-    throw new ApiError(res.status, detail || fallback(res.status));
+    throw new ApiError(res.status, detail || fallback(res.status), body);
   }
   return (await res.json()) as T;
 }
@@ -107,5 +116,6 @@ export const api = {
   post: <T>(url: string, body: unknown, headers?: Record<string, string>) =>
     request<T>("POST", url, body, headers),
   put: <T>(url: string, body: unknown) => request<T>("PUT", url, body),
+  patch: <T>(url: string, body: unknown) => request<T>("PATCH", url, body),
   del: <T>(url: string) => request<T>("DELETE", url),
 };
