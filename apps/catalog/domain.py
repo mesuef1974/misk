@@ -51,6 +51,14 @@ def validate_schema(schema: Any) -> list[dict[str, Any]]:
     return schema
 
 
+def validate_material_kinds(kinds: Any, known: set[str]) -> list[str]:
+    if not isinstance(kinds, list) or not all(isinstance(kind, str) and kind in known for kind in kinds):
+        raise ParamError({"material_kinds": f"قائمة من {sorted(known)}"})
+    if len(set(kinds)) != len(kinds):
+        raise ParamError({"material_kinds": "أنواع مكررة"})
+    return kinds
+
+
 def clean_params(schema: list[dict[str, Any]], params: Any) -> dict[str, Any]:
     """يعيد القيم منظَّفة بترتيب المخطط. يرفض الحقول المجهولة والناقصة والخارجة عن الحدود."""
     if not isinstance(params, dict):

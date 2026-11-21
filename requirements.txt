@@ -9,3 +9,7 @@ dj-database-url>=2.3
 gunicorn>=23.0
 redis>=5.2
 celery[redis]>=5.4
+# المصمِّم: تشكيل النص (HarfBuzz) وترتيب السطر ثنائي الاتجاه وهندسة المولّدات
+uharfbuzz>=0.45
+python-bidi>=0.6
+shapely>=2.0
