@@ -768,7 +768,7 @@ def test_media_bucket_falls_back_to_aws_names(monkeypatch):
         "AWS_ENDPOINT_URL": "https://storage.example.test",
         "AWS_DEFAULT_REGION": "auto",
         "AWS_ACCESS_KEY_ID": "aws-id",
-        "AWS_SECRET_ACCESS_KEY": "aws-secret",
+        "AWS_SECRET_ACCESS_KEY": "aws-secret",  # pragma: allowlist secret
     }
     try:
         for name in ("MEDIA_S3_BUCKET", "MEDIA_S3_ACCESS_KEY_ID", "MEDIA_S3_SECRET_ACCESS_KEY"):
