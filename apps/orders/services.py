@@ -223,4 +223,5 @@ def transition(*, order_id: int, to_status: str, actor=None, system: bool = Fals
     if to_status == Status.CANCELLED:
         # send لا send_robust: خطأ المستقبِل يُرجِع الإلغاء كله، فلا يبقى طلب ملغى وقطعه على لوح.
         signals.order_cancelled.send(sender=Order, order=order, actor=actor)
+    signals.order_transitioned.send(sender=Order, order=order, previous=previous, actor=actor)
     return order
