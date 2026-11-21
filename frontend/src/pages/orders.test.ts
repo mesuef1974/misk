@@ -51,6 +51,11 @@ function order(overrides: Partial<Order> = {}): Order {
     client_ref: "ref-1",
     customer_name: "أم سارة",
     status: "draft",
+    next_statuses: ["confirmed", "cancelled"],
+    channel: "staff",
+    fulfillment: "",
+    delivery_fee: "0.00",
+    source: "",
     occasion_date: "2026-12-01",
     notes: "",
     total: "50.00",
@@ -176,7 +181,7 @@ describe("تفاصيل الطلب", () => {
   it("تنقل الحالة وتعرض رفض الخادم", async () => {
     vi.mocked(ordersService.transition)
       .mockRejectedValueOnce(new ApiError(409, "لا تأكيد قبل معايرة المادة من قصاصة اختبار: جلد نباتي"))
-      .mockResolvedValueOnce(order({ status: "confirmed" }));
+      .mockResolvedValueOnce(order({ status: "confirmed", next_statuses: ["in_production", "cancelled"] }));
     const page = await show(OrderDetailPage, "/orders/1", { orderId: 1 });
 
     await page.get(".actions .primary").trigger("click");
@@ -191,7 +196,7 @@ describe("تفاصيل الطلب", () => {
   });
 
   it("الإلغاء يحتاج ضغطتين", async () => {
-    vi.mocked(ordersService.transition).mockResolvedValue(order({ status: "cancelled" }));
+    vi.mocked(ordersService.transition).mockResolvedValue(order({ status: "cancelled", next_statuses: [] }));
     const page = await show(OrderDetailPage, "/orders/1", { orderId: 1 });
 
     await page.get(".actions .danger").trigger("click");

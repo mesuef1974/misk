@@ -253,3 +253,29 @@ def test_seed_catalog_rejects_bad_file_without_writing(tmp_path):
     with pytest.raises(CommandError):
         call_command("seed_catalog", "--file", str(bad))
     assert not Material.objects.exists()
+
+
+@pytest.mark.django_db
+def test_template_storefront_fields_survive_workshop_edit(client, staff_user):
+    client.force_login(staff_user)
+    body = {
+        "slug": "wall-plaque",
+        "name": "لوحة جدارية",
+        "generator": "name_tag",
+        "width_mm": 200,
+        "height_mm": 100,
+    }
+    shop = {"name_en": "Wall plaque", "description": "تُعلَّق", "allows_religious_text": True}
+    res = client.post("/api/catalog/templates", {**body, **shop}, content_type="application/json")
+    assert res.status_code == 200, res.content
+    assert res.json()["allows_religious_text"] is True
+    # نموذج الورشة لا يرسل حقول المتجر: لا تُمسح.
+    data = client.post(
+        "/api/catalog/templates", {**body, "name": "لوحة"}, content_type="application/json"
+    ).json()
+    assert (data["name"], data["name_en"], data["description"], data["allows_religious_text"]) == (
+        "لوحة",
+        "Wall plaque",
+        "تُعلَّق",
+        True,
+    )

@@ -61,14 +61,24 @@ class OrderOut(Schema):
     client_ref: uuid.UUID
     customer_name: str
     status: str
+    next_statuses: list[str]  # ما يتاح للطاقم الآن؛ الواجهة تعرض أزراره فقط
+    channel: str
+    fulfillment: str
+    delivery_fee: Decimal
+    source: str
     occasion_date: date | None
     notes: str
-    total: Decimal
+    total: Decimal  # مجموع البنود دون رسوم التوصيل
     items: list[ItemOut]
 
     @staticmethod
     def resolve_customer_name(obj) -> str:
         return obj.customer.name
+
+    @staticmethod
+    def resolve_next_statuses(obj) -> list[str]:
+        allowed = services.allowed_transitions(obj)
+        return [status for status in Order.Status.values if status in allowed]
 
 
 class OrderPage(Schema):

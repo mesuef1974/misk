@@ -1,5 +1,5 @@
 import { buildDraft, estimateTotal, newItem, withTemplate, type OrderForm } from "./orderForm";
-import { formatDate, formatMoney, nextStatuses, statusLabel } from "./orders";
+import { formatDate, formatMoney, orderActions, statusLabel } from "./orders";
 import { cleanParams, emptyParams, type ParamField } from "./params";
 
 const schema: ParamField[] = [
@@ -35,15 +35,16 @@ describe("معاملات القالب", () => {
 });
 
 describe("حالات الطلب", () => {
-  it("يعرض الانتقالات المسموحة فقط", () => {
-    expect(nextStatuses("draft")).toEqual(["confirmed", "cancelled"]);
-    expect(nextStatuses("ready")).toEqual(["delivered"]);
-    expect(nextStatuses("delivered")).toEqual([]);
-    expect(nextStatuses("مجهولة")).toEqual([]);
+  it("يعرض ما أتاحه الخادم مما له زر", () => {
+    expect(orderActions({ next_statuses: ["confirmed", "cancelled"] })).toEqual(["confirmed", "cancelled"]);
+    expect(orderActions({ next_statuses: ["out_for_delivery"] })).toEqual(["out_for_delivery"]);
+    expect(orderActions({ next_statuses: ["paid", "refunded", "مجهولة"] })).toEqual([]);
+    expect(orderActions({ next_statuses: [] })).toEqual([]);
   });
 
   it("يسمّي الحالة ويترك المجهولة كما هي", () => {
     expect(statusLabel("in_production")).toBe("قيد التنفيذ");
+    expect(statusLabel("ready_for_pickup")).toBe("جاهز للاستلام");
     expect(statusLabel("x")).toBe("x");
   });
 

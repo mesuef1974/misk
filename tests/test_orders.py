@@ -310,3 +310,78 @@ def test_admin_locks_items_once_order_leaves_draft(rf, material, name_tag, calib
     assert not inline.has_change_permission(request, order)
     assert not inline.has_add_permission(request, order)
     assert not inline.has_delete_permission(request, order)
+
+
+def _storefront(material, status="draft", **fields):
+    order = _order(material)
+    Order.objects.filter(pk=order.pk).update(channel="storefront", status=status, **fields)
+    order.refresh_from_db()
+    return order
+
+
+@pytest.mark.django_db
+def test_new_order_gets_unique_tracking_token(material, name_tag):
+    first, second = _order(material), _order(material)
+    assert len(first.tracking_token) >= 43
+    assert first.tracking_token != second.tracking_token
+    assert first.channel == "staff"
+
+
+@pytest.mark.django_db
+def test_storefront_order_reaches_confirmed_through_payment_only(material, name_tag, calibration):
+    order = _storefront(material)
+    with pytest.raises(services.OrderError):  # لا تأكيد من المسودة دون دفع
+        services.transition(order_id=order.pk, to_status="confirmed")
+    with pytest.raises(services.OrderError):  # حالات الدفع ليست للطاقم
+        services.transition(order_id=order.pk, to_status="awaiting_payment")
+    for status in ("awaiting_payment", "paid"):
+        assert services.transition(order_id=order.pk, to_status=status, system=True).status == status
+    for status in ("under_review", "confirmed", "in_production"):
+        assert services.transition(order_id=order.pk, to_status=status).status == status
+
+
+@pytest.mark.django_db
+def test_staff_order_never_enters_payment_states(material, name_tag):
+    order = _order(material)
+    for status in ("awaiting_payment", "paid", "refunded"):
+        with pytest.raises(services.OrderError):
+            services.transition(order_id=order.pk, to_status=status, system=True)
+    services.transition(order_id=order.pk, to_status="cancelled")
+    with pytest.raises(services.OrderError):  # لا استرداد لطلب لم يُدفع عبر البوابة
+        services.transition(order_id=order.pk, to_status="refunded", system=True)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("fulfillment", "step", "blocked"),
+    [
+        ("delivery", "out_for_delivery", "ready_for_pickup"),
+        ("pickup", "ready_for_pickup", "out_for_delivery"),
+    ],
+)
+def test_ready_order_follows_its_fulfillment(material, name_tag, fulfillment, step, blocked):
+    order = _storefront(material, status="ready", fulfillment=fulfillment)
+    assert services.allowed_transitions(order) == {step}
+    with pytest.raises(services.OrderError):
+        services.transition(order_id=order.pk, to_status=blocked)
+    services.transition(order_id=order.pk, to_status=step)
+    assert services.transition(order_id=order.pk, to_status="delivered").status == "delivered"
+    with pytest.raises(services.OrderError):
+        services.transition(order_id=order.pk, to_status="refunded")
+    assert services.transition(order_id=order.pk, to_status="refunded", system=True).status == "refunded"
+
+
+@pytest.mark.django_db
+def test_orders_api_lists_next_statuses_and_rejects_system_states(client, staff_user, material, name_tag):
+    client.force_login(staff_user)
+    staff_order, shop_order = _order(material), _storefront(material, status="awaiting_payment")
+    assert client.get(f"/api/orders/{staff_order.pk}").json()["next_statuses"] == ["confirmed", "cancelled"]
+    data = client.get(f"/api/orders/{shop_order.pk}").json()
+    assert (data["channel"], data["next_statuses"]) == ("storefront", ["cancelled"])
+    assert "tracking_token" not in data
+    res = client.post(
+        f"/api/orders/{shop_order.pk}/transition", {"to_status": "paid"}, content_type="application/json"
+    )
+    assert res.status_code == 409
+    shop_order.refresh_from_db()
+    assert shop_order.status == "awaiting_payment"

@@ -32,17 +32,48 @@ class Customer(TimeStampedModel):
 class Order(TimeStampedModel):
     class Status(models.TextChoices):
         DRAFT = "draft", "مسودة"
+        AWAITING_PAYMENT = "awaiting_payment", "بانتظار الدفع"
+        PAID = "paid", "مدفوع"
+        UNDER_REVIEW = "under_review", "قيد المراجعة"
         CONFIRMED = "confirmed", "مؤكَّد"
         IN_PRODUCTION = "in_production", "قيد التنفيذ"
         READY = "ready", "جاهز"
+        OUT_FOR_DELIVERY = "out_for_delivery", "في الطريق"
+        READY_FOR_PICKUP = "ready_for_pickup", "جاهز للاستلام"
         DELIVERED = "delivered", "مُسلَّم"
         CANCELLED = "cancelled", "ملغى"
+        REFUNDED = "refunded", "مُستردّ"
+
+    class Channel(models.TextChoices):
+        STAFF = "staff", "الطاقم"
+        STOREFRONT = "storefront", "المتجر"
+
+    class Fulfillment(models.TextChoices):
+        PICKUP = "pickup", "استلام بموعد"
+        DELIVERY = "delivery", "توصيل"
+
+    class Source(models.TextChoices):
+        INSTAGRAM = "instagram", "إنستغرام"
+        TIKTOK = "tiktok", "تيك توك"
+        SNAPCHAT = "snapchat", "سناب"
+        REFERRAL = "referral", "إحالة"
+        BAZAAR = "bazaar", "بازار"
+        SEARCH = "search", "بحث"
+        OTHER = "other", "أخرى"
 
     client_ref = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="orders")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT, db_index=True)
     occasion_date = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
+    channel = models.CharField(max_length=16, choices=Channel.choices, default=Channel.STAFF, db_index=True)
+    fulfillment = models.CharField(max_length=16, choices=Fulfillment.choices, blank=True)
+    delivery_fee = models.DecimalField(
+        max_digits=8, decimal_places=2, default=Decimal("0"), validators=[MinValueValidator(Decimal("0"))]
+    )
+    source = models.CharField(max_length=16, choices=Source.choices, blank=True)
+    # رابط التتبّع السري. null للطلبات السابقة (expand)؛ الخدمة تولّده لكل طلب جديد.
+    tracking_token = models.CharField(max_length=64, null=True, blank=True, unique=True, editable=False)
 
     class Meta:
         verbose_name = "طلب"

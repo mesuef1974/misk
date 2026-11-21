@@ -1,35 +1,61 @@
-// حالات الطلب وانتقالاتها: نسخة الواجهة من TRANSITIONS في apps/orders/services.py.
-// تُستعمل لإظهار الأزرار المتاحة فقط؛ الخادم يرفض أي انتقال غير مسموح.
+// حالات الطلب وتسمياتها. الانتقالات المتاحة تأتي من الخادم في `Order.next_statuses`
+// (تتبع قناة الطلب وطريقة استلامه)، فلا نسخة ثانية لها هنا.
 
-export const ORDER_STATUSES = ["draft", "confirmed", "in_production", "ready", "delivered", "cancelled"] as const;
+export const ORDER_STATUSES = [
+  "draft",
+  "awaiting_payment",
+  "paid",
+  "under_review",
+  "confirmed",
+  "in_production",
+  "ready",
+  "out_for_delivery",
+  "ready_for_pickup",
+  "delivered",
+  "cancelled",
+  "refunded",
+] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+/** حالات طلب الطاقم: تظهر في التصفية دائمًا. حالات المتجر تظهر حين يكون فيها طلب. */
+export const WORKSHOP_STATUSES: readonly OrderStatus[] = [
+  "draft",
+  "confirmed",
+  "in_production",
+  "ready",
+  "delivered",
+  "cancelled",
+];
 
 export const STATUS_LABELS: Record<OrderStatus, string> = {
   draft: "مسودة",
+  awaiting_payment: "بانتظار الدفع",
+  paid: "مدفوع",
+  under_review: "قيد المراجعة",
   confirmed: "مؤكَّد",
   in_production: "قيد التنفيذ",
   ready: "جاهز",
+  out_for_delivery: "في الطريق",
+  ready_for_pickup: "جاهز للاستلام",
   delivered: "مُسلَّم",
   cancelled: "ملغى",
+  refunded: "مُستردّ",
 };
 
-const TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
-  draft: ["confirmed", "cancelled"],
-  confirmed: ["in_production", "cancelled"],
-  in_production: ["ready", "cancelled"],
-  ready: ["delivered"],
-  delivered: [],
-  cancelled: [],
-};
-
-/** نص الزر الذي ينقل الطلب إلى الحالة. */
+/** نص الزر الذي ينقل الطلب إلى الحالة. الفارغ حالة يدخلها النظام وحده (الدفع والاسترداد). */
 export const TRANSITION_ACTIONS: Record<OrderStatus, string> = {
   draft: "",
+  awaiting_payment: "",
+  paid: "",
+  under_review: "تحويل للمراجعة",
   confirmed: "تأكيد الطلب",
   in_production: "بدء التنفيذ",
   ready: "جاهز للتسليم",
+  out_for_delivery: "خرج للتوصيل",
+  ready_for_pickup: "جاهز للاستلام",
   delivered: "تسليم للعميل",
   cancelled: "إلغاء الطلب",
+  refunded: "",
 };
 
 function isStatus(status: string): status is OrderStatus {
@@ -40,8 +66,9 @@ export function statusLabel(status: string): string {
   return isStatus(status) ? STATUS_LABELS[status] : status;
 }
 
-export function nextStatuses(status: string): readonly OrderStatus[] {
-  return isStatus(status) ? TRANSITIONS[status] : [];
+/** أزرار الطلب: ما أتاحه الخادم مما تعرفه الواجهة وله زر. */
+export function orderActions(order: { next_statuses: readonly string[] }): OrderStatus[] {
+  return order.next_statuses.filter(isStatus).filter((status) => TRANSITION_ACTIONS[status] !== "");
 }
 
 const money = new Intl.NumberFormat("ar-u-nu-latn", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

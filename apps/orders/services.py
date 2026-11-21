@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import date
@@ -21,14 +22,59 @@ from .models import Customer, Order, OrderItem
 
 Status = Order.Status
 
+Channel = Order.Channel
+
 TRANSITIONS: dict[str, set[str]] = {
-    Status.DRAFT: {Status.CONFIRMED, Status.CANCELLED},
+    Status.DRAFT: {Status.CONFIRMED, Status.AWAITING_PAYMENT, Status.CANCELLED},
+    Status.AWAITING_PAYMENT: {Status.PAID, Status.CANCELLED},
+    Status.PAID: {Status.UNDER_REVIEW, Status.CONFIRMED},
+    Status.UNDER_REVIEW: {Status.CONFIRMED, Status.CANCELLED},
     Status.CONFIRMED: {Status.IN_PRODUCTION, Status.CANCELLED},
     Status.IN_PRODUCTION: {Status.READY, Status.CANCELLED},
-    Status.READY: {Status.DELIVERED},
-    Status.DELIVERED: set(),
-    Status.CANCELLED: set(),
+    Status.READY: {Status.DELIVERED, Status.OUT_FOR_DELIVERY, Status.READY_FOR_PICKUP},
+    Status.OUT_FOR_DELIVERY: {Status.DELIVERED},
+    Status.READY_FOR_PICKUP: {Status.DELIVERED},
+    Status.DELIVERED: {Status.REFUNDED},
+    Status.CANCELLED: {Status.REFUNDED},
+    Status.REFUNDED: set(),
 }
+
+# حالات يدخلها النظام وحده (خدمة الدفع وإشعار البوابة)، لا زر في لوحة الطاقم.
+SYSTEM_ONLY: frozenset[str] = frozenset({Status.AWAITING_PAYMENT, Status.PAID, Status.REFUNDED})
+# طلب المتجر لا يُؤكَّد من المسودة: طريقه الدفع. وطلب الطاقم لا دفع له عبر البوابة.
+_STAFF_ONLY_EDGES = {(Status.DRAFT, Status.CONFIRMED)}
+_STOREFRONT_ONLY_EDGES = {
+    (Status.DRAFT, Status.AWAITING_PAYMENT),
+    (Status.DELIVERED, Status.REFUNDED),
+    (Status.CANCELLED, Status.REFUNDED),
+}
+_FULFILLMENT_EDGES = {
+    (Status.READY, Status.OUT_FOR_DELIVERY): Order.Fulfillment.DELIVERY,
+    (Status.READY, Status.READY_FOR_PICKUP): Order.Fulfillment.PICKUP,
+}
+
+
+def allowed_transitions(order: Order, *, system: bool = False) -> set[str]:
+    """الحالات التي يصلها هذا الطلب الآن، بحسب قناته وطريقة استلامه ومن يطلب الانتقال."""
+    allowed = set()
+    for to_status in TRANSITIONS[order.status]:
+        edge = (order.status, to_status)
+        if to_status in SYSTEM_ONLY and not system:
+            continue
+        if edge in _STAFF_ONLY_EDGES and order.channel != Channel.STAFF:
+            continue
+        if edge in _STOREFRONT_ONLY_EDGES and order.channel != Channel.STOREFRONT:
+            continue
+        if edge in _FULFILLMENT_EDGES and order.fulfillment != _FULFILLMENT_EDGES[edge]:
+            continue
+        if edge == (Status.READY, Status.DELIVERED) and order.fulfillment:
+            continue  # ما له طريقة استلام يمر بخطوتها أولًا
+        allowed.add(to_status)
+    return allowed
+
+
+def new_tracking_token() -> str:
+    return secrets.token_urlsafe(32)
 
 
 MAX_ITEMS = 100
@@ -121,7 +167,11 @@ def create_order(
             # وبياناته إلى الآخر (PDPPL)، وطلبان متزامنان بالاسم نفسه كانا ينشئان زبونين على أي حال.
             customer = Customer.objects.create(name=name)
             order = Order.objects.create(
-                client_ref=client_ref, customer=customer, occasion_date=occasion_date, notes=notes
+                client_ref=client_ref,
+                customer=customer,
+                occasion_date=occasion_date,
+                notes=notes,
+                tracking_token=new_tracking_token(),
             )
     except IntegrityError:
         # طلب متزامن بالـ client_ref نفسه سبق بعد فحصنا: نعيد طلبه بدل 500.
@@ -139,17 +189,19 @@ def create_order(
 
 
 @transaction.atomic
-def transition(*, order_id: int, to_status: str, actor=None) -> Order:
+def transition(*, order_id: int, to_status: str, actor=None, system: bool = False) -> Order:
     """الانتقال إلى الحالة الحالية نفسها لا يغيّر شيئًا. التأكيد يشترط معايرة لكل مادة في الطلب.
 
     «جاهز» يُرسل `order_ready_requested` قبل الحفظ، وبه يرفض الإنتاج طلبًا بقيت فيه قطعة لم تُقصّ.
 
     الإلغاء يرسل `order_cancelled` في المعاملة نفسها، وبه يرفع الإنتاج قطع الطلب عن الألواح التي لم تُقصّ.
+
+    `system=True` لخدمة الدفع وحدها: به تُفتح حالات `SYSTEM_ONLY`. مسار الطاقم لا يمرّره.
     """
     order = Order.objects.select_for_update().get(pk=order_id)
     if order.status == to_status:
         return order
-    if to_status not in TRANSITIONS[order.status]:
+    if to_status not in allowed_transitions(order, system=system):
         raise OrderError(f"لا انتقال من «{order.get_status_display()}» إلى «{Status(to_status).label}»")
     if to_status == Status.CONFIRMED:
         material_ids = set(order.items.values_list("material_id", flat=True))
