@@ -758,3 +758,35 @@ def test_media_bucket_selects_private_s3_storage(monkeypatch):
             monkeypatch.delenv(name, raising=False)
         importlib.reload(base)
     assert base.STORAGES["default"]["BACKEND"] == "django.core.files.storage.FileSystemStorage"
+
+
+def test_media_bucket_falls_back_to_aws_names(monkeypatch):
+    """إشارات MEDIA_S3_* غير المحلولة فارغة؛ أسماء AWS_* من «Add to Service» تكمل مكانها."""
+    base = importlib.import_module("config.settings.base")
+    aws = {
+        "AWS_S3_BUCKET_NAME": "bucket-from-railway",
+        "AWS_ENDPOINT_URL": "https://storage.example.test",
+        "AWS_DEFAULT_REGION": "auto",
+        "AWS_ACCESS_KEY_ID": "aws-id",
+        "AWS_SECRET_ACCESS_KEY": "aws-secret",  # pragma: allowlist secret
+    }
+    try:
+        for name in ("MEDIA_S3_BUCKET", "MEDIA_S3_ACCESS_KEY_ID", "MEDIA_S3_SECRET_ACCESS_KEY"):
+            monkeypatch.setenv(name, "")
+        for name, value in aws.items():
+            monkeypatch.setenv(name, value)
+        storage = importlib.reload(base).STORAGES["default"]
+        assert storage["BACKEND"] == "storages.backends.s3.S3Storage"
+        assert storage["OPTIONS"]["bucket_name"] == "bucket-from-railway"
+        assert storage["OPTIONS"]["endpoint_url"] == "https://storage.example.test"
+        assert storage["OPTIONS"]["region_name"] == "auto"
+        assert storage["OPTIONS"]["access_key"] == aws["AWS_ACCESS_KEY_ID"]
+        assert storage["OPTIONS"]["secret_key"] == aws["AWS_SECRET_ACCESS_KEY"]
+
+        monkeypatch.setenv("MEDIA_S3_BUCKET", "misk-media")  # الاسم الأساسي يسبق البديل
+        assert importlib.reload(base).STORAGES["default"]["OPTIONS"]["bucket_name"] == "misk-media"
+    finally:
+        for name in ("MEDIA_S3_BUCKET", "MEDIA_S3_ACCESS_KEY_ID", "MEDIA_S3_SECRET_ACCESS_KEY", *aws):
+            monkeypatch.delenv(name, raising=False)
+        importlib.reload(base)
+    assert base.STORAGES["default"]["BACKEND"] == "django.core.files.storage.FileSystemStorage"

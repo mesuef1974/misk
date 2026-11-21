@@ -152,16 +152,35 @@ MEDIA_ROOT = BASE_DIR / "media"
 # الويب والعامل خدمتان منفصلتان في الإنتاج، والقرص الدائم يُركَّب على خدمة واحدة: الوسائط في مخزن كائنات S3
 # يقرؤه الاثنان. بلا MEDIA_S3_BUCKET يبقى القرص المحلي (التطوير والاختبار). الدلو خاص، والعرض عبر
 # `apps.core.views.media_file` للمشرفين وحدهم، فلا روابط موقَّعة تخرج إلى المتصفح.
-MEDIA_S3_BUCKET = env("MEDIA_S3_BUCKET")
+# الاحتياط بأسماء AWS_* هو ما يضيفه زر «Add to Service» في دلو Railway؛ والقيمة الفارغة (إشارة
+# `${{...}}` لم تُحلَّ) تُعامَل كالغائبة فيُنتقل إلى الاسم التالي.
+_MEDIA_S3_FALLBACKS: dict[str, tuple[str, ...]] = {
+    "MEDIA_S3_BUCKET": ("AWS_S3_BUCKET_NAME", "AWS_STORAGE_BUCKET_NAME"),
+    "MEDIA_S3_ENDPOINT": ("AWS_ENDPOINT_URL_S3", "AWS_ENDPOINT_URL", "AWS_S3_ENDPOINT_URL"),
+    "MEDIA_S3_REGION": ("AWS_DEFAULT_REGION", "AWS_REGION", "AWS_S3_REGION_NAME"),
+    "MEDIA_S3_ACCESS_KEY_ID": ("AWS_ACCESS_KEY_ID",),
+    "MEDIA_S3_SECRET_ACCESS_KEY": ("AWS_SECRET_ACCESS_KEY",),
+}
+
+
+def media_s3_env(name: str, *, required: bool = False) -> str:
+    """أول قيمة غير فارغة من MEDIA_S3_* ثم بدائلها AWS_*؛ رسالة الخطأ تسمّي الاسم الأساسي."""
+    for candidate in (name, *_MEDIA_S3_FALLBACKS.get(name, ())):
+        if value := env(candidate):
+            return value
+    return env(name, required=required)
+
+
+MEDIA_S3_BUCKET = media_s3_env("MEDIA_S3_BUCKET")
 if MEDIA_S3_BUCKET:
     STORAGES["default"] = {
         "BACKEND": "storages.backends.s3.S3Storage",
         "OPTIONS": {
             "bucket_name": MEDIA_S3_BUCKET,
-            "endpoint_url": env("MEDIA_S3_ENDPOINT") or None,
-            "region_name": env("MEDIA_S3_REGION") or None,
-            "access_key": env("MEDIA_S3_ACCESS_KEY_ID", required=True),
-            "secret_key": env("MEDIA_S3_SECRET_ACCESS_KEY", required=True),
+            "endpoint_url": media_s3_env("MEDIA_S3_ENDPOINT") or None,
+            "region_name": media_s3_env("MEDIA_S3_REGION") or None,
+            "access_key": media_s3_env("MEDIA_S3_ACCESS_KEY_ID", required=True),
+            "secret_key": media_s3_env("MEDIA_S3_SECRET_ACCESS_KEY", required=True),
             "location": env("MEDIA_S3_PREFIX", "media"),
             "default_acl": None,
             "querystring_auth": True,
