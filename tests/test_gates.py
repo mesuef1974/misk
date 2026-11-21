@@ -745,6 +745,58 @@ def test_deploy_guard_hook_exit_codes(monkeypatch, capsys):
     assert "gh-pr-merge" in capsys.readouterr().err
 
 
+# مركَّب لا حرفي، كـHEAD أعلاه: سلسلة 40 خانة ست عشرية حرفية يعدّها detect-secrets سرًّا.
+_SHA = "f12cccbd" + "0" * 32
+
+
+def test_deploy_guard_sends_the_one_merge_form_to_the_owner_prompt(monkeypatch, capsys):
+    """قرار المالك 2026-11-21: الصيغة المربوطة بالرأس لا تُسمح ولا تُحجب، بل تُحال إلى نافذة الموافقة."""
+    guard = _deploy_guard()
+    command = f"gh pr merge 88 --squash --match-head-commit {_SHA}"
+    payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
+    monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(payload))
+    assert guard.main() == 0
+    out = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert out["hookEventName"] == "PreToolUse"
+    assert out["permissionDecision"] == "ask"
+    assert "88" in out["permissionDecisionReason"] and _SHA[:8] in out["permissionDecisionReason"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh pr merge 88 --squash",
+        f"gh pr merge 88 --squash --match-head-commit {_SHA[:8]}",
+        f"gh pr merge 88 --squash --match-head-commit {_SHA} --admin",
+        f"gh pr merge 88 --squash --auto --match-head-commit {_SHA}",
+        f"gh pr merge 88 --merge --match-head-commit {_SHA}",
+        f"gh -R o/r pr merge 88 --squash --match-head-commit {_SHA}",
+        f"gh pr merge 88 --squash --match-head-commit {_SHA} && gh pr merge 89 --squash",
+        f"gh pr merge 88 --squash --match-head-commit {_SHA}\ngh pr merge 89 --squash",
+        f"gh pr merge 88 --squash --match-head-commit {_SHA}; railway up",
+        f"gh pr merge $(echo 88) --squash --match-head-commit {_SHA}",
+        f"gh pr merge feat/x --squash --match-head-commit {_SHA}",
+        f'gh pr "merge" 88 --squash --match-head-commit {_SHA}',
+    ],
+)
+def test_deploy_guard_still_blocks_every_other_merge_form(command, monkeypatch, capsys):
+    guard = _deploy_guard()
+    assert guard.owner_merge(command) is None
+    payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
+    monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(payload))
+    assert guard.main() == 2
+    assert capsys.readouterr().out == ""
+
+
+def test_merge_is_ask_not_deny_and_deploy_stays_denied():
+    permissions = json.loads((ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))["permissions"]
+    assert "Bash(gh pr merge*)" in permissions["ask"]
+    assert not [rule for rule in permissions["deny"] if "merge*)" in rule and "gate" not in rule]
+    assert not [rule for rule in permissions.get("allow", []) if "merge" in rule or "railway" in rule]
+    for rule in ("Bash(railway *)", "Bash(*@railway/cli*)", "Bash(*merge_gate.py*--enable*)"):
+        assert rule in permissions["deny"]
+
+
 def test_deploy_guard_is_registered_for_bash_and_powershell():
     hooks = json.loads((ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))["hooks"][
         "PreToolUse"

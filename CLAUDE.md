@@ -17,7 +17,8 @@ PostgreSQL + Redis + Celery (`config/celery.py`). النشر على Railway (`.r
 - قبل أي دفع: `python scripts/prepush_check.py`.
 
 ## ما لا تفعله
-- لا `gh pr merge` ولا `railway` ولا `merge_gate.py --enable` من الجلسة: محجوبة بـ deny في `.claude/settings.json`؛ الدمج والنشر بيد المالك.
+- لا `railway` ولا `merge_gate.py --enable` من الجلسة: محجوبان بـ deny في `.claude/settings.json` وبـ `.claude/hooks/guard_deploy.py`. النشر يجريه Railway من main بعد نجاح الفحوص.
+- الدمج بأمر المالك في المحادثة لكل طلب («اعتمد وادمج»)، وبصيغة واحدة: `gh pr merge <رقم> --squash --match-head-commit <SHA كاملًا>`، بعد سطر الاعتماد على الرأس نفسه واخضرار الفحوص كلها. الحارس يحيلها إلى نافذة موافقة في التطبيق؛ كل صيغة أخرى محجوبة. لا تدمج بلا أمر ولو كانت النافذة ستظهر.
 - لا `git push` إلا بأمر المالك. `.claude/hooks/guard_git.py` يحجب الدفع إلى main والدفع القسري و`git add -A` وتجاوز فحوص الإيداع؛ دفع فرع العمل غير محجوب تقنيًّا.
 - سطر الاعتماد «اعتُمد من المالك — …» لا تكتبه الجلسة إلا بأمر المالك الصريح لكل رأس: الفحص لا يميّز كاتبه.
 - لا تعديل على `.github/`، `scripts/*gate*`, `security/`, lockfiles, `Dockerfile`, `.railway/` داخل بطاقة عادية.
