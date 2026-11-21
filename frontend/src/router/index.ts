@@ -31,6 +31,13 @@ export const routes: RouteRecordRaw[] = [
         component: () => import("@/pages/ProductPage.vue"),
         props: (route) => ({ slug: String(route.params.slug) }),
       },
+      { path: "designs", name: "designs", component: () => import("@/pages/DesignsPage.vue") },
+      {
+        path: "designs/:slug",
+        name: "design",
+        component: () => import("@/pages/DesignPage.vue"),
+        props: (route) => ({ slug: String(route.params.slug) }),
+      },
       { path: "cart", name: "cart", component: () => import("@/pages/CartPage.vue") },
       { path: "checkout", name: "checkout", component: () => import("@/pages/CheckoutPage.vue") },
       {

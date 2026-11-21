@@ -93,6 +93,7 @@ async function logout(): Promise<void> {
       </nav>
       <nav v-else class="main" :aria-label="t('nav.sections')">
         <RouterLink class="nav-item" :to="{ name: 'products' }"><BrandIcon name="favors" /><span>{{ t("store.nav.products") }}</span></RouterLink>
+        <RouterLink class="nav-item" :to="{ name: 'designs' }"><BrandIcon name="wood" /><span>{{ t("store.nav.designs") }}</span></RouterLink>
         <RouterLink class="nav-item" :to="{ name: 'cart' }" :aria-label="cart.count ? t('store.nav.cartCount', { count: cart.count }) : undefined">
           <BrandIcon name="order" /><span>{{ t("store.nav.cart") }}</span><span v-if="cart.count" class="pill num count" aria-hidden="true">{{ cart.count }}</span>
         </RouterLink>

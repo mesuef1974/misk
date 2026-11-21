@@ -5,13 +5,22 @@ from decimal import Decimal
 from io import StringIO
 
 import pytest
+from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 
 from apps.catalog import services as catalog_services
 from apps.catalog.models import ProductTemplate
 from apps.core.models import AuditLog
-from apps.designs import estimate, scan, services, svg
-from apps.designs.models import Design, DesignFile, DesignSource, VariantEstimate
+from apps.designs import estimate, pricing, scan, selectors, services, svg, tasks, validators
+from apps.designs.models import (
+    Design,
+    DesignFile,
+    DesignImage,
+    DesignPricing,
+    DesignSource,
+    VariantEstimate,
+)
 
 KEY = {
     "#e30613": {"operation": "cut", "material": "wood"},
@@ -519,3 +528,174 @@ def test_command_scan_writes_nothing_and_create_source(media, library, db):
     archive = library / "Baby" / "Name-Sign-Bundle-153819768.zip"
     call_command("import_designs", str(archive), source="New", create_source=True, stdout=StringIO())
     assert DesignSource.objects.get(name="New").designs.get().variants.count() == 2
+
+
+# ——— العرض في المتجر: التسعير والنشر والمسارات العامة (docs/ready-designs-plan.md) ———
+
+RATES = pricing.Rates(minute_rate=Decimal("2"), margin_pct=Decimal("100"), round_to=Decimal("5"))
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+
+
+def _price(**overrides):
+    values = {
+        "rates": RATES,
+        "material_cost": Decimal("0.50"),
+        "total_seconds": Decimal("30"),
+        "complete": True,
+        "assembly_fee": Decimal("10"),
+    }
+    return pricing.price(**{**values, **overrides})
+
+
+def test_price_rounds_up_and_manual_price_wins():
+    assert _price() == Decimal("25.00")  # (0.50 + 1.00 + 10) × 2 = 23 ← 25
+    assert _price(assembly_fee=Decimal("11")) == Decimal("25.00")  # 25 تمامًا لا تُرفع
+    assert _price(manual_price=Decimal("40")) == Decimal("40.00")
+    assert _price(complete=False) is None
+    assert _price(complete=False, manual_price=Decimal("40")) == Decimal("40.00")
+    assert _price(rates=None, manual_price=Decimal("40")) is None
+
+
+@pytest.mark.parametrize(
+    ("name", "content"),
+    [("a.svg", b"<svg/>"), ("a.png", b'<svg xmlns="http://www.w3.org/2000/svg"/>'), ("a.jpg", PNG)],
+)
+def test_showcase_image_must_be_raster_matching_its_extension(name, content):
+    with pytest.raises(ValidationError):
+        validators.validate_showcase_image(SimpleUploadedFile(name, content))
+    validators.validate_showcase_image(SimpleUploadedFile("a.png", PNG))
+
+
+@pytest.fixture
+def box_design(media, source, wood, tmp_path):
+    """تصميم معتمد من مادة واحدة، محلَّل ومقدَّر، بلا ترخيص تجاري ولا صورة ولا سعر بعد."""
+    folder = tmp_path / "in" / "Gift Box"
+    folder.mkdir(parents=True)
+    (folder / "Gift Box.svg").write_bytes(_box(100, "#e30613"))
+    variant = services.import_folder(root=folder.parent, source=source).created[0]
+    services.analyze_variant(variant)
+    design = variant.design
+    design.name_ar, design.category = "علبة هدية", "هدايا"
+    design.save()
+    return services.approve(design)
+
+
+def _make_listable(design):
+    design.source.license_kind = DesignSource.License.COMMERCIAL
+    design.source.save()
+    design.name_en = "Gift Box"
+    design.assembly_fee = Decimal("10")
+    design.save()
+    DesignImage.objects.create(design=design, file=SimpleUploadedFile("box.png", PNG), alt_en="A gift box")
+    services.save_pricing(minute_rate=Decimal("2"), margin_pct=Decimal("100"))
+    services.reprice_all()
+
+
+def test_listing_names_what_is_missing_then_publishes_once(box_design, staff_user):
+    with pytest.raises(services.DesignError) as failure:
+        services.list_design(box_design)
+    for part in ("ترخيص المصدر", "الاسم الإنجليزي", "صورة عرض", "إعداد التسعير"):
+        assert part in str(failure.value)
+
+    _make_listable(box_design)
+    assert selectors.listing_blockers(box_design) == []
+    services.list_design(box_design, actor=staff_user)
+    services.list_design(box_design, actor=staff_user)
+    assert (box_design.slug, box_design.is_listed) == ("gift-box", True)
+    assert AuditLog.objects.filter(action="designs.design.list").count() == 1
+
+
+def test_multi_material_design_cannot_be_listed(media, source, pack_folder, wood):
+    variant = services.import_folder(root=pack_folder, source=source).created[0]
+    services.analyze_variant(variant)  # SAMPLE: خشب وأكريليك معًا
+    design = variant.design
+    design.name_ar, design.category = "حصّالة", "مواليد"
+    design.save()
+    services.approve(design)
+    _make_listable(design)
+    assert selectors.listing_blockers(design) == ["نسخة بسعر على مادة واحدة"]
+
+
+def test_store_designs_show_price_and_image_but_no_design_file(client, box_design, wood):
+    assert client.get("/api/store/designs").json() == []
+    _make_listable(box_design)
+    services.list_design(box_design)
+
+    rows = client.get("/api/store/designs").json()
+    assert [(r["slug"], r["name"], r["name_en"], r["price_from"]) for r in rows] == [
+        ("gift-box", "علبة هدية", "Gift Box", "25.00")
+    ]
+    assert client.get("/api/store/designs?category=أخرى").json() == []
+
+    response = client.get("/api/store/designs/gift-box")
+    detail = response.json()
+    offer = detail["variants"][0]["offers"][0]
+    assert (offer["price"], offer["material"]["id"]) == ("25.00", wood.pk)
+    assert detail["images"][0]["alt_en"] == "A gift box"
+    body = response.content.decode().lower()
+    variant = box_design.variants.get()
+    for secret in (
+        ".svg",
+        "sha",
+        variant.svg_sha256,
+        "test store",
+        "folder",
+        "cost",
+        "seconds",
+        "designs/files",
+    ):
+        assert secret not in body, secret
+
+    image = client.get(detail["images"][0]["url"])
+    assert image.status_code == 200 and b"".join(image.streaming_content) == PNG
+    assert image["Content-Type"] == "image/png" and image["X-Content-Type-Options"] == "nosniff"
+    assert "public" in image["Cache-Control"]
+    # ملفات التصميم نفسها تبقى خلف دخول المشرف.
+    original = variant.files.get(role=DesignFile.Role.ORIGINAL)
+    assert client.get(f"/media/{original.file.name}").status_code == 404
+
+
+def test_unlisting_or_losing_the_license_hides_the_design(client, box_design):
+    _make_listable(box_design)
+    services.list_design(box_design)
+    image_url = client.get("/api/store/designs/gift-box").json()["images"][0]["url"]
+
+    box_design.source.license_kind = DesignSource.License.PERSONAL
+    box_design.source.save()
+    assert client.get("/api/store/designs").json() == []
+    assert client.get("/api/store/designs/gift-box").status_code == 404
+    assert client.get(image_url).status_code == 404
+
+    box_design.source.license_kind = DesignSource.License.COMMERCIAL
+    box_design.source.save()
+    assert client.get("/api/store/designs/gift-box").status_code == 200
+    services.unlist_design(box_design)
+    assert client.get("/api/store/designs/gift-box?lang=en").json()["detail"] == "Design not found"
+
+
+def test_pricing_change_and_manual_price_reprice(box_design, wood):
+    _make_listable(box_design)
+    variant = box_design.variants.get()
+    assert variant.estimates.get(material=wood).price == Decimal("25.00")
+
+    services.save_pricing(minute_rate=Decimal("2"), margin_pct=Decimal("200"))
+    assert tasks.reprice_all_async.delay().get() == 1
+    assert variant.estimates.get(material=wood).price == Decimal("35.00")  # 11.5 × 3 = 34.5 ← 35
+    assert DesignPricing.objects.count() == 1
+
+    variant.manual_price = Decimal("60")
+    variant.save()
+    services.refresh_estimates(variant)
+    assert variant.estimates.get(material=wood).price == Decimal("60.00")
+
+
+def test_store_admin_pages_and_actions(box_design, admin_client):
+    _make_listable(box_design)
+    for url in ("/admin/designs/designpricing/", "/admin/designs/designpricing/1/change/"):
+        assert admin_client.get(url).status_code == 200, url
+    assert admin_client.get("/admin/designs/design/").status_code == 200
+    admin_client.post(
+        "/admin/designs/design/", {"action": "list_in_store", "_selected_action": [box_design.pk]}
+    )
+    box_design.refresh_from_db()
+    assert box_design.is_listed

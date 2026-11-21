@@ -1,7 +1,17 @@
 from django.contrib import admin, messages
+from django.db import transaction
 
-from . import services, tasks
-from .models import Design, DesignFile, DesignPack, DesignSource, DesignVariant, VariantEstimate
+from . import selectors, services, tasks
+from .models import (
+    Design,
+    DesignFile,
+    DesignImage,
+    DesignPack,
+    DesignPricing,
+    DesignSource,
+    DesignVariant,
+    VariantEstimate,
+)
 
 
 @admin.register(DesignSource)
@@ -38,14 +48,43 @@ class VariantInline(admin.TabularInline):
         return False
 
 
+class ImageInline(admin.TabularInline):
+    model = DesignImage
+    fields = ["file", "alt_ar", "alt_en", "sort"]
+    extra = 1
+
+
 @admin.register(Design)
 class DesignAdmin(admin.ModelAdmin):
-    list_display = ["name_original", "name_ar", "category", "status", "source"]
-    list_filter = ["status", "source", "category"]
-    search_fields = ["name_original", "name_ar", "tags"]
-    readonly_fields = ["status", "product_template"]
-    inlines = [VariantInline]
-    actions = ["approve"]
+    list_display = ["name_original", "name_ar", "category", "status", "is_listed", "listing_state", "source"]
+    list_filter = ["status", "is_listed", "source", "category"]
+    search_fields = ["name_original", "name_ar", "name_en", "tags"]
+    readonly_fields = ["status", "product_template", "slug", "is_listed", "listing_state"]
+    inlines = [ImageInline, VariantInline]
+    actions = ["approve", "list_in_store", "unlist_from_store"]
+
+    @admin.display(description="ينقصه للنشر")
+    def listing_state(self, obj):
+        return "، ".join(selectors.listing_blockers(obj)) or "—"
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if "assembly_fee" in form.changed_data:
+            for variant in obj.variants.all():
+                services.refresh_estimates(variant)
+
+    @admin.action(description="انشر في المتجر")
+    def list_in_store(self, request, queryset):
+        for design in queryset.select_related("source"):
+            try:
+                services.list_design(design, actor=request.user)
+            except services.DesignError as exc:
+                self.message_user(request, f"{design}: {exc}", messages.ERROR)
+
+    @admin.action(description="أخفِ من المتجر")
+    def unlist_from_store(self, request, queryset):
+        for design in queryset:
+            services.unlist_design(design, actor=request.user)
 
     @admin.action(description="اعتماد التصاميم المحددة")
     def approve(self, request, queryset):
@@ -83,6 +122,7 @@ ESTIMATE_COLUMNS = (
     "total_seconds",
     "complete",
     "material_cost",
+    "price",
 )
 
 
@@ -115,6 +155,11 @@ class DesignVariantAdmin(admin.ModelAdmin):
     inlines = [FileInline, EstimateInline]
     actions = ["analyze"]
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if "manual_price" in form.changed_data:
+            services.refresh_estimates(obj)
+
     def has_add_permission(self, request):
         return False
 
@@ -123,3 +168,29 @@ class DesignVariantAdmin(admin.ModelAdmin):
         for variant in queryset:
             tasks.analyze_variant_async.delay(variant.pk, request.user.pk)
         self.message_user(request, f"أُرسل {queryset.count()} للتحليل")
+
+
+@admin.register(DesignPricing)
+class DesignPricingAdmin(admin.ModelAdmin):
+    """صف واحد. حفظه أو إجراء «أعد حساب الأسعار» يعيد تسعير الفهرس في الخلفية (بعد تغيير سعر لوح مثلًا)."""
+
+    list_display = ["minute_rate", "margin_pct", "round_to", "updated_at"]
+    actions = ["reprice"]
+
+    def has_add_permission(self, request):
+        return not DesignPricing.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        services.save_pricing(
+            minute_rate=obj.minute_rate, margin_pct=obj.margin_pct, round_to=obj.round_to, actor=request.user
+        )
+        obj.pk = 1
+        transaction.on_commit(tasks.reprice_all_async.delay)
+
+    @admin.action(description="أعد حساب الأسعار")
+    def reprice(self, request, queryset):
+        tasks.reprice_all_async.delay()
+        self.message_user(request, "أُرسلت إعادة الحساب إلى الخلفية")

@@ -29,6 +29,45 @@ export interface StoreTemplateDetail extends StoreTemplate {
   materials: StoreMaterial[];
 }
 
+/** تصميم جاهز في القائمة: صورة عرض وسعر يبدأ منه. ملف التصميم لا يصل المتصفح أبدًا. */
+export interface StoreDesignImage {
+  url: string;
+  alt: string;
+  alt_en: string;
+}
+
+export interface StoreDesign {
+  slug: string;
+  name: string;
+  name_en: string;
+  category: string;
+  occasion: string;
+  price_from: string;
+  image: StoreDesignImage | null;
+}
+
+export interface StoreDesignOffer {
+  material: StoreMaterial;
+  price: string;
+}
+
+export interface StoreDesignVariant {
+  code: string;
+  sheet_width_mm: string | null;
+  sheet_height_mm: string | null;
+  offers: StoreDesignOffer[];
+}
+
+export interface StoreDesignDetail extends StoreDesign {
+  description: string;
+  description_en: string;
+  assembled_width_mm: string | null;
+  assembled_height_mm: string | null;
+  assembled_depth_mm: string | null;
+  images: StoreDesignImage[];
+  variants: StoreDesignVariant[];
+}
+
 /** حدّ حقل نص عند تركيبة من حقول الاختيار (`when`): تقديري للعدّاد، والحكم في المعاينة. */
 export interface FieldLimit {
   field: string;
@@ -158,6 +197,10 @@ export const storeService = {
     api.get<FieldLimit[]>(`/api/store/templates/${slug(templateSlug)}/limits?material_id=${materialId}&lang=${lang}`),
   preview: (templateSlug: string, materialId: number, params: ParamValues, lang: Locale) =>
     api.post<Preview>(`/api/store/templates/${slug(templateSlug)}/preview`, { material_id: materialId, params, lang }),
+
+  designs: () => api.get<StoreDesign[]>("/api/store/designs"),
+  design: (designSlug: string, lang: Locale) =>
+    api.get<StoreDesignDetail>(`/api/store/designs/${slug(designSlug)}?lang=${lang}`),
 
   cart: () => api.get<Cart>("/api/store/cart"),
   addItem: (draft: CartItemDraft, lang: Locale) => api.post<Cart>("/api/store/cart/items", { ...draft, lang }),
