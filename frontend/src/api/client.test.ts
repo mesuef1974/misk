@@ -67,6 +67,16 @@ describe("عميل API", () => {
     expect((await failure(api.post("/api/auth/login", {}))).message).toBe("محاولات كثيرة؛ حاول بعد قليل");
   });
 
+  it("يحمل جسم الخطأ كما أرسله الخادم: رمز المتجر وحقوله", async () => {
+    const body = { code: "invalid", detail: "راجع الحقول المحدّدة", fields: { name: { code: "required", message: "مطلوب" } } };
+    respond(422, body);
+    const error = await failure(api.patch("/api/store/cart/items/1", { quantity: 2 }));
+    expect(error.message).toBe("راجع الحقول المحدّدة");
+    expect(error.body).toEqual(body);
+    respond(500, "<html>");
+    expect((await failure(api.get("/api/x"))).body).toBeNull();
+  });
+
   it("يتحمّل جسمًا غير JSON وانقطاع الشبكة", async () => {
     respond(500, "<html>");
     expect((await failure(api.get("/api/x"))).message).toBe("تعذّر إتمام العملية (500)");

@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import BrandIcon from "@/components/BrandIcon.vue";
 import BrandLockupRibbon from "@/components/BrandLockupRibbon.vue";
 import BrandPanel from "@/components/BrandPanel.vue";
+import ProductCard from "@/components/ProductCard.vue";
 import StatusCard from "@/components/StatusCard.vue";
 import { ORDER_STATUSES, statusLabel } from "@/domain/orders";
 import { useAppStore } from "@/stores/app";
@@ -11,14 +12,18 @@ import { useCatalogStore } from "@/stores/catalog";
 import { useOrdersStore } from "@/stores/orders";
 import { useProductionStore } from "@/stores/production";
 import { useSessionStore } from "@/stores/session";
+import { useStorefrontStore } from "@/stores/storefront";
 
 const { t } = useI18n();
-const TRAITS = ["precise", "warm", "elegant"] as const;
+const HOW = ["design", "pay", "receive"] as const;
+const FEATURED = 3;
 const store = useAppStore();
 const session = useSessionStore();
 const orders = useOrdersStore();
 const production = useProductionStore();
 const catalog = useCatalogStore();
+const storefront = useStorefrontStore();
+const featured = computed(() => storefront.templates.slice(0, FEATURED));
 
 /** الحالات المفتوحة فقط: ما يحتاج عملًا اليوم، لا ما سُلِّم أو أُلغي. */
 const OPEN = ["draft", "confirmed", "in_production", "ready"] as const satisfies readonly (typeof ORDER_STATUSES)[number][];
@@ -39,6 +44,14 @@ watch(
   () => session.isStaff,
   (isStaff) => {
     if (isStaff) void loadAll();
+  },
+  { immediate: true },
+);
+// الزائر يرى المتجر: منتجاته تُجلب حين يُعلم أنه ليس مشرفًا.
+watch(
+  () => session.checked && !session.isStaff,
+  (visitor) => {
+    if (visitor) void storefront.ensureLoaded();
   },
   { immediate: true },
 );
@@ -86,25 +99,37 @@ watch(
     </section>
   </template>
 
-  <!-- صفحة الزائر على شاشة landing من الدليل: الشعار اللفظي، العنوان، الزران، بطاقات الشخصية، ولوح الرمز. -->
-  <div v-else-if="session.checked" class="landing">
-    <div class="pitch">
-      <p class="slogan">{{ t("site.slogan") }}</p>
-      <h1>{{ t("home.heading") }}</h1>
-      <p class="lead">{{ t("home.lead") }}</p>
-      <div class="cta">
-        <RouterLink class="btn primary" :to="{ name: 'login' }">{{ t("home.staffLogin") }}</RouterLink>
-        <RouterLink class="btn" :to="{ name: 'about' }">{{ t("nav.about") }}</RouterLink>
-      </div>
-      <div class="traits">
-        <div v-for="trait in TRAITS" :key="trait" class="panel">
-          <h2>{{ t(`home.traits.${trait}.title`) }}</h2>
-          <p>{{ t(`home.traits.${trait}.body`) }}</p>
+  <!-- صفحة الزائر على شاشة landing من الدليل: الشعار اللفظي، العنوان، الزران، خطوات الطلب، ولوح الرمز؛ وتحتها منتجات المتجر. -->
+  <template v-else-if="session.checked">
+    <div class="landing">
+      <div class="pitch">
+        <p class="slogan">{{ t("site.slogan") }}</p>
+        <h1>{{ t("store.home.heading") }}</h1>
+        <p class="lead">{{ t("store.home.lead") }}</p>
+        <div class="cta">
+          <RouterLink class="btn primary" :to="{ name: 'products' }">{{ t("store.home.browse") }}</RouterLink>
+          <RouterLink class="btn" :to="{ name: 'about' }">{{ t("nav.about") }}</RouterLink>
+        </div>
+        <div class="traits" :aria-label="t('store.home.how.title')">
+          <div v-for="step in HOW" :key="step" class="panel">
+            <h2>{{ t(`store.home.how.${step}.title`) }}</h2>
+            <p>{{ t(`store.home.how.${step}.body`) }}</p>
+          </div>
         </div>
       </div>
+      <BrandPanel />
     </div>
-    <BrandPanel />
-  </div>
+
+    <section v-if="featured.length" aria-labelledby="home-featured">
+      <div class="featured-head">
+        <h2 id="home-featured">{{ t("store.home.featured") }}</h2>
+        <RouterLink :to="{ name: 'products' }">{{ t("store.home.allProducts") }}</RouterLink>
+      </div>
+      <ul class="product-grid">
+        <li v-for="product in featured" :key="product.slug"><ProductCard :product="product" /></li>
+      </ul>
+    </section>
+  </template>
 
   <StatusCard class="status" :ok="store.backendOk" />
 </template>
@@ -116,6 +141,8 @@ h2 { font-size: 20px; margin-block: 0 12px; }
 .tile b { font-family: var(--font-heading); font-size: 26px; font-weight: 600; }
 .tile .muted { font-size: 13px; }
 .retry { margin-inline-start: 12px; }
+.featured-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; margin-block-end: 12px; }
+.featured-head h2 { margin: 0; }
 
 .landing { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 32px; align-items: stretch; }
 .pitch { display: flex; flex-direction: column; gap: 20px; padding-block: 24px; }

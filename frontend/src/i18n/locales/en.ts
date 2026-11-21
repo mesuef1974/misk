@@ -2,6 +2,7 @@ import type { Messages } from "@/i18n";
 import catalog from "./en/catalog";
 import orders from "./en/orders";
 import production from "./en/production";
+import store from "./en/store";
 
 const en: Messages = {
   site: {
@@ -18,7 +19,7 @@ const en: Messages = {
     production: "Production",
     materials: "Materials",
     templates: "Templates",
-    about: "About",
+    about: "About us",
     admin: "Admin panel",
     login: "Sign in",
     logout: "Sign out",
@@ -28,25 +29,6 @@ const en: Messages = {
     checking: "Checking the server…",
     up: "Server is running",
     down: "Server is not responding",
-  },
-  home: {
-    heading: "Your name, drawn then engraved.",
-    lead: "Order management for a laser workshop: the catalog, orders, and sheet planning and runs.",
-    staffLogin: "Staff sign-in",
-    traits: {
-      precise: {
-        title: "Precise",
-        body: "We check the spelling of every name with its owner before engraving, and state the size, material, quantity and pickup time in numbers.",
-      },
-      warm: {
-        title: "Warm",
-        body: "We ask about the occasion and who it is for before we suggest anything, and let the natural material show its own color and texture.",
-      },
-      elegant: {
-        title: "Elegant",
-        body: "We choose one typeface that suits the name, leave space around it, and say what is needed in a short sentence.",
-      },
-    },
   },
   dashboard: {
     newOrder: "New order",
@@ -122,24 +104,25 @@ const en: Messages = {
   orders,
   production,
   catalog,
+  store,
   about: {
-    heading: "About",
-    lead: "Misk runs the work of a small laser workshop, from the order to the finished piece.",
+    heading: "About us",
+    lead: "Misk Design is a laser engraving workshop in Qatar: your name is drawn, then engraved on leather, wood and acrylic.",
     steps: {
-      catalog: {
-        title: "Catalog.",
-        body: "Materials with their thicknesses and sheet costs, a calibration for each material from a test offcut, and product templates with the fields an order fills in.",
+      design: {
+        title: "You see it before you pay.",
+        body: "The preview on the product page is the engraving file itself, in the font and size that leave the workshop.",
       },
-      orders: {
-        title: "Orders.",
-        body: "An order is saved as a draft, then confirmed, and it cannot be confirmed before every material in it is calibrated.",
+      make: {
+        title: "We engrave to order.",
+        body: "Every piece is made for its owner after payment, and its ready date is calculated from the workshop's actual queue.",
       },
-      production: {
-        title: "Production.",
-        body: "Pieces from confirmed orders are laid out on sheets of the material, then each sheet run is recorded with its duration, result and material cost.",
+      receive: {
+        title: "You follow your order.",
+        body: "A private tracking link shows the order's stage, and you book your pickup slot from it.",
       },
     },
-    audit: "Every write is recorded in the audit log, and sign-in is for staff accounts only.",
+    audit: "What you confirm in the preview is what we engrave, and we let the natural material show its colour and texture.",
   },
   notFound: {
     heading: "Page not found",

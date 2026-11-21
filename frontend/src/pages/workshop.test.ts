@@ -33,6 +33,9 @@ vi.mock("@/services/production", () => ({
 vi.mock("@/services/session", () => ({
   sessionService: { me: vi.fn(), login: vi.fn(), logout: vi.fn() },
 }));
+vi.mock("@/services/store", () => ({
+  storeService: { templates: vi.fn().mockResolvedValue([]) },
+}));
 
 function job(overrides: Partial<PlanJob> = {}): PlanJob {
   return { id: "", status: "done", sheets: [], error: "", waiting: 0, ...overrides };
@@ -479,10 +482,11 @@ describe("اللوحة الرئيسية", () => {
     expect(catalogService.materials).toHaveBeenCalledTimes(1);
   });
 
-  it("تدعو غير المشرف إلى الدخول ولا تطلب بيانات", async () => {
+  it("تعرض للزائر واجهة المتجر ولا تطلب بيانات الورشة", async () => {
     vi.mocked(sessionService.me).mockResolvedValue(null);
     const page = await show(HomePage, "/");
-    expect(page.text()).toContain("دخول المشرف");
+    expect(page.get("h1").text()).toBe("هديتك باسمك، مصنوعة لك في قطر.");
+    expect(page.get(".cta a.primary").attributes("href")).toBe("/products");
     expect(page.find(".tile").exists()).toBe(false);
     expect(ordersService.list).not.toHaveBeenCalled();
   });
