@@ -392,6 +392,26 @@ def test_single_color_rule_applies_only_to_single_unknown_color():
     assert svg.analyze(_box(100), {}).operations == {}
 
 
+def test_default_key_reads_multicolor_and_single_color_stays_cut():
+    key = services.DEFAULT_COLOR_KEY
+    mixed = _box(
+        100,
+        extra=b'<line x1="0" y1="0" x2="5" y2="0" stroke="#2B3990"/>'
+        b'<line x1="0" y1="10" x2="7" y2="10" stroke="#000000"/>',
+    )
+    result = svg.analyze(mixed, key)
+    assert result.unknown_colors == {} and "assumed" not in result.as_json()
+    assert result.operations["cut:wood"]["length_mm"] == pytest.approx(300)
+    assert result.operations["score:wood"]["length_mm"] == pytest.approx(5)
+    assert result.operations["engrave:wood"]["count"] == 1
+
+    # ملف كله بالأسود أو الأزرق قصّ لا حفر ولا علام: قاعدة المفرد تسبق المفتاح.
+    for color in ("#000000", "#0000ff"):
+        single = svg.analyze(_box(100, color=color), key)
+        assert set(single.operations) == {"cut:wood"}
+        assert single.as_json()["assumed"] == {color: "cut:wood"}
+
+
 def test_combine_sums_parts():
     a, b = svg.analyze(_box(100), SINGLE), svg.analyze(_box(40), SINGLE)
     total = svg.combine([a, b])
@@ -476,7 +496,7 @@ def test_import_tree_from_archives_and_parts(media, library, wood):
     services.analyze_variant(panels)
     cut = panels.analysis["operations"]["cut:wood"]
     assert cut["count"] == 3 and cut["length_mm"] == pytest.approx(2 * 260 + 220)
-    assert panels.analysis["assumed"] == {"#ff0000": "cut:wood"}
+    assert "assumed" not in panels.analysis  # الأحمر في المفتاح الافتراضي قص أصلًا
     assert panels.analysis["outer_area_mm2"]["wood"] == pytest.approx(80 * 50 * 2 + 60 * 50)
     assert panels.analysis["same_geometry"] == [["back.svg", "front.svg"]]
     assert panels.files.filter(role=DesignFile.Role.READY_CUT).count() == 3
