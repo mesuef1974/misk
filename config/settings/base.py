@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "apps.designs",
     "apps.capacity",
     "apps.checkout",
+    "apps.fulfillment",
 ]
 
 MIDDLEWARE = [

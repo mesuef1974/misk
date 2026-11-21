@@ -139,6 +139,7 @@ class CheckoutIn(Schema):
     occasion_date: date | None = None
     notes: str = Field("", max_length=orders_services.MAX_NOTES_LENGTH)
     source: str = ""
+    delivery_zone_id: int | None = None  # مطلوب مع التوصيل؛ من `/api/store/delivery-zones`
     lang: Lang = "ar"
 
 
@@ -253,6 +254,7 @@ def checkout(request: HttpRequest, payload: CheckoutIn):
         occasion_date=payload.occasion_date,
         notes=payload.notes,
         source=payload.source,
+        delivery_zone_id=payload.delivery_zone_id,
     )
     try:
         payment = services.start_checkout(cart_ref=_cart_ref(request), form=form)

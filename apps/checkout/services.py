@@ -24,6 +24,9 @@ from apps.catalog import designer
 from apps.catalog import domain as catalog_domain
 from apps.core.columns import column_length
 from apps.core.services import record_audit
+from apps.fulfillment import selectors as fulfillment_selectors
+from apps.fulfillment import services as fulfillment_services
+from apps.fulfillment.models import DeliveryZone
 from apps.orders import services as orders_services
 from apps.orders.models import Customer, Order
 
@@ -33,7 +36,7 @@ from .models import Payment, WebhookEvent
 logger = logging.getLogger(__name__)
 
 Status = Order.Status
-CURRENCY = "QAR"
+CURRENCY = orders_services.CURRENCY
 NAME_LENGTH = column_length(Customer, "name")
 # سلة لم تُفتح لها جلسة دفع ومضى عليها يوم: جلسة صاحبها انتهت (8 ساعات) فلا يصلها أحد.
 ABANDONED_CART = timedelta(hours=24)
@@ -57,15 +60,36 @@ class CheckoutForm:
     occasion_date: date | None = None
     notes: str = ""
     source: str = ""
+    delivery_zone_id: int | None = None
 
 
 def checkout_ttl() -> timedelta:
     return timedelta(minutes=settings.CHECKOUT_TTL_MIN)
 
 
+def items_total(order: Order) -> Decimal:
+    return sum((item.unit_price * item.quantity for item in order.items.all()), Decimal("0"))
+
+
 def order_amount(order: Order) -> Decimal:
-    items = sum((item.unit_price * item.quantity for item in order.items.all()), Decimal("0"))
-    return items + order.delivery_fee
+    return items_total(order) + order.delivery_fee
+
+
+def _delivery_zone(form: CheckoutForm) -> DeliveryZone | None:
+    """منطقة التوصيل المختارة. الموقوفة أو المجهولة تُرفض؛ الاستلام بلا منطقة."""
+    if form.fulfillment != Order.Fulfillment.DELIVERY:
+        return None
+    zone = fulfillment_selectors.active_zone(form.delivery_zone_id)
+    if zone is None:
+        raise CheckoutError("invalid", fields={"delivery_zone_id": "invalid_choice"})
+    return zone
+
+
+def _attempt_amount(order: Order, zone: DeliveryZone | None) -> Decimal:
+    """مبلغ هذه المحاولة: المسودة برسم منطقتها المختارة الآن، وما فُتح دفعه برسمه المثبَّت."""
+    if order.status == Status.DRAFT:
+        return items_total(order) + (zone.fee if zone else Decimal("0"))
+    return order_amount(order)
 
 
 def ready_on(order: Order, *, now: datetime) -> date | None:
@@ -84,6 +108,9 @@ def _clean_form(form: CheckoutForm, *, today: date) -> CheckoutForm:
         errors["customer_name"] = "too_long"
     if form.fulfillment not in Order.Fulfillment.values:
         errors["fulfillment"] = "invalid_choice"
+    delivery = form.fulfillment == Order.Fulfillment.DELIVERY
+    if delivery and form.delivery_zone_id is None:
+        errors["delivery_zone_id"] = "required"
     if form.source and form.source not in Order.Source.values:
         errors["source"] = "invalid_choice"
     if len(form.notes) > orders_services.MAX_NOTES_LENGTH:
@@ -92,7 +119,8 @@ def _clean_form(form: CheckoutForm, *, today: date) -> CheckoutForm:
         errors["occasion_date"] = "date_in_past"
     if errors:
         raise CheckoutError("invalid", fields=errors)
-    return CheckoutForm(name, form.fulfillment, form.occasion_date, form.notes, form.source)
+    zone_id = form.delivery_zone_id if delivery else None
+    return CheckoutForm(name, form.fulfillment, form.occasion_date, form.notes, form.source, zone_id)
 
 
 def _recheck_items(order: Order) -> None:
@@ -123,6 +151,7 @@ def start_checkout(*, cart_ref: uuid.UUID | None, form: CheckoutForm, now: datet
     """يفتح جلسة دفع للسلة وينقلها إلى «بانتظار الدفع». إعادته والجلسة قائمة تعيد الجلسة نفسها.
 
     طلب بانتظار الدفع فشلت محاولته يُفتح له جلسة جديدة بالمبلغ نفسه دون تغيير بياناته.
+    رسم التوصيل من المنطقة المختارة يدخل المبلغ ويُثبَّت على الطلب عند فتح الدفع.
     """
     provider = providers.active()
     if provider is None:
@@ -132,6 +161,7 @@ def start_checkout(*, cart_ref: uuid.UUID | None, form: CheckoutForm, now: datet
     order = cart.find(cart_ref)
     if order is None:
         raise CheckoutError("cart_empty")
+    zone = None
     if order.status == Status.AWAITING_PAYMENT:
         if live := _live_payment(order, now):
             return live
@@ -141,14 +171,15 @@ def start_checkout(*, cart_ref: uuid.UUID | None, form: CheckoutForm, now: datet
         raise CheckoutError("cart_empty")
     else:
         form = _clean_form(form, today=timezone.localtime(now).date())
+        zone = _delivery_zone(form)
         _recheck_items(order)
         ready = ready_on(order, now=now)
         if ready is None:
             raise CheckoutError("no_capacity")
         if form.occasion_date is not None and ready > form.occasion_date:
             raise CheckoutError("occasion_too_soon", ready_on=ready)
-    amount = order_amount(order)
-    if amount <= 0:
+    amount = _attempt_amount(order, zone)
+    if items_total(order) <= 0:
         raise CheckoutError("cart_empty")
     key = uuid.uuid4()
     try:
@@ -176,7 +207,9 @@ def _open_payment(
             return live
     elif order.status != Status.DRAFT:
         raise CheckoutError("cart_empty")
-    if order_amount(order) != amount:  # السلة تغيّرت بين الحساب والقفل
+    # المسودة يُعاد قراءة منطقتها والطلب مقفول: منطقة أُوقفت أو تغيّر رسمها بين الحساب والقفل لا تمر.
+    zone = _delivery_zone(form) if order.status == Status.DRAFT else None
+    if _attempt_amount(order, zone) != amount:  # السلة أو الرسم تغيّرا بين الحساب والقفل
         raise CheckoutError("cart_changed")
     # جلسة انتهت مهلتها ولم تُكنس بعد: تُغلق كي لا تزاحم الجديدة على قيد «جلسة مفتوحة واحدة».
     order.payments.filter(status=Payment.Status.PENDING).update(
@@ -190,6 +223,8 @@ def _open_payment(
         order.notes = form.notes
         order.source = form.source
         order.save(update_fields=["fulfillment", "occasion_date", "notes", "source", "updated_at"])
+        if zone is not None:
+            fulfillment_services.assign_delivery(order=order, zone=zone)
         orders_services.transition(order_id=order.pk, to_status=Status.AWAITING_PAYMENT, system=True)
     payment = Payment.objects.create(
         order=order,
