@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 import dj_database_url
 
@@ -131,7 +132,7 @@ STATICFILES_DIRS: list = [_FRONTEND_DIST] if _FRONTEND_DIST.exists() else []  # 
 # ألوان المنصة مصدر واحد في الواجهة؛ لوحة Django تقرؤها من /static/brand/tokens.css (templates/admin/base_site.html).
 # المجلد يحمل البادئة brand/ في بنيته لا في الإعداد: بادئة STATICFILES_DIRS لا يطابقها الباحث على ويندوز.
 STATICFILES_DIRS.append(BASE_DIR / "frontend" / "src" / "static")
-STORAGES = {
+STORAGES: dict[str, dict[str, Any]] = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
 }
@@ -148,6 +149,27 @@ WHITENOISE_IMMUTABLE_FILE_TEST = _immutable_static
 WHITENOISE_MIMETYPES = {".webmanifest": "application/manifest+json"}
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+# الويب والعامل خدمتان منفصلتان في الإنتاج، والقرص الدائم يُركَّب على خدمة واحدة: الوسائط في مخزن كائنات S3
+# يقرؤه الاثنان. بلا MEDIA_S3_BUCKET يبقى القرص المحلي (التطوير والاختبار). الدلو خاص، والعرض عبر
+# `apps.core.views.media_file` للمشرفين وحدهم، فلا روابط موقَّعة تخرج إلى المتصفح.
+MEDIA_S3_BUCKET = env("MEDIA_S3_BUCKET")
+if MEDIA_S3_BUCKET:
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "bucket_name": MEDIA_S3_BUCKET,
+            "endpoint_url": env("MEDIA_S3_ENDPOINT") or None,
+            "region_name": env("MEDIA_S3_REGION") or None,
+            "access_key": env("MEDIA_S3_ACCESS_KEY_ID", required=True),
+            "secret_key": env("MEDIA_S3_SECRET_ACCESS_KEY", required=True),
+            "location": env("MEDIA_S3_PREFIX", "media"),
+            "default_acl": None,
+            "querystring_auth": True,
+            "file_overwrite": False,
+            "addressing_style": env("MEDIA_S3_ADDRESSING_STYLE") or None,
+            "signature_version": "s3v4",
+        },
+    }
 
 DJANGO_VITE = {
     "default": {
