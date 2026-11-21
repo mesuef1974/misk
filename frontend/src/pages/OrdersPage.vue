@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import BrandIcon from "@/components/BrandIcon.vue";
 import OrderStatusBadge from "@/components/OrderStatusBadge.vue";
-import { formatDate, formatMoney, ORDER_STATUSES, STATUS_LABELS } from "@/domain/orders";
+import { formatDate, formatMoney, ORDER_STATUSES, STATUS_LABELS, WORKSHOP_STATUSES } from "@/domain/orders";
 import { useOrdersStore } from "@/stores/orders";
 
 const store = useOrdersStore();
@@ -15,7 +15,10 @@ const filters = computed(() => [
     value: status as string,
     label: STATUS_LABELS[status],
     count: store.countByStatus[status] ?? 0,
-  })),
+  })).filter(
+    (option) =>
+      option.count > 0 || option.value === filter.value || (WORKSHOP_STATUSES as readonly string[]).includes(option.value),
+  ),
 ]);
 
 function choose(value: string): Promise<void> {

@@ -73,12 +73,21 @@ class TemplateIn(Schema):
     height_mm: Decimal
     param_schema: list[dict[str, Any]] = []
     base_price: Decimal = Decimal("0")
+    # حقول المتجر اختيارية: غيابها لا يمسح ما حُفظ (نموذج الورشة لا يرسلها).
+    name_en: str | None = None
+    description: str | None = None
+    description_en: str | None = None
+    allows_religious_text: bool | None = None
 
 
 class TemplateOut(Schema):
     id: int
     slug: str
     name: str
+    name_en: str
+    description: str
+    description_en: str
+    allows_religious_text: bool
     generator: str
     width_mm: Decimal
     height_mm: Decimal
@@ -130,6 +139,7 @@ def list_templates(request: HttpRequest):
 @router.post("/templates", response=TemplateOut)
 def save_template(request: HttpRequest, payload: TemplateIn):
     try:
-        return services.upsert_template(actor=request.user, **payload.dict())
+        fields = {key: value for key, value in payload.dict().items() if value is not None}
+        return services.upsert_template(actor=request.user, **fields)
     except (domain.ParamError, ValidationError) as exc:
         raise _invalid(exc) from exc

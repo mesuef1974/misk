@@ -35,9 +35,9 @@ class CustomerAdmin(admin.ModelAdmin):
 class OrderAdmin(admin.ModelAdmin):
     """الحالة للقراءة فقط هنا: تغييرها يمر من الخدمة حتى تُطبَّق قواعد الانتقال ويُسجَّل التدقيق."""
 
-    list_display = ("id", "customer", "status", "occasion_date", "created_at")
-    list_filter = ("status",)
+    list_display = ("id", "customer", "status", "channel", "occasion_date", "created_at")
+    list_filter = ("status", "channel")
     search_fields = ("customer__name",)
-    readonly_fields = ("client_ref", "status")
+    readonly_fields = ("client_ref", "status", "channel")
     list_select_related = ("customer",)
     inlines = [OrderItemInline]

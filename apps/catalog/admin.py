@@ -19,5 +19,5 @@ class MaterialAdmin(admin.ModelAdmin):
 @admin.register(ProductTemplate)
 class ProductTemplateAdmin(admin.ModelAdmin):
     list_display = ("name", "slug", "generator", "width_mm", "height_mm", "base_price", "is_active")
-    list_filter = ("is_active",)
-    search_fields = ("name", "slug")
+    list_filter = ("is_active", "allows_religious_text")
+    search_fields = ("name", "name_en", "slug")

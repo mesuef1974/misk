@@ -7,7 +7,7 @@ import {
   formatDate,
   formatMoney,
   lineTotal,
-  nextStatuses,
+  orderActions,
   TRANSITION_ACTIONS,
   type OrderStatus,
 } from "@/domain/orders";
@@ -27,7 +27,7 @@ const settled = ref(false);
 const lookupError = ref("");
 
 const order = computed(() => orders.byId(props.orderId));
-const actions = computed(() => (order.value ? nextStatuses(order.value.status) : []));
+const actions = computed(() => (order.value ? orderActions(order.value) : []));
 
 /** البنود جاهزة للعرض: أسماء القالب والمادة والمعاملات تُحسب هنا لا في القالب. */
 const lines = computed(() =>

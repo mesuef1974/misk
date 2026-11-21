@@ -17,8 +17,15 @@ export interface Order {
   client_ref: string;
   customer_name: string;
   status: string;
+  /** ما يتاح للطاقم الآن، من الخادم. */
+  next_statuses: string[];
+  channel: string;
+  fulfillment: string;
+  delivery_fee: string;
+  source: string;
   occasion_date: string | null;
   notes: string;
+  /** مجموع البنود دون رسوم التوصيل. */
   total: string;
   items: OrderItem[];
 }

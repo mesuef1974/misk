@@ -79,6 +79,11 @@ class ProductTemplate(TimeStampedModel):
 
     slug = models.SlugField(max_length=64, unique=True, allow_unicode=True)
     name = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True)
+    description = models.TextField(blank=True)
+    description_en = models.TextField(blank=True)
+    # النص الديني حصر لا منع: يُسمح على ما يُعلَّق ويُصان فقط (قرار المالك 2026-11-20).
+    allows_religious_text = models.BooleanField(default=False)
     generator = models.CharField(max_length=64)
     width_mm = models.DecimalField(
         max_digits=6, decimal_places=1, validators=[MinValueValidator(Decimal("1"))]
