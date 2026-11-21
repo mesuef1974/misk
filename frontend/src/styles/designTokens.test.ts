@@ -52,7 +52,7 @@ describe("رموز الهوية في الواجهة", () => {
 
   it("لا يبقى شعار الهوية السابقة في مكوّن ولا قناع", () => {
     const names = Object.keys(components).filter((file) => /\/Brand\w+\.vue$/.test(file)).sort();
-    expect(names).toEqual(["BrandIcon", "BrandLockup", "BrandLockupRibbon", "BrandMark", "BrandPanel"].map((name) => `../components/${name}.vue`));
+    expect(names).toEqual(["BrandIcon", "BrandLockup", "BrandLockupLatin", "BrandLockupRibbon", "BrandMark", "BrandPanel"].map((name) => `../components/${name}.vue`));
     const viewBox = /viewBox="0 0 100 ([\d.]+)"/.exec(mark)?.[1];
     expect(viewBox).toBeDefined();
     expect(styles["./base.css"]).toContain(`aspect-ratio: 100 / ${viewBox};`);

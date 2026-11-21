@@ -300,6 +300,7 @@ def test_old_logo_shape_is_gone_from_the_frontend():
     assert components == {
         "BrandIcon.vue",
         "BrandLockup.vue",
+        "BrandLockupLatin.vue",
         "BrandLockupRibbon.vue",
         "BrandMark.vue",
         "BrandPanel.vue",

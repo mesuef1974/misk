@@ -239,4 +239,19 @@ describe("شعار الشريط العلوي", () => {
     expect(brand.find("svg.brand-lockup").exists()).toBe(true);
     expect(brand.attributes("aria-label")).toBe("مسك");
   });
+
+  it("في الإنجليزية يعرض الشريط قفل Misk اللاتيني بدل العربي", async () => {
+    vi.mocked(sessionService.me).mockResolvedValue(null);
+    const { default: App } = await import("@/App.vue");
+    const { setLocale } = await import("@/i18n");
+    const app = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
+    const arabic = app.get("a.brand svg.brand-lockup").attributes("viewBox");
+    await setLocale("en");
+    await flushPromises();
+    const latin = app.get("a.brand svg.brand-lockup").attributes("viewBox");
+    expect(latin).toBe("107 116 1910 505");
+    expect(latin).not.toBe(arabic);
+    app.unmount();
+  });
 });
