@@ -501,8 +501,9 @@ SINGLE_COLOR = "*"
 def analyze(data: bytes, color_key: dict[str, dict]) -> Analysis:
     """`color_key`: لون → {"operation": cut|score|engrave, "material": نوع المادة}.
 
-    المفتاح «*» قاعدة المفرد: ملف كل خطوطه بلون واحد لا يعرفه المفتاح تُطبَّق عليه هذه القاعدة، ويُسجَّل اللون في
-    `assumed`. الملف المتعدد الألوان لا يُخمَّن: ألوانه المجهولة تبقى في `unknown_colors`.
+    المفتاح «*» قاعدة المفرد: ملف كل خطوطه بلون واحد تُطبَّق عليه هذه القاعدة وإن عرف المفتاح لونه بغيرها، ويُسجَّل
+    اللون في `assumed` حين تغيّر القاعدة نتيجته. الملف المتعدد الألوان لا يُخمَّن: ألوانه المجهولة تبقى في
+    `unknown_colors`.
     """
     return _analyze_root(parse_root(data), color_key)
 
@@ -519,8 +520,8 @@ def _analyze_root(root: ET.Element, color_key: dict[str, dict]) -> Analysis:
         reference.is_reference = True
     assumed: dict[str, str] = {}
     colors = {el.stroke or el.fill for el in elements if el is not reference} - {""}
-    if single and len(colors) == 1 and not colors & key.keys():
-        color = colors.pop()
+    # الملف الأحادي اللون قصّ كله ولو عرف المفتاحُ لونه بعملية أخرى: ملف كله حفر أو علام لا يُقص منه شيء.
+    if single and len(colors) == 1 and key.get(color := next(iter(colors))) != single:
         key[color] = single
         assumed[color] = f"{single['operation']}:{single.get('material', '')}"
     operations: dict[str, dict] = {}

@@ -26,8 +26,18 @@ IMAGE_FORMATS = {".png", ".jpg", ".jpeg", ".webp"}
 IGNORED = {"desktop.ini", "thumbs.db", ".ds_store"}
 _INSTRUCTIONS = re.compile(r"size\s*check|lightburn", re.IGNORECASE)
 _SIZE_REFERENCE = re.compile(r"size\s*preview", re.IGNORECASE)
-# قرار المالك 2026-11-21: مصدر عام لحزم البائعين المتفرقين، والملف أحادي اللون فيه قص على الخشب حتى يُعرَّف مفتاحه.
-DEFAULT_COLOR_KEY = {svg.SINGLE_COLOR: {"operation": "cut", "material": "wood"}}
+# قرار المالك 2026-11-21: مصدر عام لحزم البائعين المتفرقين، والملف أحادي اللون فيه قص على الخشب.
+# والمتعدد الألوان بعُرف البائعين: الأحمر قص، والأزرق علام، والأسود حفر، وألوان تعبئة الطبقات قص.
+_CUT = ("#ff0000", "#ed1c24", "#fe0002", "#e94e1b")
+_LAYER_FILLS = ("#a88671", "#c4a695", "#f0b2ac", "#ffffff", "#cfb69f", "#6a3814", "#fefefe")
+_SCORE = ("#0000ff", "#2b3990", "#27aae1", "#00aeef")
+_ENGRAVE = ("#000000", "#2b2a29", "#383746")
+DEFAULT_COLOR_KEY = {
+    svg.SINGLE_COLOR: {"operation": "cut", "material": "wood"},
+    **{c: {"operation": "cut", "material": "wood"} for c in _CUT + _LAYER_FILLS},
+    **{c: {"operation": "score", "material": "wood"} for c in _SCORE},
+    **{c: {"operation": "engrave", "material": "wood"} for c in _ENGRAVE},
+}
 
 split_variant_name = scan.split_variant_name
 
