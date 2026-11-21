@@ -61,6 +61,7 @@ class CheckoutForm:
     notes: str = ""
     source: str = ""
     delivery_zone_id: int | None = None
+    lang: str = Customer.Language.AR
 
 
 def checkout_ttl() -> timedelta:
@@ -120,7 +121,8 @@ def _clean_form(form: CheckoutForm, *, today: date) -> CheckoutForm:
     if errors:
         raise CheckoutError("invalid", fields=errors)
     zone_id = form.delivery_zone_id if delivery else None
-    return CheckoutForm(name, form.fulfillment, form.occasion_date, form.notes, form.source, zone_id)
+    lang = form.lang if form.lang in Customer.Language.values else Customer.Language.AR
+    return CheckoutForm(name, form.fulfillment, form.occasion_date, form.notes, form.source, zone_id, lang)
 
 
 def _recheck_items(order: Order) -> None:
@@ -217,7 +219,8 @@ def _open_payment(
     )
     if order.status == Status.DRAFT:
         order.customer.name = form.customer_name
-        order.customer.save(update_fields=["name", "updated_at"])
+        order.customer.language = form.lang
+        order.customer.save(update_fields=["name", "language", "updated_at"])
         order.fulfillment = form.fulfillment
         order.occasion_date = form.occasion_date
         order.notes = form.notes

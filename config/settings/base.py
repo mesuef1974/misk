@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "apps.capacity",
     "apps.checkout",
     "apps.fulfillment",
+    "apps.notifications",
 ]
 
 MIDDLEWARE = [
@@ -255,6 +256,25 @@ PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", "")
 PAYMENT_WEBHOOK_SECRET = env("PAYMENT_WEBHOOK_SECRET", "")
 # مهلة الطلب غير المدفوع بالدقائق؛ بعدها يُلغى وتتحرر سعته.
 CHECKOUT_TTL_MIN = int(env("CHECKOUT_TTL_MIN", "30"))
+
+# الإشعارات خلف واجهة مزوّد (apps/notifications/providers.py). «log» يسجّل الحدث بلا نصّه، و«email» يرسل
+# إلى بريد المشغِّل حتى تُخزَّن وسيلة اتصال العميل مشفَّرة، وفارغ = الإشعارات معطَّلة.
+NOTIFY_PROVIDER = env("NOTIFY_PROVIDER", "log")
+NOTIFY_OPERATOR_EMAIL = env("NOTIFY_OPERATOR_EMAIL", "")
+# أصل الروابط في الإشعارات (رابط التتبّع). Railway يعطي نطاق الخدمة العام في RAILWAY_PUBLIC_DOMAIN.
+_PUBLIC_DOMAIN = env("RAILWAY_PUBLIC_DOMAIN", "")
+PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", f"https://{_PUBLIC_DOMAIN}" if _PUBLIC_DOMAIN else "")
+# عنوان نقطة الاستلام: لا يُخزَّن في القاعدة ولا يُعرض على المنصة، ويُرسل في إشعار تأكيد الموعد وحده.
+PICKUP_ADDRESS_AR = env("PICKUP_ADDRESS_AR", "")
+PICKUP_ADDRESS_EN = env("PICKUP_ADDRESS_EN", "")
+
+EMAIL_HOST = env("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(env("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+EMAIL_TIMEOUT = 10
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "misk@localhost")
 
 SITE_TITLE = "مسك"
 

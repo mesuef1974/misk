@@ -11,7 +11,7 @@ from apps.core.services import record_audit
 from apps.orders import services as orders_services
 from apps.orders.models import Order
 
-from . import selectors
+from . import selectors, signals
 from .models import Delivery, DeliveryZone, PickupAppointment
 
 Status = Order.Status
@@ -77,5 +77,8 @@ def book_pickup(*, token: str, starts_at: datetime, now: datetime | None = None)
             "starts_at": starts_at.isoformat(),
             "previous": previous.isoformat() if previous else None,
         },
+    )
+    signals.pickup_booked.send(
+        sender=PickupAppointment, order=order, appointment=appointment, previous=previous
     )
     return appointment
