@@ -19,9 +19,12 @@
     ]
   },
   "permissions": {
+    "ask": [
+      "Bash(gh pr merge*)",
+      "PowerShell(gh pr merge*)"
+    ],
     "deny": [
       "Bash(railway *)",
-      "Bash(gh pr merge*)",
       "Bash(*@railway/cli*)",
       "Bash(*merge_gate.py*--enable*)",
       "Read(./.env)",

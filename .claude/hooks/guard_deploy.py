@@ -17,6 +17,11 @@
 ز5: الكلمة المركَّبة تُحجب في موضع الأمر (`${r}way up`) أو مع كلمة نشر في الأمر نفسه، لا في كل وسيط
 (`cp ${f}.txt ${f}bak`). ومسارات ملفات المستودع التي فيها rail لا تُعدّ كلمة نشر، ونص heredoc حرفي
 (`<<'EOF'`) يُكتب بـcat أو tee إلى ملف بيانات لا أمر.
+
+دمج بتأكيد المالك (قراره 2026-11-21): صيغة واحدة تمرّ، والأمر كله هي ولا شيء معها:
+`gh pr merge <رقم> --squash --match-head-commit <SHA كاملًا>`. الحارس لا يسمح بها بل يحيلها إلى نافذة
+الموافقة في التطبيق (`permissionDecision: ask`) مهما كان وضع الأذونات، فلا دمج بلا نقرة المالك.
+الربط بالرأس إلزامي: ما يُدمج هو الإيداع الذي اعتُمد، لا ما دُفع بعده. كل صيغة أخرى للدمج تبقى محجوبة.
 """
 
 from __future__ import annotations
@@ -89,7 +94,18 @@ _DATA_HEREDOC = re.compile(
     r"(\b(?:cat|tee)\b[^\n|]*<<-?\s*(['\"])(\w+)\2[^\n|]*)\n.*?\n[ \t]*\3[ \t]*(?=\n|$)", re.S
 )
 
-MESSAGE = "guard_deploy: {rule} — الدمج والنشر بيد المالك (CLAUDE.md «ما لا تفعله»)؛ اطلب منه تنفيذه."
+MESSAGE = (
+    "guard_deploy: {rule} — النشر بيد المالك، والدمج بصيغة واحدة يوافق عليها في التطبيق: "
+    "gh pr merge <رقم> --squash --match-head-commit <SHA كاملًا> (CLAUDE.md «ما لا تفعله»)."
+)
+
+# الأمر كله (fullmatch): لا علم آخر (`--admin`، `--auto`، `-R`)، ولا أمر ثانٍ في السطر، ولا تنصيص ولا توسيع.
+OWNER_MERGE = re.compile(r"gh pr merge (?P<pr>[1-9]\d{0,5}) --squash --match-head-commit (?P<sha>[0-9a-f]{40})")
+ASK_REASON = "دمج الطلب {pr} عند الرأس {sha} — يدمج في main وينشره Railway بعد نجاح الفحوص. الموافقة للمالك."
+
+
+def owner_merge(command: str) -> re.Match[str] | None:
+    return OWNER_MERGE.fullmatch(command.strip(" \t"))
 
 
 def flatten(command: str) -> str:
@@ -117,6 +133,16 @@ def main() -> int:
     except ValueError:
         return 0
     command = (payload.get("tool_input") or {}).get("command") or ""
+    merge = owner_merge(command)
+    if merge:
+        decision = {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "ask",
+            "permissionDecisionReason": ASK_REASON.format(pr=merge["pr"], sha=merge["sha"][:8]),
+        }
+        # ensure_ascii: مخرج الخطّاف يُقرأ JSON مهما كان ترميز الطرفية.
+        print(json.dumps({"hookSpecificOutput": decision}))
+        return 0
     found = hits(command)
     if not found:
         return 0
