@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field
 from decimal import Decimal
 from functools import partial
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -18,16 +18,18 @@ from apps.catalog.models import Calibration, Material, ProductTemplate
 from apps.core.services import record_audit
 
 from . import estimate as estimating
-from . import svg
+from . import scan, svg
 from .models import Design, DesignFile, DesignPack, DesignSource, DesignVariant, VariantEstimate
 
-ALTERNATE_FORMATS = {".dxf", ".eps", ".pdf", ".cdr", ".ai"}
+ALTERNATE_FORMATS = {".dxf", ".eps", ".pdf", ".cdr", ".ai", ".dwg"}
 IMAGE_FORMATS = {".png", ".jpg", ".jpeg", ".webp"}
 IGNORED = {"desktop.ini", "thumbs.db", ".ds_store"}
-_VARIANT_NAME = re.compile(r"^(?P<name>.*?\S)\s*-\s*(?P<code>\d{1,3})$")
-_LISTING = re.compile(r"^(?P<title>.+?)-(?P<listing>\d{6,})$")
 _INSTRUCTIONS = re.compile(r"size\s*check|lightburn", re.IGNORECASE)
 _SIZE_REFERENCE = re.compile(r"size\s*preview", re.IGNORECASE)
+# قرار المالك 2026-11-21: مصدر عام لحزم البائعين المتفرقين، والملف أحادي اللون فيه قص على الخشب حتى يُعرَّف مفتاحه.
+DEFAULT_COLOR_KEY = {svg.SINGLE_COLOR: {"operation": "cut", "material": "wood"}}
+
+split_variant_name = scan.split_variant_name
 
 
 class DesignError(ValueError):
@@ -38,22 +40,21 @@ class DesignError(ValueError):
 class ImportReport:
     created: list[DesignVariant] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
 
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def split_variant_name(folder_name: str) -> tuple[str, str]:
-    """«Personalised Baby Milestone Bank-03» → («Personalised Baby Milestone Bank»، «03»)."""
-    m = _VARIANT_NAME.match(folder_name.strip())
-    return (m.group("name"), m.group("code")) if m else (folder_name.strip(), "")
+def classify(name: str, stems: set[str]) -> str | None:
+    """دور الملف في النسخة، أو «instructions» لملف تعليمات المصدر، أو None لما يُتجاهل.
 
-
-def classify(path: Path, variant_stem: str) -> str | None:
-    """دور الملف في النسخة، أو «instructions» لملف تعليمات المصدر، أو None لما يُتجاهل."""
-    name, ext = path.name.lower(), path.suffix.lower()
-    if name in IGNORED:
+    `stems` أسماء أجزاء النسخة واسم مجلدها بأحرف صغيرة: صورة PNG باسم أحدها معاينة قصه.
+    """
+    path = PurePosixPath(name)
+    lower, ext = path.name.lower(), path.suffix.lower()
+    if lower in IGNORED:
         return None
     if ext == ".svg":
         return DesignFile.Role.ORIGINAL
@@ -65,170 +66,218 @@ def classify(path: Path, variant_stem: str) -> str | None:
         return "instructions"
     if _SIZE_REFERENCE.search(path.stem):
         return DesignFile.Role.SIZE_REFERENCE
-    if ext == ".png" and path.stem.lower() == variant_stem.lower():
+    if ext == ".png" and path.stem.lower() in stems:
         return DesignFile.Role.CUT_LAYOUT
     return DesignFile.Role.COVER
 
 
-def _variant_folders(root: Path) -> list[Path]:
-    folders = [p for p in [root, *sorted(root.rglob("*"))] if p.is_dir() and any(p.glob("*.svg"))]
-    if not folders:
-        raise DesignError(f"لا ملف SVG في {root}")
-    return folders
+@transaction.atomic
+def ensure_source(name: str, *, actor=None) -> DesignSource:
+    """المصدر بالاسم، أو مصدر جديد بترخيص «غير محدد» ومفتاح المفرد (`DEFAULT_COLOR_KEY`)."""
+    source, created = DesignSource.objects.get_or_create(name=name, defaults={"color_key": DEFAULT_COLOR_KEY})
+    if created:
+        record_audit(action="designs.source.create", actor=actor, target=f"source:{source.pk}")
+    return source
 
 
-def _pack_for(source: DesignSource, folder: Path, root: Path, listing: str | None) -> DesignPack | None:
-    for candidate in [folder, *folder.parents]:
-        m = _LISTING.match(candidate.name)
-        if m and (listing is None or m.group("listing") == listing):
-            pack, _ = DesignPack.objects.get_or_create(
-                source=source,
-                listing_id=m.group("listing"),
-                defaults={"title": m.group("title").replace("-", " ")},
-            )
-            return pack
-        if candidate == root.parent:
-            break
-    if listing:
-        pack, _ = DesignPack.objects.get_or_create(
-            source=source, listing_id=listing, defaults={"title": listing}
-        )
-        return pack
-    return None
+def _pack(source: DesignSource, pack: tuple[str, str] | None) -> DesignPack | None:
+    if pack is None:
+        return None
+    listing, title = pack
+    obj, _ = DesignPack.objects.get_or_create(source=source, listing_id=listing, defaults={"title": title})
+    return obj
 
 
-def _original_svg(folder: Path) -> Path:
-    svgs = sorted(folder.glob("*.svg"))
-    return next((p for p in svgs if p.stem.lower() == folder.name.lower()), svgs[0])
+def _variant_digest(digests: list[str]) -> str:
+    """بصمة النسخة: بصمة SVG الوحيد، أو بصمة بصمات أجزائها مرتّبة فلا يغيّرها ترتيب المسح."""
+    return digests[0] if len(digests) == 1 else _sha256("\n".join(sorted(digests)).encode())
+
+
+def _store(variant: DesignVariant, role: str, entry: scan.Entry, content: bytes, digest: str) -> None:
+    row = DesignFile(
+        variant=variant,
+        role=role,
+        fmt=entry.suffix.lstrip(".")[:8],
+        name=entry.name[:255],
+        size_bytes=len(content),
+        sha256=digest,
+    )
+    if role == DesignFile.Role.ALTERNATE:
+        row.external_path = entry.location[:500]  # الصيغ الكبيرة تبقى مكانها (قرار المالك 2026-11-20)
+    else:
+        row.file.save(f"{digest[:16]}{entry.suffix}", ContentFile(content), save=False)
+    row.save()
 
 
 @transaction.atomic
-def _import_variant(
-    source: DesignSource, folder: Path, root: Path, listing: str | None, actor
-) -> DesignVariant | str:
-    original = _original_svg(folder)
-    data = original.read_bytes()
-    digest = _sha256(data)
+def _import_variant(source: DesignSource, plan: scan.VariantPlan, actor, report: ImportReport) -> None:
+    label = plan.folder.location if len(plan.parts) > 1 else plan.parts[0].location
+    try:
+        parts = [(entry, entry.read()) for entry in plan.parts]
+    except (scan.ScanError, OSError) as exc:
+        report.skipped.append(f"{label}: {exc}")
+        return
+    digests = [_sha256(data) for _, data in parts]
+    digest = _variant_digest(digests)
     if existing := DesignVariant.objects.filter(svg_sha256=digest).first():
-        return f"{folder.name}: مستورد من قبل ({existing})"
-    name, code = split_variant_name(folder.name)
+        report.skipped.append(f"{label}: مستورد من قبل ({existing})")
+        return
     design, _ = Design.objects.get_or_create(
-        source=source, name_original=name, defaults={"pack": _pack_for(source, folder, root, listing)}
+        source=source,
+        name_original=plan.name[:200],
+        defaults={"pack": _pack(source, plan.pack), "category": plan.category[:80]},
     )
-    if DesignVariant.objects.filter(design=design, code=code).exists():
-        return f"{folder.name}: للتصميم نسخة بالرمز «{code}» ببصمة أخرى؛ لم تُستورد"
+    if DesignVariant.objects.filter(design=design, code=plan.code).exists():
+        report.skipped.append(f"{label}: للتصميم «{design}» نسخة بالرمز «{plan.code}» ببصمة أخرى؛ لم تُستورد")
+        return
     variant = DesignVariant.objects.create(
-        design=design, code=code, folder_path=str(folder), svg_sha256=digest
+        design=design, code=plan.code, folder_path=plan.folder.location[:500], svg_sha256=digest
     )
 
-    for path in sorted(folder.iterdir()):
-        if not path.is_file():
-            continue
-        role = classify(path, folder.name)
+    seen: set[tuple[str, str]] = set()
+    for (entry, data), file_digest in zip(parts, digests, strict=True):
+        if (DesignFile.Role.ORIGINAL, file_digest) not in seen:
+            seen.add((DesignFile.Role.ORIGINAL, file_digest))
+            _store(variant, DesignFile.Role.ORIGINAL, entry, data, file_digest)
+    stems = {e.stem.lower() for e in plan.parts} | {plan.folder.name.lower()}
+    for entry in plan.files:
+        role = classify(entry.name, stems)
         if role is None:
             continue
-        if role == DesignFile.Role.ORIGINAL and path != original:
-            role = DesignFile.Role.ALTERNATE
-        content = data if path == original else path.read_bytes()
+        if role == DesignFile.Role.ORIGINAL:
+            role = DesignFile.Role.ALTERNATE  # نسخة الملف لآلة أخرى
+        try:
+            content = entry.read()
+        except (scan.ScanError, OSError) as exc:
+            report.notes.append(f"{entry.location}: {exc}")
+            continue
         file_digest = _sha256(content)
         if role == "instructions":
             if not source.instructions:
-                source.instructions.save(f"{file_digest[:16]}{path.suffix.lower()}", ContentFile(content))
+                source.instructions.save(f"{file_digest[:16]}{entry.suffix}", ContentFile(content))
             continue
-        row = DesignFile(
-            variant=variant,
-            role=role,
-            fmt=path.suffix.lower().lstrip("."),
-            name=path.name,
-            size_bytes=len(content),
-            sha256=file_digest,
-        )
-        if role == DesignFile.Role.ALTERNATE:
-            row.external_path = str(path)  # الصيغ الكبيرة تبقى مكانها (قرار المالك 2026-11-20)
-        else:
-            row.file.save(f"{file_digest[:16]}{path.suffix.lower()}", ContentFile(content), save=False)
-        row.save()
+        if (role, file_digest) in seen:
+            continue
+        seen.add((role, file_digest))
+        _store(variant, role, entry, content, file_digest)
     record_audit(
         action="designs.variant.import",
         actor=actor,
         target=f"variant:{variant.pk}",
-        payload={"folder": str(folder)},
+        payload={"folder": plan.folder.location, "parts": [e.name for e in plan.parts]},
     )
-    return variant
+    report.created.append(variant)
 
 
 def import_folder(
-    *, root: Path, source: DesignSource, listing: str | None = None, actor=None
+    *,
+    root: Path,
+    source: DesignSource,
+    listing: str | None = None,
+    tree: bool = False,
+    each_svg: list[Path] | tuple = (),
+    actor=None,
 ) -> ImportReport:
-    """يستورد كل مجلد فيه SVG تحت `root`. يُعاد تشغيله بأمان: النسخة المعروفة ببصمتها تُتخطّى."""
-    report = ImportReport()
-    for folder in _variant_folders(root):
-        result = _import_variant(source, folder, root, listing, actor)
-        if isinstance(result, str):
-            report.skipped.append(result)
-        else:
-            report.created.append(result)
+    """يستورد كل مجلد فيه SVG تحت `root` وكل أرشيف zip لم يُفكّ (القواعد في `scan.plan`).
+
+    يُعاد تشغيله بأمان: النسخة المعروفة ببصمتها تُتخطّى، وكل نسخة في معاملة مستقلة فلا يُسقط خطأ واحدة البقية.
+    """
+    try:
+        result = scan.scan(root)
+    except scan.ScanError as exc:
+        raise DesignError(str(exc)) from exc
+    plans = scan.plan(result, tree=tree, each_svg=each_svg, listing=listing)
+    if not plans:
+        raise DesignError(f"لا ملف SVG في {root}")
+    report = ImportReport(notes=list(result.notes))
+    for item in plans:
+        _import_variant(source, item, actor, report)
     return report
 
 
-def _original_bytes(variant: DesignVariant) -> bytes:
-    original = variant.files.filter(role=DesignFile.Role.ORIGINAL).exclude(file="").first()
-    if original is None:
-        raise DesignError("لا ملف أصل مرفوع للنسخة")
-    with original.file.open("rb") as handle:
+def _read(row: DesignFile) -> bytes:
+    with row.file.open("rb") as handle:
         return handle.read()
+
+
+def _geometry(analysis: svg.Analysis) -> tuple:
+    ops = sorted((k, g["count"], round(g["length_mm"])) for k, g in analysis.operations.items())
+    return round(analysis.width_mm), round(analysis.height_mm), tuple(ops)
 
 
 @transaction.atomic
 def analyze_variant(variant: DesignVariant, *, actor=None) -> DesignVariant:
-    """يقرأ الأصل، ويحفظ التحليل والنسخة الجاهزة للقص، ثم يحدّث التقديرات. إعادته تستبدل نتيجته السابقة."""
+    """يقرأ أجزاء النسخة، ويحفظ تحليلها المجموع ونسخة جاهزة للقص لكل جزء، ثم يحدّث التقديرات.
+
+    إعادته تستبدل نتيجته السابقة.
+    """
     color_key = variant.design.source.color_key
+    rows = list(variant.files.filter(role=DesignFile.Role.ORIGINAL).exclude(file="").order_by("name", "pk"))
     try:
-        data = _original_bytes(variant)
-        analysis = svg.analyze(data, color_key)
-        ready = svg.ready_to_cut(data, color_key)
+        if not rows:
+            raise DesignError("لا ملف أصل مرفوع للنسخة")
+        parts = []
+        for row in rows:
+            data = _read(row)
+            parts.append((row.name, svg.analyze(data, color_key), svg.ready_to_cut(data, color_key)))
     except (svg.SvgError, DesignError) as exc:
         variant.analysis, variant.analysis_error, variant.analyzed_at = {}, str(exc), timezone.now()
         variant.save(update_fields=["analysis", "analysis_error", "analyzed_at", "updated_at"])
         return variant
 
-    variant.analysis = analysis.as_json()
+    analyses = [analysis for _, analysis, _ in parts]
+    combined = svg.combine(analyses)
+    variant.analysis = combined.as_json()
     variant.analysis["outer_area_mm2"] = {
-        kind: round(svg.outer_area_mm2(analysis, kind), 1)
-        for kind in {g["material"] for g in analysis.operations.values()}
+        kind: round(sum(svg.outer_area_mm2(a, kind) for a in analyses), 1)
+        for kind in {g["material"] for g in combined.operations.values()}
     }
-    variant.sheet_width_mm = Decimal(str(round(analysis.width_mm, 1)))
-    variant.sheet_height_mm = Decimal(str(round(analysis.height_mm, 1)))
+    if len(parts) > 1:
+        variant.analysis["parts"] = [
+            {"name": name, "width_mm": round(a.width_mm, 1), "height_mm": round(a.height_mm, 1)}
+            for name, a, _ in parts
+        ]
+        # جزءان متطابقان هندسيًّا قد يكونان نسختين للملف نفسه فيتضاعف التقدير، أو لوحين مطلوبين معًا: يُراجعان.
+        groups: dict[tuple, list[str]] = {}
+        for name, a, _ in parts:
+            groups.setdefault(_geometry(a), []).append(name)
+        if same := [names for names in groups.values() if len(names) > 1]:
+            variant.analysis["same_geometry"] = same
+    variant.sheet_width_mm = Decimal(str(round(combined.width_mm, 1)))
+    variant.sheet_height_mm = Decimal(str(round(combined.height_mm, 1)))
     variant.analysis_error, variant.analyzed_at = "", timezone.now()
     variant.save()
 
-    _replace_ready_cut(variant, ready)
+    _replace_ready_cut(
+        variant, [(f"{PurePosixPath(name).stem}-ready.svg", ready) for name, _, ready in parts]
+    )
     refresh_estimates(variant)
     record_audit(action="designs.variant.analyze", actor=actor, target=f"variant:{variant.pk}")
     return variant
 
 
-def _replace_ready_cut(variant: DesignVariant, ready: bytes) -> None:
-    """النتيجة نفسها تُبقي الملف القائم؛ وإلا يُستبدل، والملف القديم يُحذف من المخزن بعد ثبوت المعاملة لا قبلها."""
-    digest = _sha256(ready)
+def _replace_ready_cut(variant: DesignVariant, readies: list[tuple[str, bytes]]) -> None:
+    """النتيجة نفسها تُبقي الملفات القائمة؛ وإلا تُستبدل، والقديمة تُحذف من المخزن بعد ثبوت المعاملة لا قبلها."""
+    wanted = {_sha256(data): (name, data) for name, data in readies}
     old = list(variant.files.filter(role=DesignFile.Role.READY_CUT))
-    if len(old) == 1 and old[0].sha256 == digest:
+    if len(old) == len(wanted) and {row.sha256 for row in old} == wanted.keys():
         return
     for row in old:
-        storage, name = row.file.storage, row.file.name
+        storage, stored = row.file.storage, row.file.name
         row.delete()
-        if name:
-            transaction.on_commit(partial(storage.delete, name))
-    row = DesignFile(
-        variant=variant,
-        role=DesignFile.Role.READY_CUT,
-        fmt="svg",
-        name=f"{Path(variant.folder_path).name}-ready.svg",
-        size_bytes=len(ready),
-        sha256=digest,
-    )
-    row.file.save(f"{digest[:16]}.svg", ContentFile(ready), save=False)
-    row.save()
+        if stored:
+            transaction.on_commit(partial(storage.delete, stored))
+    for digest, (name, data) in wanted.items():
+        row = DesignFile(
+            variant=variant,
+            role=DesignFile.Role.READY_CUT,
+            fmt="svg",
+            name=name[:255],
+            size_bytes=len(data),
+            sha256=digest,
+        )
+        row.file.save(f"{digest[:16]}.svg", ContentFile(data), save=False)
+        row.save()
 
 
 def _settings_for(material: Material) -> dict[str, estimating.Setting]:

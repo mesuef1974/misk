@@ -1,6 +1,8 @@
 import math
+import zipfile
 from datetime import date
 from decimal import Decimal
+from io import StringIO
 
 import pytest
 from django.core.management import call_command
@@ -8,7 +10,7 @@ from django.core.management import call_command
 from apps.catalog import services as catalog_services
 from apps.catalog.models import ProductTemplate
 from apps.core.models import AuditLog
-from apps.designs import estimate, services, svg
+from apps.designs import estimate, scan, services, svg
 from apps.designs.models import Design, DesignFile, DesignSource, VariantEstimate
 
 KEY = {
@@ -312,3 +314,188 @@ def test_admin_pages_render(media, source, pack_folder, admin_client):
         "/admin/designs/designsource/",
     ):
         assert admin_client.get(url).status_code == 200, url
+
+
+# ——— التعميم: DOCTYPE والأصناف والمفرد والأجزاء والأرشيفات ———
+
+SINGLE = {"*": {"operation": "cut", "material": "wood"}}
+
+
+def _box(width: int, color: str = "#ff0000", extra: bytes = b"") -> bytes:
+    head = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}mm" height="50mm" viewBox="0 0 {width} 50">'
+        f'<rect x="0" y="0" width="{width}" height="50" fill="none" stroke="{color}"/>'
+    )
+    return head.encode() + extra + b"</svg>"
+
+
+def test_public_doctype_and_plain_entities_are_read():
+    public = (
+        b'<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">'
+    )
+    assert svg.analyze(public + _box(100), SINGLE).width_mm == pytest.approx(100)
+    illustrator = (
+        b'<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "x.dtd" [\r\n\t<!ENTITY ns_x "http://ns.example/x">'
+        b"<!-- c -->]>"
+        b'<svg xmlns="http://www.w3.org/2000/svg" xmlns:x="&ns_x;" width="10mm" height="10mm" viewBox="0 0 10 10">'
+        b'<line x1="0" y1="0" x2="10" y2="0" stroke="#e30613"/></svg>'
+    )
+    assert svg.analyze(illustrator, KEY).operations["cut:wood"]["length_mm"] == pytest.approx(10)
+
+
+@pytest.mark.parametrize(
+    "doctype",
+    [
+        b'<!DOCTYPE svg [<!ENTITY x SYSTEM "file:///etc/passwd">]>',
+        b'<!DOCTYPE svg [<!ENTITY % p "x">]>',
+        b'<!DOCTYPE svg [<!ENTITY a "x"><!ENTITY b "&a;&a;">]>',
+        b"<!DOCTYPE svg [<!ELEMENT svg ANY>]>",
+        b"<!DOCTYPE svg><!DOCTYPE svg>",
+    ],
+)
+def test_unsafe_doctype_rejected(doctype):
+    with pytest.raises(svg.SvgError):
+        svg.analyze(doctype + _box(10), KEY)
+
+
+def test_entity_growth_is_bounded():
+    data = (
+        b'<!DOCTYPE svg [<!ENTITY e "'
+        + b"x" * 512
+        + b'">]>'
+        + _box(10, extra=b"<desc>" + b"&e;" * 2000 + b"</desc>")
+    )
+    with pytest.raises(svg.SvgError, match="يضخّم"):
+        svg.analyze(data, KEY)
+
+
+def test_css_class_rules_apply_between_attributes_and_inline_style():
+    data = (
+        b'<svg xmlns="http://www.w3.org/2000/svg" width="10mm" height="10mm" viewBox="0 0 10 10">'
+        b"<defs><style><![CDATA[ .str0, .other {stroke:#E30613} /* x */ .fil0 {fill:none} ]]></style></defs>"
+        b'<line class="fil0 str0" stroke="#009640" x1="0" y1="0" x2="10" y2="0"/>'
+        b'<line class="str0" style="stroke:#009640" x1="0" y1="5" x2="4" y2="5"/></svg>'
+    )
+    ops = svg.analyze(data, KEY).operations
+    assert ops["cut:wood"]["length_mm"] == pytest.approx(10)
+    assert ops["score:wood"]["length_mm"] == pytest.approx(4)
+
+
+def test_single_color_rule_applies_only_to_single_unknown_color():
+    single = svg.analyze(_box(100), SINGLE)
+    assert single.operations["cut:wood"]["length_mm"] == pytest.approx(300)
+    assert single.as_json()["assumed"] == {"#ff0000": "cut:wood"}
+
+    mixed = _box(100, extra=b'<line x1="0" y1="0" x2="5" y2="0" stroke="#000000"/>')
+    result = svg.analyze(mixed, SINGLE)
+    assert result.operations == {} and result.unknown_colors == {"#ff0000": 1, "#000000": 1}
+    assert svg.analyze(_box(100), {}).operations == {}
+
+
+def test_combine_sums_parts():
+    a, b = svg.analyze(_box(100), SINGLE), svg.analyze(_box(40), SINGLE)
+    total = svg.combine([a, b])
+    assert total.operations["cut:wood"]["count"] == 2
+    assert total.operations["cut:wood"]["length_mm"] == pytest.approx(300 + 180)
+    assert (total.width_mm, total.height_mm) == (pytest.approx(100), pytest.approx(50))
+    assert svg.combine([a]) is a
+
+
+def _zip(path, members: dict[str, bytes]):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as archive:
+        for name, data in members.items():
+            archive.writestr(name, data)
+    return path
+
+
+@pytest.fixture
+def library(tmp_path):
+    root = tmp_path / "library"
+    _zip(
+        root / "Baby" / "Name-Sign-Bundle-153819768.zip",
+        {"1/a.svg": _box(100), "1/a.dxf": b"dxf-1", "2/a.svg": _box(120), "__MACOSX/1/._a.svg": b"junk"},
+    )
+    box = root / "BOXES" / "Gift-Box-119253291" / "Files"
+    for thickness, width in (("3mm", 150), ("4mm", 151)):
+        folder = box / f"Box 150 70 {thickness}"
+        folder.mkdir(parents=True)
+        (folder / f"Box {thickness}.svg").write_bytes(_box(width))
+        (folder / f"Box {thickness} Glowforge.svg").write_bytes(_box(width, "#e42110"))
+    panels = root / "BOXES" / "5M PLYWOOD"
+    panels.mkdir(parents=True)
+    (panels / "front.svg").write_bytes(_box(80))
+    (panels / "back.svg").write_bytes(_box(80).replace(b"<rect", b"<rect id='b'"))
+    (panels / "bottom.svg").write_bytes(_box(60))
+    (root / "BOXES" / "loose.svg").write_bytes(_box(30))
+    sets = root / "Decor" / "Panel-set-36780861" / "SVG"
+    sets.mkdir(parents=True)
+    (sets / "P (1).svg").write_bytes(_box(20))
+    (sets / "P (2).svg").write_bytes(_box(21))
+    extracted = root / "Decor" / "Clock-160894418"
+    extracted.mkdir()
+    (extracted / "Clock.svg").write_bytes(_box(90))
+    _zip(root / "Decor" / "Clock-160894418.zip", {"Clock.svg": _box(90)})
+    _zip(root / "Decor" / "Only-dxf-123456789.zip", {"a.dxf": b"dxf"})
+    return root
+
+
+def test_plan_names_codes_parts_and_categories(library):
+    result = scan.scan(library)
+    plans = scan.plan(result, tree=True, each_svg=[library / "Decor" / "Panel-set-36780861"])
+    found = {(p.category, p.name, p.code): sorted(e.name for e in p.parts) for p in plans}
+    assert found == {
+        ("Baby", "Name Sign Bundle", "1"): ["a.svg"],
+        ("Baby", "Name Sign Bundle", "2"): ["a.svg"],
+        ("BOXES", "Gift Box", "3mm"): ["Box 3mm.svg"],
+        ("BOXES", "Gift Box", "4mm"): ["Box 4mm.svg"],
+        ("BOXES", "5M PLYWOOD", ""): ["back.svg", "bottom.svg", "front.svg"],
+        ("BOXES", "loose", ""): ["loose.svg"],
+        ("Decor", "Panel set", "P (1)"): ["P (1).svg"],
+        ("Decor", "Panel set", "P (2)"): ["P (2).svg"],
+        ("Decor", "Clock", ""): ["Clock.svg"],
+    }
+    gift = next(p for p in plans if p.code == "3mm")
+    assert [e.name for e in gift.files] == ["Box 3mm Glowforge.svg"]
+    assert any("Only-dxf" in note and "لا SVG" in note for note in result.notes)
+
+
+def test_import_tree_from_archives_and_parts(media, library, wood):
+    source = services.ensure_source("Creative Fabrica")
+    assert source.color_key == services.DEFAULT_COLOR_KEY
+    assert services.ensure_source("Creative Fabrica") == source
+
+    report = services.import_folder(root=library, source=source, tree=True)
+    assert len(report.created) == 8  # P (1) وP (2) أجزاء نسخة واحدة بلا --each-svg
+    sign = source.designs.get(name_original="Name Sign Bundle")
+    assert sign.category == "Baby" and sign.pack.listing_id == "153819768"
+    dxf = sign.variants.get(code="1").files.get(role=DesignFile.Role.ALTERNATE)
+    assert dxf.external_path.endswith("Name-Sign-Bundle-153819768.zip!/1/a.dxf") and not dxf.file
+
+    panels = source.designs.get(name_original="5M PLYWOOD").variants.get()
+    services.analyze_variant(panels)
+    cut = panels.analysis["operations"]["cut:wood"]
+    assert cut["count"] == 3 and cut["length_mm"] == pytest.approx(2 * 260 + 220)
+    assert panels.analysis["assumed"] == {"#ff0000": "cut:wood"}
+    assert panels.analysis["outer_area_mm2"]["wood"] == pytest.approx(80 * 50 * 2 + 60 * 50)
+    assert panels.analysis["same_geometry"] == [["back.svg", "front.svg"]]
+    assert panels.files.filter(role=DesignFile.Role.READY_CUT).count() == 3
+    assert panels.estimates.get(material=wood).complete
+    services.analyze_variant(panels)
+    assert panels.files.filter(role=DesignFile.Role.READY_CUT).count() == 3
+
+    gift = source.designs.get(name_original="Gift Box").variants.get(code="3mm")
+    assert gift.files.get(role=DesignFile.Role.ALTERNATE).name == "Box 3mm Glowforge.svg"
+
+    again = services.import_folder(root=library, source=source, tree=True)
+    assert not again.created and len(again.skipped) == 8
+
+
+def test_command_scan_writes_nothing_and_create_source(media, library, db):
+    out = StringIO()
+    call_command("import_designs", str(library), source="New", tree=True, show_plan=True, stdout=out)
+    assert "Name Sign Bundle (1)" in out.getvalue() and not DesignSource.objects.exists()
+
+    archive = library / "Baby" / "Name-Sign-Bundle-153819768.zip"
+    call_command("import_designs", str(archive), source="New", create_source=True, stdout=StringIO())
+    assert DesignSource.objects.get(name="New").designs.get().variants.count() == 2
