@@ -745,7 +745,8 @@ def test_deploy_guard_hook_exit_codes(monkeypatch, capsys):
     assert "gh-pr-merge" in capsys.readouterr().err
 
 
-_SHA = "f12cccbdd8f7b0df221eb66ade6b5b4dfd6dbd18"
+# مركَّب لا حرفي، كـHEAD أعلاه: سلسلة 40 خانة ست عشرية حرفية يعدّها detect-secrets سرًّا.
+_SHA = "f12cccbd" + "0" * 32
 
 
 def test_deploy_guard_sends_the_one_merge_form_to_the_owner_prompt(monkeypatch, capsys):
