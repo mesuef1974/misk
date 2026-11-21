@@ -23,7 +23,7 @@ router = Router(tags=["المتجر"], auth=None, throttle=[ClientRateThrottle("
 # المعاينة تشكّل نصًّا وترسم هندسة: حدّها أضيق من التصفح.
 PREVIEW_THROTTLE = ClientRateThrottle("store-preview", "30/m")
 
-MESSAGES: dict[str, tuple[str, str]] = {
+MESSAGES: dict[str, tuple[str, str]] = {  # (عربي، إنجليزي)
     "not_found": ("القالب غير موجود", "Product not found"),
     "no_generator": ("هذا المنتج غير متاح للتصميم الآن", "This product cannot be designed right now"),
     "material_not_offered": (
@@ -119,23 +119,35 @@ class ErrorOut(Schema):
     suggestions: list[str] = []
 
 
-def _text(code: str, lang: Lang) -> str:
-    ar, en = MESSAGES.get(code, MESSAGES["invalid_value"])
+Messages = dict[str, tuple[str, str]]
+
+
+def message_text(code: str, lang: Lang, messages: Messages = MESSAGES) -> str:
+    ar, en = messages.get(code, MESSAGES["invalid_value"])
     return en if lang == "en" else ar
 
 
-def _error(
-    code: str, lang: Lang, *, fields: dict[str, str] | None = None, suggestions: list[str] | None = None
-):
+def error_body(
+    code: str,
+    lang: Lang,
+    *,
+    fields: dict[str, str] | None = None,
+    suggestions: list[str] | None = None,
+    messages: Messages = MESSAGES,
+) -> dict[str, Any]:
+    """جسم الخطأ الموحَّد لمسارات المتجر. `messages` جدول المسار المستدعي إن زاد رموزًا على هذا."""
     return {
         "code": code,
-        "detail": _text(code, lang),
-        "fields": {name: {"code": c, "message": _text(c, lang)} for name, c in (fields or {}).items()},
+        "detail": message_text(code, lang, messages),
+        "fields": {
+            name: {"code": c, "message": message_text(c, lang, messages)}
+            for name, c in (fields or {}).items()
+        },
         "suggestions": suggestions or [],
     }
 
 
-def _param_code(message: str) -> str:
+def param_code(message: str) -> str:
     if message.startswith("أطول من"):
         return "too_long"
     return _PARAM_CODES.get(message, "invalid_value")
@@ -165,7 +177,7 @@ def list_templates(request: HttpRequest):
 def template_detail(request: HttpRequest, slug: str, lang: Lang = "ar"):
     template = selectors.template_by_slug(slug)
     if template is None:
-        return Status(404, _error("not_found", lang))
+        return Status(404, error_body("not_found", lang))
     return Status(
         200, {**_template_out(template), "materials": list(selectors.storefront_materials(template))}
     )
@@ -176,13 +188,13 @@ def template_limits(request: HttpRequest, slug: str, material_id: int = Query(..
     template = selectors.template_by_slug(slug)
     material = Material.objects.filter(pk=material_id).first()
     if template is None:
-        return Status(404, _error("not_found", lang))
+        return Status(404, error_body("not_found", lang))
     if material is None:
-        return Status(422, _error("material_not_offered", lang))
+        return Status(422, error_body("material_not_offered", lang))
     try:
         return Status(200, designer.limits(template, material))
     except designer.DesignUnavailableError as exc:
-        return Status(422, _error(exc.code, lang))
+        return Status(422, error_body(exc.code, lang))
 
 
 @router.post(
@@ -196,14 +208,16 @@ def preview(request: HttpRequest, slug: str, payload: PreviewIn):
     template = selectors.template_by_slug(slug)
     material = Material.objects.filter(pk=payload.material_id).first()
     if template is None:
-        return Status(404, _error("not_found", lang))
+        return Status(404, error_body("not_found", lang))
     if material is None:
-        return Status(422, _error("material_not_offered", lang))
+        return Status(422, error_body("material_not_offered", lang))
     try:
         return Status(200, designer.render(template, material, payload.params))
     except designer.DesignUnavailableError as exc:
-        return Status(422, _error(exc.code, lang))
+        return Status(422, error_body(exc.code, lang))
     except domain.ParamError as exc:
-        return Status(422, _error("invalid", lang, fields={k: _param_code(v) for k, v in exc.errors.items()}))
+        return Status(
+            422, error_body("invalid", lang, fields={k: param_code(v) for k, v in exc.errors.items()})
+        )
     except designer.DesignRejectedError as exc:
-        return Status(422, _error("invalid", lang, fields=exc.errors, suggestions=exc.suggestions))
+        return Status(422, error_body("invalid", lang, fields=exc.errors, suggestions=exc.suggestions))

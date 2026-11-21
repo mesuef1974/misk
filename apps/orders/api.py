@@ -50,6 +50,7 @@ class ItemOut(Schema):
     params: dict[str, Any]
     quantity: int
     unit_price: Decimal
+    review_reasons: list[str]  # غير فارغ: سبب وقوف الطلب في طابور المراجعة
 
     @staticmethod
     def resolve_template_slug(obj) -> str:

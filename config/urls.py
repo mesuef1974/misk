@@ -7,6 +7,7 @@ from django.urls import path, re_path
 from apps.capacity.api import router as capacity_router
 from apps.catalog.api import router as catalog_router
 from apps.catalog.storefront_api import router as store_router
+from apps.checkout.api import cart_router, payments_router
 from apps.core.api import api
 from apps.core.views import health, media_file, robots_txt, spa
 from apps.orders.api import router as orders_router
@@ -15,8 +16,10 @@ from apps.production.api import router as production_router
 api.add_router("/capacity", capacity_router)
 api.add_router("/catalog", catalog_router)
 api.add_router("/orders", orders_router)
+api.add_router("/payments", payments_router)
 api.add_router("/production", production_router)
 api.add_router("/store", store_router)
+api.add_router("/store/cart", cart_router)
 
 urlpatterns = [
     path(settings.ADMIN_URL, admin.site.urls),
