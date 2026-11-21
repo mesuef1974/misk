@@ -72,9 +72,11 @@ class Analysis:
     unknown_colors: dict[str, int]
     reference_mm: tuple[float, float] | None
     elements: list[Element] = field(repr=False, default_factory=list)
+    # لون → «عملية:مادة» طُبّق بقاعدة المفرد («*» في المفتاح)، لا بمفتاح صريح؛ يُعرض للمراجعة.
+    assumed: dict[str, str] = field(default_factory=dict)
 
     def as_json(self) -> dict:
-        return {
+        data = {
             "width_mm": round(self.width_mm, 1),
             "height_mm": round(self.height_mm, 1),
             "mm_per_unit": round(self.mm_per_unit, 6),
@@ -82,6 +84,9 @@ class Analysis:
             "unknown_colors": self.unknown_colors,
             "reference_mm": [round(v, 2) for v in self.reference_mm] if self.reference_mm else None,
         }
+        if self.assumed:
+            data["assumed"] = self.assumed
+        return data
 
 
 # ——— الألوان والأنماط ———
@@ -101,16 +106,43 @@ def normalize_color(value: str | None) -> str:
     return value
 
 
-def _style(node: ET.Element, inherited: dict[str, str]) -> dict[str, str]:
+def _declarations(text: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for part in text.split(";"):
+        if ":" in part:
+            key, value = (s.strip() for s in part.split(":", 1))
+            if key in ("stroke", "fill"):
+                out[key] = value
+    return out
+
+
+_CSS_RULE = re.compile(r"([^{}]+)\{([^{}]*)\}")
+_CSS_CLASS = re.compile(r"\.([\w-]+)")
+
+
+def class_styles(root: ET.Element) -> dict[str, dict[str, str]]:
+    """قواعد `<style>` بمحدِّد صنف بسيط (`.str0`، `.cls-1, .cls-2`) كما يصدّرها CorelDRAW وIllustrator."""
+    out: dict[str, dict[str, str]] = {}
+    for node in root.iter(f"{SVG_NS}style"):
+        text = re.sub(r"/\*.*?\*/", "", "".join(node.itertext()), flags=re.DOTALL)
+        for selectors, body in _CSS_RULE.findall(text):
+            if not (decls := _declarations(body)):
+                continue
+            for selector in selectors.split(","):
+                if m := _CSS_CLASS.fullmatch(selector.strip()):
+                    out.setdefault(m.group(1), {}).update(decls)
+    return out
+
+
+def _style(node: ET.Element, inherited: dict[str, str], classes: dict[str, dict[str, str]]) -> dict[str, str]:
+    """الأسبقية كما في CSS: الموروث، ثم خصائص العرض، ثم قواعد الأصناف، ثم `style` المضمَّن."""
     style = dict(inherited)
     for key in ("stroke", "fill"):
         if key in node.attrib:
             style[key] = node.attrib[key]
-    for part in node.attrib.get("style", "").split(";"):
-        if ":" in part:
-            key, value = (s.strip() for s in part.split(":", 1))
-            if key in ("stroke", "fill"):
-                style[key] = value
+    for name in node.attrib.get("class", "").split():
+        style.update(classes.get(name, {}))
+    style.update(_declarations(node.attrib.get("style", "")))
     return style
 
 
@@ -362,11 +394,48 @@ def shape_polylines(node: ET.Element) -> list[list[Point]]:
 # ——— القراءة الكاملة ———
 
 
+_DOCTYPE = re.compile(rb"<!DOCTYPE\s+svg\b[^\[>]*(?:\[(?P<subset>[^\]]*)\])?\s*>", re.IGNORECASE)
+_ENTITY = re.compile(rb'<!ENTITY\s+(?P<name>[A-Za-z_][\w.-]{0,63})\s+"(?P<value>[^"&%<]{0,512})"\s*>')
+_COMMENT = re.compile(rb"<!--.*?-->", re.DOTALL)
+MAX_ENTITIES = 32
+MAX_GROWTH = 2  # النص بعد إحلال الكيانات لا يتجاوز ضعف الأصل
+
+
+def strip_doctype(data: bytes) -> bytes:
+    """يحذف DOCTYPE ويحلّ كياناته النصية البسيطة، ويرفض ما سواها.
+
+    CorelDRAW وInkscape يكتبان DOCTYPE عامًّا بلا تعريفات، وIllustrator يعرّف كيانات نصية (`ns_extend` ونحوها) يستعملها
+    في `xmlns`. يُقبل الكيان الحرفي وحده: لا SYSTEM ولا PUBLIC ولا كيان داخل كيان ولا كيانات معاملات، وعددها ونموّ
+    النص بعد إحلالها محدودان، فلا جلب خارجي ولا توسّع أسّي.
+    """
+    m = _DOCTYPE.search(data)
+    if m is None:
+        if b"<!DOCTYPE" in data or b"<!ENTITY" in data:
+            raise SvgError("ملف SVG فيه DOCTYPE أو كيانات غير مدعومة؛ لا يُقرأ")
+        return data
+    entities: dict[bytes, bytes] = {}
+    if subset := m.group("subset"):
+        rest = _ENTITY.sub(b"", _COMMENT.sub(b"", subset))
+        if rest.strip():
+            raise SvgError("DOCTYPE فيه تعريفات غير الكيانات النصية؛ لا يُقرأ")
+        entities = {e.group("name"): e.group("value") for e in _ENTITY.finditer(subset)}
+        if len(entities) > MAX_ENTITIES:
+            raise SvgError("كيانات DOCTYPE كثيرة؛ لا يُقرأ")
+    body = data[: m.start()] + data[m.end() :]
+    if b"<!DOCTYPE" in body or b"<!ENTITY" in body:
+        raise SvgError("ملف SVG فيه أكثر من DOCTYPE؛ لا يُقرأ")
+    if entities:
+        pattern = re.compile(rb"&(" + b"|".join(re.escape(n) for n in entities) + rb");")
+        body = pattern.sub(lambda e: entities[e.group(1)], body)
+        if len(body) > MAX_GROWTH * len(data) + 4096:
+            raise SvgError("إحلال كيانات DOCTYPE يضخّم الملف؛ لا يُقرأ")
+    return body
+
+
 def parse_root(data: bytes) -> ET.Element:
-    if b"<!ENTITY" in data or b"<!DOCTYPE" in data:
-        raise SvgError("ملف SVG فيه DOCTYPE أو كيانات؛ لا يُقرأ")
+    data = strip_doctype(data)
     try:
-        root = ET.fromstring(data)  # noqa: S314 — DOCTYPE مرفوض أعلاه
+        root = ET.fromstring(data)  # noqa: S314 — DOCTYPE حُذف وكياناته حُلّت أعلاه، فلا كيان يتوسّع هنا
     except ET.ParseError as exc:
         raise SvgError(f"ملف SVG غير صالح: {exc}") from exc
     if root.tag != f"{SVG_NS}svg":
@@ -389,15 +458,21 @@ def _units(root: ET.Element) -> tuple[float, float, float, Matrix]:
     return width, height, s, (s, 0.0, 0.0, s, 0.0, 0.0)
 
 
-def _walk(node: ET.Element, matrix: Matrix, style: dict[str, str], out: list[Element]) -> None:
+def _walk(
+    node: ET.Element,
+    matrix: Matrix,
+    style: dict[str, str],
+    out: list[Element],
+    classes: dict[str, dict[str, str]],
+) -> None:
     for child in node:
         tag = child.tag.removeprefix(SVG_NS) if isinstance(child.tag, str) else ""
         if tag in ("defs", "clipPath", "mask", "symbol", "metadata", "title", "desc", "style"):
             continue
         m = _multiply(matrix, parse_transform(child.attrib.get("transform", "")))
-        s = _style(child, style)
+        s = _style(child, style, classes)
         if tag == "g" or tag == "a":
-            _walk(child, m, s, out)
+            _walk(child, m, s, out, classes)
         elif tag in SHAPES:
             lines = [[_apply(m, p) for p in line] for line in shape_polylines(child)]
             if lines:
@@ -420,20 +495,34 @@ def _is_reference(el: Element, key: dict[str, dict]) -> bool:
     return all(abs(v - REFERENCE_MM) <= REFERENCE_TOLERANCE_MM for v in (x1 - x0, y1 - y0))
 
 
+SINGLE_COLOR = "*"
+
+
 def analyze(data: bytes, color_key: dict[str, dict]) -> Analysis:
-    """`color_key`: لون → {"operation": cut|score|engrave, "material": نوع المادة}."""
+    """`color_key`: لون → {"operation": cut|score|engrave, "material": نوع المادة}.
+
+    المفتاح «*» قاعدة المفرد: ملف كل خطوطه بلون واحد لا يعرفه المفتاح تُطبَّق عليه هذه القاعدة، ويُسجَّل اللون في
+    `assumed`. الملف المتعدد الألوان لا يُخمَّن: ألوانه المجهولة تبقى في `unknown_colors`.
+    """
     return _analyze_root(parse_root(data), color_key)
 
 
 def _analyze_root(root: ET.Element, color_key: dict[str, dict]) -> Analysis:
     key = {normalize_color(c): v for c, v in color_key.items()}
+    single = key.pop(SINGLE_COLOR, None)
     width, height, mm_per_unit, base = _units(root)
     elements: list[Element] = []
-    _walk(root, base, {}, elements)
+    _walk(root, base, {}, elements, class_styles(root))
 
     reference = next((el for el in elements if _is_reference(el, key)), None)
     if reference:
         reference.is_reference = True
+    assumed: dict[str, str] = {}
+    colors = {el.stroke or el.fill for el in elements if el is not reference} - {""}
+    if single and len(colors) == 1 and not colors & key.keys():
+        color = colors.pop()
+        key[color] = single
+        assumed[color] = f"{single['operation']}:{single.get('material', '')}"
     operations: dict[str, dict] = {}
     unknown: dict[str, int] = {}
     for el in elements:
@@ -465,7 +554,39 @@ def _analyze_root(root: ET.Element, color_key: dict[str, dict]) -> Analysis:
     if reference:
         x0, y0, x1, y1 = reference.bbox
         ref = (x1 - x0, y1 - y0)
-    return Analysis(width, height, mm_per_unit, operations, unknown, ref, elements)
+    return Analysis(width, height, mm_per_unit, operations, unknown, ref, elements, assumed)
+
+
+def combine(parts: list[Analysis]) -> Analysis:
+    """تحليل نسخة من أجزاء (ألواح صندوق، طبقات): العمليات والألوان تُجمع، والمقاس أكبر الأجزاء.
+
+    العناصر لا تُدمج لأن إحداثيات كل جزء في لوحه؛ مساحة القطع الخارجية تُحسب لكل جزء ثم تُجمع.
+    """
+    if len(parts) == 1:
+        return parts[0]
+    operations: dict[str, dict] = {}
+    unknown: dict[str, int] = {}
+    assumed: dict[str, str] = {}
+    for part in parts:
+        for name, group in part.operations.items():
+            total = operations.setdefault(name, {**group, "count": 0, "length_mm": 0.0, "bbox_area_mm2": 0.0})
+            for field_name in ("count", "length_mm", "bbox_area_mm2"):
+                total[field_name] += group[field_name]
+        for color, count in part.unknown_colors.items():
+            unknown[color] = unknown.get(color, 0) + count
+        assumed.update(part.assumed)
+    for group in operations.values():
+        group["length_mm"] = round(group["length_mm"], 1)
+        group["bbox_area_mm2"] = round(group["bbox_area_mm2"], 1)
+    return Analysis(
+        width_mm=max(p.width_mm for p in parts),
+        height_mm=max(p.height_mm for p in parts),
+        mm_per_unit=parts[0].mm_per_unit,
+        operations=operations,
+        unknown_colors=unknown,
+        reference_mm=next((p.reference_mm for p in parts if p.reference_mm), None),
+        assumed=assumed,
+    )
 
 
 def outer_area_mm2(analysis: Analysis, material: str) -> float:
