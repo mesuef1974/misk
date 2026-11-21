@@ -62,10 +62,15 @@
           "name": "الخط",
           "type": "choice",
           "choices": [
-            "ثلث",
-            "نسخ"
+            "كايرو",
+            "المراي"
           ]
         }
+      ],
+      "material_kinds": [
+        "wood",
+        "acrylic",
+        "paper"
       ]
     },
     {
@@ -87,6 +92,10 @@
           "type": "bool",
           "required": false
         }
+      ],
+      "material_kinds": [
+        "wood",
+        "acrylic"
       ]
     },
     {
@@ -113,10 +122,13 @@
           "name": "الخط",
           "type": "choice",
           "choices": [
-            "ثلث",
-            "نسخ"
+            "كايرو",
+            "المراي"
           ]
         }
+      ],
+      "material_kinds": [
+        "wood"
       ]
     },
     {
@@ -141,6 +153,9 @@
           "type": "text",
           "max_length": 20
         }
+      ],
+      "material_kinds": [
+        "leather"
       ]
     },
     {
@@ -165,6 +180,9 @@
           "type": "text",
           "max_length": 20
         }
+      ],
+      "material_kinds": [
+        "leather"
       ]
     }
   ]

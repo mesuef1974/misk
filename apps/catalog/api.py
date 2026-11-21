@@ -78,6 +78,7 @@ class TemplateIn(Schema):
     description: str | None = None
     description_en: str | None = None
     allows_religious_text: bool | None = None
+    material_kinds: list[str] | None = None
 
 
 class TemplateOut(Schema):
@@ -88,6 +89,7 @@ class TemplateOut(Schema):
     description: str
     description_en: str
     allows_religious_text: bool
+    material_kinds: list[str]
     generator: str
     width_mm: Decimal
     height_mm: Decimal

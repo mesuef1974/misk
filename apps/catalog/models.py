@@ -84,6 +84,8 @@ class ProductTemplate(TimeStampedModel):
     description_en = models.TextField(blank=True)
     # النص الديني حصر لا منع: يُسمح على ما يُعلَّق ويُصان فقط (قرار المالك 2026-11-20).
     allows_religious_text = models.BooleanField(default=False)
+    # أنواع الخامات (`Material.Kind`) التي يُباع عليها القالب في المتجر. فارغة: كل الأنواع.
+    material_kinds = models.JSONField(default=list, blank=True)
     generator = models.CharField(max_length=64)
     width_mm = models.DecimalField(
         max_digits=6, decimal_places=1, validators=[MinValueValidator(Decimal("1"))]
