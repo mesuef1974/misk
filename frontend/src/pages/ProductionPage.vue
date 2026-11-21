@@ -1,24 +1,28 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { ApiError, errorMessage } from "@/api/client";
 import LiveNotice from "@/components/LiveNotice.vue";
 import SheetDiagram from "@/components/SheetDiagram.vue";
 import SheetRunForm from "@/components/SheetRunForm.vue";
+import { materialName, templateName } from "@/domain/catalog";
 import { formatInstant, formatMoney } from "@/domain/orders";
 import {
   formatDuration,
   groupPlacements,
-  OUTCOME_LABELS,
-  SHEET_STATUS_LABELS,
+  outcomeLabel,
   SHEET_STATUSES,
   sheetStatusLabel,
   usedFraction,
 } from "@/domain/production";
+import { currentLocale } from "@/i18n";
+import type { Material } from "@/services/catalog";
 import { useCatalogStore } from "@/stores/catalog";
 import { PlanCancelled, useProductionStore } from "@/stores/production";
 
 const production = useProductionStore();
 const catalog = useCatalogStore();
+const { t } = useI18n();
 
 const filter = ref("");
 const planMaterial = ref<number | "">("");
@@ -31,17 +35,28 @@ const confirmingScrap = ref<number | null>(null);
 const scrapping = ref(false);
 const scrapError = ref<Record<number, string>>({});
 
-const percent = new Intl.NumberFormat("ar-u-nu-latn", { style: "percent", maximumFractionDigits: 0 });
+// الأرقام لاتينية في اللغتين؛ موضع علامة النسبة يتبع لغة الصفحة.
+const percent = computed(
+  () => new Intl.NumberFormat(currentLocale() === "ar" ? "ar-u-nu-latn" : "en", { style: "percent", maximumFractionDigits: 0 }),
+);
+
+const materialLabel = (material: Pick<Material, "name" | "name_en" | "thickness_mm">) =>
+  t("production.material.named", { name: materialName(material), thickness: material.thickness_mm });
 
 // الأعداد والتصفية من الخادم: القائمة صفحات، وما حُمّل منها ليس الجدول كله.
 const filters = computed(() => [
-  { value: "", label: "الكل", count: production.totalAll },
+  { value: "", label: t("production.filter.all"), count: production.totalAll },
   ...SHEET_STATUSES.map((status) => ({
     value: status as string,
-    label: SHEET_STATUS_LABELS[status],
+    label: sheetStatusLabel(status),
     count: production.countByStatus[status] ?? 0,
   })),
 ]);
+
+function templateLabel(slug: string): string {
+  const template = catalog.templateBySlug(slug);
+  return template ? templateName(template) : slug;
+}
 
 /** الألواح جاهزة للعرض: اسم المادة، نسبة الاستعمال، مفتاح الرسم بأسماء الطلبات، وسجل التشغيل. */
 const cards = computed(() =>
@@ -49,19 +64,22 @@ const cards = computed(() =>
     const material = catalog.materialById(sheet.material_id);
     return {
       sheet,
-      material: material ? `${material.name} (${material.thickness_mm} مم)` : `مادة ${sheet.material_id}`,
-      used: percent.format(usedFraction(sheet)),
+      material: material ? materialLabel(material) : t("production.material.unknown", { id: sheet.material_id }),
+      used: percent.value.format(usedFraction(sheet)),
       groups: groupPlacements(sheet).map((group) => ({
         ...group,
-        title: `${catalog.templateBySlug(group.templateSlug)?.name ?? group.templateSlug} — ${group.customerName}`,
+        title: t("production.sheet.groupTitle", {
+          template: templateLabel(group.templateSlug),
+          customer: group.customerName,
+        }),
       })),
       runs: sheet.runs.map((run) => ({
         id: run.id,
         outcome: run.outcome,
         summary: [
-          OUTCOME_LABELS[run.outcome] ?? run.outcome,
+          outcomeLabel(run.outcome),
           formatDuration(run.duration_s),
-          `كلفة المادة ${formatMoney(run.material_cost)}`,
+          t("production.sheet.materialCost", { cost: formatMoney(run.material_cost) }),
           formatInstant(run.created_at),
         ].join(" · "),
         notes: run.notes,
@@ -90,10 +108,10 @@ async function plan(): Promise<void> {
     // لا جديد لا يعني لا قطع: نقرة ثانية أو إعادة بعد المهلة تجد القطع على ألواح خُطِّطت قبلها.
     planResult.value =
       planned.length > 0
-        ? `خُطِّطت ${pieces} قطعة على ${planned.length} لوح.`
+        ? t("production.plan.planned", { pieces, sheets: planned.length })
         : waiting > 0
-          ? `لا جديد للتخطيط: قطع هذه المادة مخطَّطة سلفًا على ${waiting} لوح ينتظر القصّ.`
-          : "لا قطع تنتظر التخطيط لهذه المادة. تُخطَّط بنود الطلبات المؤكَّدة وقيد التنفيذ فقط.";
+          ? t("production.plan.alreadyPlanned", { waiting })
+          : t("production.plan.nothing");
     // الألواح الجديدة مخطَّطة: تصفية بحالة أخرى تخفيها، فنعود إلى الكل.
     if (planned.length > 0 && filter.value !== "" && filter.value !== "planned") await choose("");
   } catch (error) {
@@ -193,27 +211,27 @@ async function scrap(sheetId: number): Promise<void> {
 
 <template>
   <div class="page-head">
-    <h1 id="production-title" tabindex="-1">الإنتاج</h1>
+    <h1 id="production-title" tabindex="-1">{{ t("production.title") }}</h1>
   </div>
 
   <form class="panel plan" @submit.prevent="plan">
     <label class="field">
-      <span>تخطيط ألواح جديدة لمادة</span>
+      <span>{{ t("production.plan.label") }}</span>
       <select v-model="planMaterial">
-        <option value="">اختر المادة</option>
+        <option value="">{{ t("production.plan.choose") }}</option>
         <option v-for="material in catalog.materials" :key="material.id" :value="material.id">
-          {{ material.name }} ({{ material.thickness_mm }} مم)
+          {{ materialLabel(material) }}
         </option>
       </select>
     </label>
     <button type="submit" class="btn primary" :disabled="planning || planMaterial === ''">
-      {{ planning ? "يخطّط…" : "تخطيط الألواح" }}
+      {{ planning ? t("production.plan.busy") : t("production.plan.submit") }}
     </button>
     <LiveNotice :message="planError" />
     <LiveNotice kind="status" :message="planError ? '' : planResult" />
   </form>
 
-  <div class="filters" role="group" aria-label="تصفية بالحالة">
+  <div class="filters" role="group" :aria-label="t('production.filter.label')">
     <button
       v-for="option in filters"
       :key="option.value"
@@ -229,22 +247,22 @@ async function scrap(sheetId: number): Promise<void> {
 
   <div v-if="production.loadError" class="notice" role="alert">
     {{ production.loadError }}
-    <button type="button" class="btn retry" @click="production.load(filter)">إعادة المحاولة</button>
+    <button type="button" class="btn retry" @click="production.load(filter)">{{ t("production.list.retry") }}</button>
   </div>
-  <p v-else-if="production.loading && !production.loaded" class="muted" role="status">يحمّل الألواح…</p>
+  <p v-else-if="production.loading && !production.loaded" class="muted" role="status">{{ t("production.list.loading") }}</p>
   <div v-else-if="production.totalAll === 0" class="empty">
-    <div class="inner"><div class="mark" aria-hidden="true"></div><p>لا ألواح بعد. أكِّد طلبًا ثم خطِّط ألواح مادته من الأعلى.</p></div>
+    <div class="inner"><div class="mark" aria-hidden="true"></div><p>{{ t("production.list.empty") }}</p></div>
   </div>
-  <p v-else-if="cards.length === 0" class="panel muted">لا ألواح بهذه الحالة.</p>
+  <p v-else-if="cards.length === 0" class="panel muted">{{ t("production.list.noneInStatus") }}</p>
 
   <ul v-if="!production.loadError && cards.length > 0" class="cards" :aria-busy="production.loading">
     <li v-for="card in cards" :key="card.sheet.id" class="panel sheet-card">
       <div class="head">
-        <strong :id="sheetTitleId(card.sheet.id)" data-sheet-title tabindex="-1">لوح {{ card.sheet.id }}</strong>
+        <strong :id="sheetTitleId(card.sheet.id)" data-sheet-title tabindex="-1">{{ t("production.sheet.title", { id: card.sheet.id }) }}</strong>
         <span class="muted">{{ card.material }}</span>
         <span class="state" :class="`is-${card.sheet.status}`">{{ sheetStatusLabel(card.sheet.status) }}</span>
         <span class="muted num used">
-          {{ card.sheet.placements.length }} قطعة · مستعمل {{ card.used }}
+          {{ t("production.sheet.usage", { pieces: card.sheet.placements.length, used: card.used }) }}
         </span>
       </div>
 
@@ -256,13 +274,13 @@ async function scrap(sheetId: number): Promise<void> {
           <span>{{ group.title }}</span>
           <span class="muted num">× {{ group.copies }}</span>
           <RouterLink :to="{ name: 'order-detail', params: { id: group.orderId } }">
-            طلب {{ group.orderId }}
+            {{ t("production.sheet.order", { id: group.orderId }) }}
           </RouterLink>
         </li>
       </ol>
 
-      <section v-if="card.runs.length" class="runs" :aria-label="`سجل تشغيل اللوح ${card.sheet.id}`">
-        <h3>سجل التشغيل</h3>
+      <section v-if="card.runs.length" class="runs" :aria-label="t('production.sheet.runsLabel', { id: card.sheet.id })">
+        <h3>{{ t("production.sheet.runs") }}</h3>
         <ol>
           <li v-for="run in card.runs" :key="run.id" :class="`is-${run.outcome}`">
             <span class="num">{{ run.summary }}</span>
@@ -280,26 +298,26 @@ async function scrap(sheetId: number): Promise<void> {
         @cancel="closeRunForm(card.sheet.id)"
       />
       <div v-else-if="card.sheet.status === 'planned'" class="form-actions">
-        <button :id="`run-${card.sheet.id}`" type="button" class="btn" @click="running = card.sheet.id">تسجيل تشغيل</button>
+        <button :id="`run-${card.sheet.id}`" type="button" class="btn" @click="running = card.sheet.id">{{ t("production.sheet.recordRun") }}</button>
         <template v-if="confirmingScrap === card.sheet.id">
-          <span class="muted">تُرفع قطع اللوح لتُخطَّط على لوح جديد، ولا رجعة.</span>
+          <span class="muted">{{ t("production.sheet.scrapWarning") }}</span>
           <button type="button" class="btn danger" :disabled="scrapping" @click="scrap(card.sheet.id)">
-            تأكيد الإتلاف
+            {{ t("production.sheet.confirmScrap") }}
           </button>
           <button :id="`scrap-cancel-${card.sheet.id}`" type="button" class="btn" @click="cancelScrap(card.sheet.id)">
-            تراجع
+            {{ t("production.sheet.cancelScrap") }}
           </button>
         </template>
         <button v-else :id="`scrap-${card.sheet.id}`" type="button" class="btn" :disabled="scrapping" @click="scrap(card.sheet.id)">
-          إتلاف اللوح
+          {{ t("production.sheet.scrap") }}
         </button>
       </div>
     </li>
   </ul>
   <div v-if="!production.loadError && production.hasMore" class="more">
-    <span class="muted num">يعرض {{ production.sheets.length }} من {{ production.total }}</span>
+    <span class="muted num">{{ t("production.list.showing", { shown: production.sheets.length, total: production.total }) }}</span>
     <button type="button" class="btn" :disabled="production.loading || production.loadingMore" @click="production.loadMore()">
-      {{ production.loadingMore ? "يحمّل…" : "تحميل المزيد" }}
+      {{ production.loadingMore ? t("production.list.loadingMore") : t("production.list.loadMore") }}
     </button>
   </div>
 </template>

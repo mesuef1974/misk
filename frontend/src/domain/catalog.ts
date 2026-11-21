@@ -1,6 +1,7 @@
 // نماذج الكتالوج: حالتها، وفحصها، وتحويلها إلى ما يرسله الخادم. منطق خالص يُختبر بلا واجهة.
 // الحدود نسخة الواجهة من حقول apps/catalog/models.py؛ الخادم هو الحَكَم.
-import type { ParamChoice, ParamField } from "@/domain/params";
+import { fieldLabel, type ParamChoice, type ParamField } from "@/domain/params";
+import { currentLocale, i18n } from "@/i18n";
 import type {
   CalibrationDraft,
   Material,
@@ -9,25 +10,26 @@ import type {
   TemplateDraft,
 } from "@/services/catalog";
 
+/** اسم القالب بلغة الصفحة: الإنجليزي في الصفحة الإنجليزية إن أُدخل، وإلا العربي. */
+export function templateName(template: Pick<ProductTemplate, "name" | "name_en">): string {
+  return (currentLocale() === "en" && template.name_en) || template.name;
+}
+
+/** اسم المادة بلغة الصفحة، بالقاعدة نفسها. */
+export function materialName(material: Pick<Material, "name" | "name_en">): string {
+  return (currentLocale() === "en" && material.name_en) || material.name;
+}
+
 export const MATERIAL_KINDS = ["leather", "wood", "acrylic", "paper", "other"] as const;
-const KIND_LABELS: Record<string, string> = {
-  leather: "جلد نباتي الدباغة",
-  wood: "خشب",
-  acrylic: "أكريليك",
-  paper: "ورق مقوّى",
-  other: "أخرى",
-};
 
 export const OPERATIONS = ["engrave", "score", "cut"] as const;
-const OPERATION_LABELS: Record<string, string> = { engrave: "حفر", score: "خط", cut: "قص" };
 
 export const FIELD_TYPES = ["text", "int", "bool", "choice"] as const;
-export const FIELD_TYPE_LABELS: Record<ParamField["type"], string> = {
-  text: "نص",
-  int: "عدد صحيح",
-  bool: "نعم/لا",
-  choice: "اختيار من قائمة",
-};
+
+// التسميات دوال تُستدعى وقت العرض: نصها يتبع لغة الصفحة.
+export function fieldTypeLabel(type: ParamField["type"]): string {
+  return i18n.global.t(`catalog.fieldTypes.${type}`);
+}
 
 /** أيقونة الهوية لنوع المادة (brand/misk/identity/icons)؛ ما لا أيقونة له في الهوية يبقى بلا أيقونة. */
 export const KIND_ICONS: Record<string, string> = { leather: "leather", wood: "wood", acrylic: "acrylic" };
@@ -40,14 +42,18 @@ export function templateIcon(generator: string): string {
 }
 
 export function kindLabel(kind: string): string {
-  return KIND_LABELS[kind] ?? kind;
+  return (MATERIAL_KINDS as readonly string[]).includes(kind) ? i18n.global.t(`catalog.kinds.${kind}`) : kind;
 }
 
 export function operationLabel(operation: string): string {
-  return OPERATION_LABELS[operation] ?? operation;
+  return (OPERATIONS as readonly string[]).includes(operation) ? i18n.global.t(`catalog.operations.${operation}`) : operation;
 }
 
 export type Errors = Record<string, string>;
+
+function message(key: string, named: Record<string, unknown> = {}): string {
+  return i18n.global.t(`catalog.validation.${key}`, named);
+}
 type NumberInput = number | "";
 
 function collapse(text: string): string {
@@ -56,15 +62,15 @@ function collapse(text: string): string {
 
 /** عدد عشري داخل المدى وبخانات عشرية لا تزيد على `places`، كما يقبله DecimalField. */
 function decimalError(value: NumberInput, min: number, max: number, places: number): string {
-  if (value === "" || !Number.isFinite(value)) return "مطلوب";
-  if (value < min || value > max) return `بين ${min} و${max}`;
+  if (value === "" || !Number.isFinite(value)) return message("required");
+  if (value < min || value > max) return message("between", { min, max });
   const scaled = value * 10 ** places;
-  return Math.abs(scaled - Math.round(scaled)) > 1e-6 ? `${places} خانات عشرية على الأكثر` : "";
+  return Math.abs(scaled - Math.round(scaled)) > 1e-6 ? message("decimalPlaces", { places }) : "";
 }
 
 function integerError(value: NumberInput, min: number, max: number): string {
-  if (value === "") return "مطلوب";
-  return Number.isInteger(value) && value >= min && value <= max ? "" : `عدد صحيح بين ${min} و${max}`;
+  if (value === "") return message("required");
+  return Number.isInteger(value) && value >= min && value <= max ? "" : message("integerBetween", { min, max });
 }
 
 function put(errors: Errors, key: string, message: string): void {
@@ -75,6 +81,7 @@ function put(errors: Errors, key: string, message: string): void {
 
 export interface MaterialForm {
   name: string;
+  nameEn: string;
   kind: string;
   thickness: NumberInput;
   sheetCost: NumberInput;
@@ -83,12 +90,13 @@ export interface MaterialForm {
 }
 
 export function emptyMaterialForm(): MaterialForm {
-  return { name: "", kind: "", thickness: "", sheetCost: 0, supplier: "", notes: "" };
+  return { name: "", nameEn: "", kind: "", thickness: "", sheetCost: 0, supplier: "", notes: "" };
 }
 
 export function materialFormFrom(material: Material): MaterialForm {
   return {
     name: material.name,
+    nameEn: material.name_en,
     kind: material.kind,
     thickness: Number(material.thickness_mm),
     sheetCost: Number(material.sheet_cost),
@@ -100,16 +108,19 @@ export function materialFormFrom(material: Material): MaterialForm {
 export function buildMaterialDraft(form: MaterialForm): { draft: MaterialDraft | null; errors: Errors } {
   const errors: Errors = {};
   const name = collapse(form.name);
-  if (!name) errors.name = "اسم المادة مطلوب";
-  else if (name.length > 120) errors.name = "أطول من 120 حرفًا";
-  if (!(MATERIAL_KINDS as readonly string[]).includes(form.kind)) errors.kind = "اختر النوع";
+  if (!name) errors.name = message("materialName");
+  else if (name.length > 120) errors.name = message("longerThan", { max: 120 });
+  const nameEn = collapse(form.nameEn);
+  if (nameEn.length > 120) errors.nameEn = message("longerThan", { max: 120 });
+  if (!(MATERIAL_KINDS as readonly string[]).includes(form.kind)) errors.kind = message("kind");
   put(errors, "thickness", decimalError(form.thickness, 0.1, 999.99, 2));
   put(errors, "sheetCost", decimalError(form.sheetCost, 0, 999999.99, 2));
-  if (form.supplier.trim().length > 160) errors.supplier = "أطول من 160 حرفًا";
+  if (form.supplier.trim().length > 160) errors.supplier = message("longerThan", { max: 160 });
   if (Object.keys(errors).length > 0) return { draft: null, errors };
   return {
     draft: {
       name,
+      name_en: nameEn,
       kind: form.kind,
       thickness_mm: String(form.thickness),
       sheet_cost: String(form.sheetCost),
@@ -157,13 +168,13 @@ export function buildCalibrationDraft(form: CalibrationForm): {
   errors: Errors;
 } {
   const errors: Errors = {};
-  if (!(OPERATIONS as readonly string[]).includes(form.operation)) errors.operation = "اختر العملية";
+  if (!(OPERATIONS as readonly string[]).includes(form.operation)) errors.operation = message("operation");
   put(errors, "power", integerError(form.power, 1, 100));
   put(errors, "speed", decimalError(form.speed, 0.1, 99999.9, 1));
   put(errors, "passes", integerError(form.passes, 1, 99));
   if (form.linesPerCm !== "") put(errors, "linesPerCm", integerError(form.linesPerCm, 1, 9999));
   put(errors, "minLine", decimalError(form.minLine, 0.01, 99.99, 2));
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(form.measuredOn)) errors.measuredOn = "تاريخ القياس مطلوب";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(form.measuredOn)) errors.measuredOn = message("measuredOn");
   if (Object.keys(errors).length > 0) return { draft: null, errors };
   return {
     draft: {
@@ -186,6 +197,7 @@ export interface SchemaFieldForm {
   key: number;
   name: string;
   label: string;
+  labelEn: string;
   type: ParamField["type"];
   required: boolean;
   maxLength: NumberInput;
@@ -193,11 +205,14 @@ export interface SchemaFieldForm {
   max: NumberInput;
   /** الخيارات نصًّا، كل خيار في سطر أو بينها فاصلة. */
   choices: string;
+  /** تسمياتها الإنجليزية بالترتيب نفسه؛ فارغة تعني عرض الخيارات كما هي. */
+  choicesEn: string;
 }
 
 export interface TemplateForm {
   slug: string;
   name: string;
+  nameEn: string;
   generator: string;
   width: NumberInput;
   height: NumberInput;
@@ -206,17 +221,30 @@ export interface TemplateForm {
 }
 
 export function newSchemaField(key: number): SchemaFieldForm {
-  return { key, name: "", label: "", type: "text", required: true, maxLength: "", min: "", max: "", choices: "" };
+  return {
+    key,
+    name: "",
+    label: "",
+    labelEn: "",
+    type: "text",
+    required: true,
+    maxLength: "",
+    min: "",
+    max: "",
+    choices: "",
+    choicesEn: "",
+  };
 }
 
 export function emptyTemplateForm(): TemplateForm {
-  return { slug: "", name: "", generator: "", width: "", height: "", basePrice: 0, fields: [] };
+  return { slug: "", name: "", nameEn: "", generator: "", width: "", height: "", basePrice: 0, fields: [] };
 }
 
 export function templateFormFrom(template: ProductTemplate): TemplateForm {
   return {
     slug: template.slug,
     name: template.name,
+    nameEn: template.name_en,
     generator: template.generator,
     width: Number(template.width_mm),
     height: Number(template.height_mm),
@@ -225,12 +253,14 @@ export function templateFormFrom(template: ProductTemplate): TemplateForm {
       key: index + 1,
       name: field.name,
       label: field.label ?? "",
+      labelEn: field.label_en ?? "",
       type: field.type,
       required: field.required ?? true,
       maxLength: field.max_length ?? "",
       min: field.min ?? "",
       max: field.max ?? "",
       choices: (field.choices ?? []).join("\n"),
+      choicesEn: (field.choices_en ?? []).join("\n"),
     })),
   };
 }
@@ -258,31 +288,39 @@ function buildField(
   original: ParamField | undefined,
 ): { field: ParamField | null; error: string } {
   const name = form.name.trim();
-  if (!name) return { field: null, error: "اسم الحقل مطلوب" };
+  if (!name) return { field: null, error: message("fieldName") };
   const field: ParamField = { name, type: form.type };
   const label = collapse(form.label);
   if (label) field.label = label;
+  const labelEn = collapse(form.labelEn);
+  if (labelEn) field.label_en = labelEn;
   if (!form.required) field.required = false;
   if (form.type === "text" && form.maxLength !== "") {
     if (!Number.isInteger(form.maxLength) || form.maxLength < 1) {
-      return { field: null, error: "أقصى طول عدد صحيح موجب" };
+      return { field: null, error: message("maxLength") };
     }
     field.max_length = form.maxLength;
   }
   if (form.type === "int") {
     for (const bound of [form.min, form.max]) {
-      if (bound !== "" && !Number.isInteger(bound)) return { field: null, error: "الحدّان عددان صحيحان" };
+      if (bound !== "" && !Number.isInteger(bound)) return { field: null, error: message("integerBounds") };
     }
     if (form.min !== "" && form.max !== "" && form.min > form.max) {
-      return { field: null, error: "الحد الأدنى أكبر من الأقصى" };
+      return { field: null, error: message("minAboveMax") };
     }
     if (form.min !== "") field.min = form.min;
     if (form.max !== "") field.max = form.max;
   }
   if (form.type === "choice") {
     const choices = parseChoices(form.choices);
-    if (choices.length === 0) return { field: null, error: "أدخل خيارًا واحدًا على الأقل" };
+    if (choices.length === 0) return { field: null, error: message("noChoices") };
     field.choices = keepChoiceTypes(choices, original?.type === "choice" ? original.choices : undefined);
+    // التسميات تقابل الخيارات موضعًا بموضع، فلا يُحذف منها مكرر ولا يُقبل عدد مختلف.
+    const labels = form.choicesEn.split(/[\n,،]/).map(collapse).filter(Boolean);
+    if (labels.length > 0 && labels.length !== choices.length) {
+      return { field: null, error: message("choicesEnCount") };
+    }
+    if (labels.length > 0) field.choices_en = labels;
   }
   return { field, error: "" };
 }
@@ -294,16 +332,18 @@ export function buildTemplateDraft(
 ): { draft: TemplateDraft | null; errors: Errors } {
   const errors: Errors = {};
   const slug = form.slug.trim();
-  if (!slug) errors.slug = "المعرّف مطلوب";
+  if (!slug) errors.slug = message("slugRequired");
   else if (slug.length > 64 || !/^[\p{L}\p{N}_-]+$/u.test(slug)) {
-    errors.slug = "حروف وأرقام وشرطات فقط، بلا مسافات، و64 على الأكثر";
+    errors.slug = message("slugFormat");
   }
   const name = collapse(form.name);
-  if (!name) errors.name = "اسم القالب مطلوب";
-  else if (name.length > 120) errors.name = "أطول من 120 حرفًا";
+  if (!name) errors.name = message("templateName");
+  else if (name.length > 120) errors.name = message("longerThan", { max: 120 });
+  const nameEn = collapse(form.nameEn);
+  if (nameEn.length > 120) errors.nameEn = message("longerThan", { max: 120 });
   const generator = form.generator.trim();
-  if (!generator) errors.generator = "مفتاح المولّد مطلوب";
-  else if (generator.length > 64) errors.generator = "أطول من 64 حرفًا";
+  if (!generator) errors.generator = message("generator");
+  else if (generator.length > 64) errors.generator = message("longerThan", { max: 64 });
   put(errors, "width", decimalError(form.width, 1, 99999.9, 1));
   put(errors, "height", decimalError(form.height, 1, 99999.9, 1));
   put(errors, "basePrice", decimalError(form.basePrice, 0, 999999.99, 2));
@@ -314,7 +354,7 @@ export function buildTemplateDraft(
     const before = original?.param_schema.find((field) => field.name === fieldForm.name.trim());
     const { field, error } = buildField(fieldForm, before);
     if (!field) errors[`field:${fieldForm.key}`] = error;
-    else if (names.has(field.name)) errors[`field:${fieldForm.key}`] = `الاسم ${field.name} مكرر`;
+    else if (names.has(field.name)) errors[`field:${fieldForm.key}`] = message("duplicateField", { name: field.name });
     else {
       names.add(field.name);
       schema.push(field);
@@ -326,6 +366,7 @@ export function buildTemplateDraft(
     draft: {
       slug,
       name,
+      name_en: nameEn,
       generator,
       width_mm: String(form.width),
       height_mm: String(form.height),
@@ -338,7 +379,7 @@ export function buildTemplateDraft(
 
 /** وصف موجز لحقل المخطط في قائمة القوالب. */
 export function describeField(field: ParamField): string {
-  const label = field.label || field.name;
-  const optional = field.required === false ? "، اختياري" : "";
-  return `${label} (${FIELD_TYPE_LABELS[field.type]}${optional})`;
+  const label = fieldLabel(field);
+  const key = field.required === false ? "catalog.templates.fieldSummaryOptional" : "catalog.templates.fieldSummary";
+  return i18n.global.t(key, { label, type: fieldTypeLabel(field.type) });
 }

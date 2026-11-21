@@ -1,22 +1,25 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { errorMessage } from "@/api/client";
 import BrandIcon from "@/components/BrandIcon.vue";
 import OrderStatusBadge from "@/components/OrderStatusBadge.vue";
+import { materialName, templateName } from "@/domain/catalog";
 import {
   formatDate,
   formatMoney,
   lineTotal,
   orderActions,
-  TRANSITION_ACTIONS,
+  transitionAction,
   type OrderStatus,
 } from "@/domain/orders";
-import { fieldLabel, type ParamValue } from "@/domain/params";
+import { choiceLabel, fieldLabel, type ParamField, type ParamValue } from "@/domain/params";
 import { useCatalogStore } from "@/stores/catalog";
 import { useOrdersStore } from "@/stores/orders";
 
 const props = defineProps<{ orderId: number }>();
 
+const { t } = useI18n();
 const orders = useOrdersStore();
 const catalog = useCatalogStore();
 
@@ -33,15 +36,16 @@ const actions = computed(() => (order.value ? orderActions(order.value) : []));
 const lines = computed(() =>
   (order.value?.items ?? []).map((item) => {
     const template = catalog.templateBySlug(item.template_slug);
-    const labels = new Map((template?.param_schema ?? []).map((field) => [field.name, fieldLabel(field)]));
+    const fields = new Map((template?.param_schema ?? []).map((field) => [field.name, field]));
+    const material = catalog.materialById(item.material_id);
     return {
       id: item.id,
-      template: template?.name ?? item.template_slug,
-      material: catalog.materialById(item.material_id)?.name ?? `مادة ${item.material_id}`,
+      template: template ? templateName(template) : item.template_slug,
+      material: material ? materialName(material) : t("orders.detail.materialFallback", { id: item.material_id }),
       params: Object.entries(item.params).map(([name, value]) => ({
         name,
-        label: labels.get(name) ?? name,
-        value: display(value),
+        label: fields.has(name) ? fieldLabel(fields.get(name)!) : name,
+        value: display(value, fields.get(name)),
       })),
       quantity: item.quantity,
       unitPrice: formatMoney(item.unit_price),
@@ -50,9 +54,9 @@ const lines = computed(() =>
   }),
 );
 
-function display(value: ParamValue): string {
-  if (typeof value === "boolean") return value ? "نعم" : "لا";
-  return String(value);
+function display(value: ParamValue, field?: ParamField): string {
+  if (typeof value === "boolean") return value ? t("orders.detail.yes") : t("orders.detail.no");
+  return field ? choiceLabel(field, value) : String(value);
 }
 
 /** الطلب من المخزن إن كان فيه (جاء من القائمة أو أُنشئ للتو)، وإلا يُجلب وحده بلا تحميل القائمة كلها. */
@@ -92,43 +96,43 @@ async function move(toStatus: OrderStatus): Promise<void> {
 
 <template>
   <div class="page-head">
-    <h1>طلب {{ orderId }}</h1>
-    <RouterLink class="btn" :to="{ name: 'orders' }">رجوع للطلبات</RouterLink>
+    <h1>{{ t("orders.detail.heading", { id: orderId }) }}</h1>
+    <RouterLink class="btn" :to="{ name: 'orders' }">{{ t("orders.back") }}</RouterLink>
   </div>
 
   <div v-if="lookupError" class="notice" role="alert">
     {{ lookupError }}
-    <button type="button" class="btn retry" @click="lookup()">إعادة المحاولة</button>
+    <button type="button" class="btn retry" @click="lookup()">{{ t("orders.retry") }}</button>
   </div>
-  <p v-else-if="!order && !settled" class="muted" role="status">يحمّل الطلب…</p>
-  <p v-else-if="!order" class="panel muted">لا طلب بهذا الرقم.</p>
+  <p v-else-if="!order && !settled" class="muted" role="status">{{ t("orders.detail.loading") }}</p>
+  <p v-else-if="!order" class="panel muted">{{ t("orders.detail.notFound") }}</p>
 
   <template v-else>
     <section class="panel summary">
       <div>
-        <span class="muted">العميل</span>
+        <span class="muted">{{ t("orders.detail.customer") }}</span>
         <strong>{{ order.customer_name }}</strong>
       </div>
       <div>
-        <span class="muted">الحالة</span>
+        <span class="muted">{{ t("orders.detail.status") }}</span>
         <OrderStatusBadge :status="order.status" />
       </div>
       <div v-if="order.occasion_date">
-        <span class="muted">تاريخ المناسبة</span>
+        <span class="muted">{{ t("orders.detail.occasionDate") }}</span>
         <strong>{{ formatDate(order.occasion_date) }}</strong>
       </div>
       <div>
-        <span class="muted">المجموع</span>
+        <span class="muted">{{ t("orders.detail.total") }}</span>
         <strong class="num">{{ formatMoney(order.total) }}</strong>
       </div>
     </section>
 
     <section v-if="order.notes" class="panel order-notes">
-      <span class="muted">ملاحظات</span>
+      <span class="muted">{{ t("orders.detail.notes") }}</span>
       <p>{{ order.notes }}</p>
     </section>
 
-    <h2>البنود</h2>
+    <h2>{{ t("orders.detail.items") }}</h2>
     <ul class="lines">
       <li v-for="line in lines" :key="line.id" class="panel line">
         <div class="what">
@@ -161,11 +165,11 @@ async function move(toStatus: OrderStatus): Promise<void> {
         @click="move(status)"
       >
         <BrandIcon name="delivery" v-if="status === 'delivered'" />
-        {{ status === "cancelled" && confirmingCancel ? "اضغط ثانيةً لتأكيد الإلغاء" : TRANSITION_ACTIONS[status] }}
+        {{ status === "cancelled" && confirmingCancel ? t("orders.detail.confirmCancel") : transitionAction(status) }}
       </button>
-      <button v-if="confirmingCancel" type="button" class="btn" @click="confirmingCancel = false">تراجع</button>
+      <button v-if="confirmingCancel" type="button" class="btn" @click="confirmingCancel = false">{{ t("orders.detail.undo") }}</button>
     </div>
-    <p v-else class="muted">هذا الطلب في حالة نهائية ولا إجراء عليه.</p>
+    <p v-else class="muted">{{ t("orders.detail.final") }}</p>
   </template>
 </template>
 

@@ -104,6 +104,7 @@ def tracking_view(order: Order) -> dict[str, Any]:
             "name": item.template.name,
             "name_en": item.template.name_en,
             "material_name": item.material.name,
+            "material_name_en": item.material.name_en,
             "quantity": item.quantity,
             "line_total": item.unit_price * item.quantity,
         }

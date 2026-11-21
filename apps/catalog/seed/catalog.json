@@ -2,6 +2,7 @@
   "materials": [
     {
       "name": "جلد نباتي طبيعي",
+      "name_en": "Natural veg-tan leather",
       "kind": "leather",
       "thickness_mm": "2.00",
       "sheet_width_mm": "600.0",
@@ -11,6 +12,7 @@
     },
     {
       "name": "خشب زيزفون رقائقي",
+      "name_en": "Basswood plywood",
       "kind": "wood",
       "thickness_mm": "3.00",
       "sheet_width_mm": "600.0",
@@ -20,6 +22,7 @@
     },
     {
       "name": "أكريليك شفاف",
+      "name_en": "Clear acrylic",
       "kind": "acrylic",
       "thickness_mm": "3.00",
       "sheet_width_mm": "600.0",
@@ -29,6 +32,7 @@
     },
     {
       "name": "ورق مقوّى أبيض",
+      "name_en": "White cardstock",
       "kind": "paper",
       "thickness_mm": "0.30",
       "sheet_width_mm": "600.0",
@@ -41,6 +45,7 @@
     {
       "slug": "arched-card",
       "name": "بطاقة مقوّسة",
+      "name_en": "Arched card",
       "generator": "arched_card",
       "width_mm": "90.0",
       "height_mm": "130.0",
@@ -49,21 +54,28 @@
       "param_schema": [
         {
           "name": "الاسم",
+          "label_en": "Name",
           "type": "text",
           "max_length": 30
         },
         {
           "name": "العبارة",
+          "label_en": "Phrase",
           "type": "text",
           "max_length": 60,
           "required": false
         },
         {
           "name": "الخط",
+          "label_en": "Font",
           "type": "choice",
           "choices": [
             "كايرو",
             "المراي"
+          ],
+          "choices_en": [
+            "Cairo",
+            "Almarai"
           ]
         }
       ],
@@ -76,6 +88,7 @@
     {
       "slug": "letter-keychain",
       "name": "ميدالية حرف",
+      "name_en": "Letter keychain",
       "generator": "letter_keychain",
       "width_mm": "45.0",
       "height_mm": "60.0",
@@ -84,11 +97,13 @@
       "param_schema": [
         {
           "name": "الحرف",
+          "label_en": "Letter",
           "type": "text",
           "max_length": 1
         },
         {
           "name": "حلقة معدنية",
+          "label_en": "Metal ring",
           "type": "bool",
           "required": false
         }
@@ -101,6 +116,7 @@
     {
       "slug": "jar-lid",
       "name": "غطاء برطمان",
+      "name_en": "Jar lid",
       "generator": "jar_lid",
       "width_mm": "70.0",
       "height_mm": "70.0",
@@ -109,21 +125,28 @@
       "param_schema": [
         {
           "name": "الاسم",
+          "label_en": "Name",
           "type": "text",
           "max_length": 24
         },
         {
           "name": "القطر مم",
+          "label_en": "Diameter (mm)",
           "type": "int",
           "min": 50,
           "max": 100
         },
         {
           "name": "الخط",
+          "label_en": "Font",
           "type": "choice",
           "choices": [
             "كايرو",
             "المراي"
+          ],
+          "choices_en": [
+            "Cairo",
+            "Almarai"
           ]
         }
       ],
@@ -134,6 +157,7 @@
     {
       "slug": "case-iphone-17",
       "name": "كفر جلد آيفون 17",
+      "name_en": "iPhone 17 leather case",
       "generator": "case_name",
       "width_mm": "72.0",
       "height_mm": "150.0",
@@ -142,14 +166,20 @@
       "param_schema": [
         {
           "name": "النمط",
+          "label_en": "Style",
           "type": "choice",
           "choices": [
             "اسم",
             "حرفان"
+          ],
+          "choices_en": [
+            "Name",
+            "Two letters"
           ]
         },
         {
           "name": "النص",
+          "label_en": "Text",
           "type": "text",
           "max_length": 20
         }
@@ -161,6 +191,7 @@
     {
       "slug": "case-galaxy-s25",
       "name": "كفر جلد جالكسي S25",
+      "name_en": "Galaxy S25 leather case",
       "generator": "case_name",
       "width_mm": "71.0",
       "height_mm": "147.0",
@@ -169,14 +200,20 @@
       "param_schema": [
         {
           "name": "النمط",
+          "label_en": "Style",
           "type": "choice",
           "choices": [
             "اسم",
             "حرفان"
+          ],
+          "choices_en": [
+            "Name",
+            "Two letters"
           ]
         },
         {
           "name": "النص",
+          "label_en": "Text",
           "type": "text",
           "max_length": 20
         }

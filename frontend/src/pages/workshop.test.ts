@@ -41,6 +41,7 @@ function job(overrides: Partial<PlanJob> = {}): PlanJob {
 const leather: Material = {
   id: 7,
   name: "جلد نباتي",
+  name_en: "",
   kind: "leather",
   thickness_mm: "2.00",
   sheet_width_mm: "600.0",
@@ -53,6 +54,7 @@ const card: ProductTemplate = {
   id: 1,
   slug: "card",
   name: "بطاقة مقوّسة",
+  name_en: "Arched card",
   generator: "card",
   width_mm: "90.0",
   height_mm: "55.0",
@@ -171,12 +173,14 @@ describe("صفحة المواد", () => {
 
     const inputs = page.findAll(".editor input");
     await inputs[0].setValue("خشب بتولا");
-    await inputs[1].setValue("3");
+    await inputs[1].setValue(" Birch  plywood ");
+    await inputs[2].setValue("3");
     await page.get(".editor select").setValue("wood");
     await page.get("form").trigger("submit");
     await flushPromises();
     expect(catalogService.saveMaterial).toHaveBeenCalledWith({
       name: "خشب بتولا",
+      name_en: "Birch plywood",
       kind: "wood",
       thickness_mm: "3",
       sheet_cost: "0",
@@ -193,7 +197,9 @@ describe("صفحة المواد", () => {
     await button(page, "تعديل").trigger("click");
     const inputs = page.findAll(".editor input");
     expect(inputs[0].attributes("disabled")).toBeDefined();
-    expect(inputs[1].attributes("disabled")).toBeDefined();
+    // الاسم الإنجليزي ليس من مفتاح المادة فيبقى قابلًا للتعديل.
+    expect(inputs[1].attributes("disabled")).toBeUndefined();
+    expect(inputs[2].attributes("disabled")).toBeDefined();
     await page.get("form").trigger("submit");
     await flushPromises();
     expect(page.get('[role="alert"]').text()).toContain("قيمة غير صالحة");

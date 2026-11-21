@@ -1,5 +1,9 @@
 import { defineStore } from "pinia";
 import { api } from "@/api/client";
+import { DEFAULT_LOCALE, type Locale } from "@/domain/locale";
+
+// الاسم العربي من الخادم (SITE_TITLE، المصدر نفسه للوحة الإدارة)؛ هذا رسمه اللاتيني للواجهة الإنجليزية.
+const SITE_TITLE_LATIN = "Misk";
 
 interface PingOut {
   ok: boolean;
@@ -11,6 +15,9 @@ export const useAppStore = defineStore("app", {
     siteTitle: document.getElementById("app")?.dataset.siteTitle ?? "",
     backendOk: null as boolean | null,
   }),
+  getters: {
+    title: (state) => (locale: Locale) => (locale === DEFAULT_LOCALE ? state.siteTitle : SITE_TITLE_LATIN),
+  },
   actions: {
     async loadPing() {
       try {

@@ -13,6 +13,7 @@ from django.core.files.storage import default_storage
 from django.db import connection
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.utils import translation
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_safe
 
@@ -71,6 +72,14 @@ def media_file(request: HttpRequest, path: str) -> FileResponse:
     return response
 
 
+def spa_language(path: str) -> str:
+    """لغة القشرة من المسار وحده، كما يقرؤها الموجّه في `frontend/src/domain/locale.ts`: `/en` وما تحته
+    إنجليزي وكل ما عداه عربي. لا Accept-Language: الرابط نفسه يعطي اللغة نفسها لكل زائر."""
+    return "en" if path == "/en" or path.startswith("/en/") else "ar"
+
+
 @require_safe
 def spa(request: HttpRequest) -> HttpResponse:
-    return render(request, "spa.html")
+    # القشرة تخرج بلغة الصفحة واتجاهها من أول بايت، فلا تنقلب بعد إقلاع Vue.
+    with translation.override(spa_language(request.path)):
+        return render(request, "spa.html")

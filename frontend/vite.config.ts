@@ -24,6 +24,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // vue-i18n لكل مكوّن يُركَّب في الاختبار، والعودة إلى العربية قبل كل اختبار.
+    setupFiles: ["src/test-setup.ts"],
     // e2e/ اختبارات Playwright (npm run test:screens)، لا يشغّلها vitest.
     exclude: [...configDefaults.exclude, "e2e/**"],
   },

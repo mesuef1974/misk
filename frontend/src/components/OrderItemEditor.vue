@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
+import { materialName, templateName } from "@/domain/catalog";
 import { formatMoney } from "@/domain/orders";
 import { withTemplate, type ItemErrors, type ItemForm } from "@/domain/orderForm";
-import { fieldLabel, type ParamValue } from "@/domain/params";
+import { choiceLabel, fieldLabel, type ParamValue } from "@/domain/params";
 import type { Material, ProductTemplate } from "@/services/catalog";
 
 const props = withDefaults(
@@ -23,6 +25,8 @@ const emit = defineEmits<{
   param: [name: string, value: ParamValue];
   remove: [];
 }>();
+
+const { t } = useI18n();
 
 const template = computed(() => props.templates.find((candidate) => candidate.slug === props.item.templateSlug));
 const schema = computed(() => template.value?.param_schema ?? []);
@@ -64,35 +68,35 @@ function chooseParam(name: string, choices: ParamValue[], event: Event): void {
 
 <template>
   <fieldset class="item">
-    <legend>البند {{ index + 1 }}</legend>
+    <legend>{{ t("orders.item.legend", { number: index + 1 }) }}</legend>
 
     <div class="grid">
       <label class="field">
-        <span>القالب</span>
+        <span>{{ t("orders.item.template") }}</span>
         <select :value="item.templateSlug" :aria-invalid="Boolean(errors.template)" @change="chooseTemplate">
-          <option value="">اختر القالب</option>
-          <option v-for="option in templates" :key="option.slug" :value="option.slug">{{ option.name }}</option>
+          <option value="">{{ t("orders.item.chooseTemplate") }}</option>
+          <option v-for="option in templates" :key="option.slug" :value="option.slug">{{ templateName(option) }}</option>
         </select>
         <span v-if="errors.template" class="error">{{ errors.template }}</span>
       </label>
 
       <label class="field">
-        <span>المادة</span>
+        <span>{{ t("orders.item.material") }}</span>
         <select
           :value="item.materialId"
           :aria-invalid="Boolean(errors.material)"
           @change="patch({ materialId: numberOf($event) })"
         >
-          <option value="">اختر المادة</option>
+          <option value="">{{ t("orders.item.chooseMaterial") }}</option>
           <option v-for="option in materials" :key="option.id" :value="option.id">
-            {{ option.name }} ({{ option.thickness_mm }} مم)
+            {{ t("orders.item.materialOption", { name: materialName(option), thickness: option.thickness_mm }) }}
           </option>
         </select>
         <span v-if="errors.material" class="error">{{ errors.material }}</span>
       </label>
 
       <label class="field">
-        <span>الكمية</span>
+        <span>{{ t("orders.item.quantity") }}</span>
         <input
           type="number"
           min="1"
@@ -106,7 +110,7 @@ function chooseParam(name: string, choices: ParamValue[], event: Event): void {
       </label>
 
       <label class="field">
-        <span>سعر الوحدة (اختياري)</span>
+        <span>{{ t("orders.item.unitPrice") }}</span>
         <input
           type="number"
           min="0"
@@ -133,20 +137,20 @@ function chooseParam(name: string, choices: ParamValue[], event: Event): void {
         </label>
 
         <label v-else class="field">
-          <span>{{ fieldLabel(field) }}<template v-if="field.required === false"> (اختياري)</template></span>
+          <span>{{ fieldLabel(field) }}<template v-if="field.required === false"> {{ t("orders.optional") }}</template></span>
           <select
             v-if="field.type === 'choice'"
             :id="`${uid}-${field.name}`"
             :aria-invalid="Boolean(errors[`param:${field.name}`])"
             @change="chooseParam(field.name, field.choices ?? [], $event)"
           >
-            <option value="" :selected="item.params[field.name] === ''">اختر</option>
+            <option value="" :selected="item.params[field.name] === ''">{{ t("orders.item.choose") }}</option>
             <option
               v-for="choice in field.choices"
               :key="String(choice)"
               :selected="item.params[field.name] === choice"
             >
-              {{ choice }}
+              {{ choiceLabel(field, choice) }}
             </option>
           </select>
           <input
@@ -173,7 +177,7 @@ function chooseParam(name: string, choices: ParamValue[], event: Event): void {
       </template>
     </div>
 
-    <button v-if="removable" type="button" class="btn danger remove" @click="emit('remove')">حذف البند</button>
+    <button v-if="removable" type="button" class="btn danger remove" @click="emit('remove')">{{ t("orders.item.remove") }}</button>
   </fieldset>
 </template>
 

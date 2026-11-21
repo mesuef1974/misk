@@ -1,20 +1,19 @@
+<script setup lang="ts">
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n();
+const STEPS = ["catalog", "orders", "production"] as const;
+</script>
+
 <template>
-  <h1>عن المنصة</h1>
-  <p class="lead">مسك تدير عمل ورشة ليزر صغيرة من الطلب إلى القطعة المنفَّذة.</p>
+  <h1>{{ t("about.heading") }}</h1>
+  <p class="lead">{{ t("about.lead") }}</p>
   <ol class="steps">
-    <li>
-      <strong>الكتالوج.</strong> المواد بسماكاتها وكلفة ألواحها، ومعايرة كل مادة من قصاصة اختبار، وقوالب المنتجات
-      بحقولها التي يملؤها الطلب.
-    </li>
-    <li>
-      <strong>الطلبات.</strong> الطلب يُحفظ مسودةً ثم يُؤكَّد، ولا يُؤكَّد قبل معايرة كل مادة فيه.
-    </li>
-    <li>
-      <strong>الإنتاج.</strong> قطع الطلبات المؤكَّدة تُرتَّب على ألواح المادة، ثم يُسجَّل تشغيل كل لوح بمدته
-      ونتيجته وكلفة مادته.
+    <li v-for="step in STEPS" :key="step">
+      <strong>{{ t(`about.steps.${step}.title`) }}</strong> {{ t(`about.steps.${step}.body`) }}
     </li>
   </ol>
-  <p class="muted">كل عملية كتابة تُسجَّل في سجل التدقيق، والدخول لحسابات المشرفين وحدها.</p>
+  <p class="muted">{{ t("about.audit") }}</p>
 </template>
 
 <style scoped>

@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import { defineStore } from "pinia";
 import { errorMessage } from "@/api/client";
+import { currentLocale } from "@/i18n";
 import {
   catalogService,
   type Calibration,
@@ -11,7 +12,7 @@ import {
   type TemplateDraft,
 } from "@/services/catalog";
 
-const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, "ar");
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, currentLocale());
 
 export const useCatalogStore = defineStore("catalog", () => {
   const materials = ref<Material[]>([]);

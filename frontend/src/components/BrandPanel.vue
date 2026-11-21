@@ -1,14 +1,17 @@
 <script setup lang="ts">
 // لوح الواجهة في صفحتَي الزائر والدخول: نصف الصفحة بلون السمة وعليه نقش الهوية، وفي وسطه بطاقة عاجية
 // تحمل قفل «مسك» بإكساء الشريط بنسخة السمة الجارية والشعار اللفظي. زينة لا محتوى: مخفي عن قارئ الشاشة وعن الجوال.
+import { useI18n } from "vue-i18n";
 import BrandLockupRibbon from "@/components/BrandLockupRibbon.vue";
+
+const { t } = useI18n();
 </script>
 
 <template>
   <div class="brand-panel" aria-hidden="true">
     <div class="card">
       <BrandLockupRibbon :height="80" />
-      <p>يُرسم اسمك ثم يُحفر</p>
+      <p>{{ t("site.slogan") }}</p>
     </div>
   </div>
 </template>

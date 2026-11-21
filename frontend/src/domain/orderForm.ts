@@ -1,5 +1,6 @@
 // نموذج «طلب جديد»: حالته، وفحصه، وتحويله إلى ما يرسله الخادم. منطق خالص يُختبر بلا واجهة.
 import { cleanParams, emptyParams, type ParamField, type ParamValues } from "@/domain/params";
+import { i18n } from "@/i18n";
 import type { OrderDraft, OrderItemDraft } from "@/services/orders";
 
 /** حقول الأرقام تحمل "" حين تُترك فارغة، كما يعطيها حقل الإدخال. */
@@ -51,20 +52,22 @@ export function buildDraft(
   clientRef: string,
   templates: TemplateInfo[],
 ): { draft: OrderDraft | null; errors: FormErrors } {
+  // رسائل الفحص بلغة الصفحة لحظة الحفظ.
+  const { t } = i18n.global;
   const errors: FormErrors = { items: {} };
   const customerName = form.customerName.split(/\s+/).filter(Boolean).join(" ");
-  if (!customerName) errors.customerName = "اسم العميل مطلوب";
+  if (!customerName) errors.customerName = t("orders.validation.customerRequired");
 
   const items: OrderItemDraft[] = [];
   for (const item of form.items) {
     const itemErrors: ItemErrors = {};
     const template = templates.find((candidate) => candidate.slug === item.templateSlug);
-    if (!template) itemErrors.template = "اختر القالب";
-    if (item.materialId === "") itemErrors.material = "اختر المادة";
+    if (!template) itemErrors.template = t("orders.validation.chooseTemplate");
+    if (item.materialId === "") itemErrors.material = t("orders.validation.chooseMaterial");
     if (item.quantity === "" || !Number.isInteger(item.quantity) || item.quantity < 1) {
-      itemErrors.quantity = "عدد صحيح، 1 أو أكثر";
+      itemErrors.quantity = t("orders.validation.quantity");
     }
-    if (item.unitPrice !== "" && !(item.unitPrice >= 0)) itemErrors.unitPrice = "السعر لا يكون سالبًا";
+    if (item.unitPrice !== "" && !(item.unitPrice >= 0)) itemErrors.unitPrice = t("orders.validation.negativePrice");
     const cleaned = cleanParams(template?.param_schema ?? [], item.params);
     for (const [name, message] of Object.entries(cleaned.errors)) itemErrors[`param:${name}`] = message;
 

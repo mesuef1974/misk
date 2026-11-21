@@ -84,6 +84,26 @@ def test_spa_shell_is_arabic_rtl_regardless_of_browser_locale(client):
     assert b'<html lang="ar" dir="rtl">' in res.content
 
 
+@pytest.mark.parametrize(
+    ("path", "tag"),
+    [
+        ("/en", b'<html lang="en" dir="ltr">'),
+        ("/en/", b'<html lang="en" dir="ltr">'),
+        ("/en/track/abc", b'<html lang="en" dir="ltr">'),
+        ("/", b'<html lang="ar" dir="rtl">'),
+        ("/track/abc", b'<html lang="ar" dir="rtl">'),
+        ("/engraving", b'<html lang="ar" dir="rtl">'),
+        ("/orders/en", b'<html lang="ar" dir="rtl">'),
+    ],
+)
+def test_spa_shell_language_follows_the_path_only(client, path, tag):
+    res = client.get(path, HTTP_ACCEPT_LANGUAGE="fr")
+    assert res.status_code == 200
+    assert tag in res.content
+    # اللغة لا تتسرّب إلى الطلب التالي في الخيط نفسه.
+    assert b'<html lang="ar" dir="rtl">' in client.get("/").content
+
+
 def test_static_storage_has_no_django_manifest():
     """Manifest storage يعيد تسمية ملف الدخول فتستورد أجزاء Vite نسخة ثانية ويُركَّب التطبيق مرتين (صفحة فارغة)."""
     from importlib import import_module

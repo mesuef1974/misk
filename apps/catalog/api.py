@@ -27,11 +27,14 @@ class MaterialIn(Schema):
     sheet_cost: Decimal = Decimal("0")
     supplier: str = ""
     notes: str = ""
+    # غيابه لا يمسح الاسم الإنجليزي المحفوظ.
+    name_en: str | None = None
 
 
 class MaterialOut(Schema):
     id: int
     name: str
+    name_en: str
     kind: str
     thickness_mm: Decimal
     sheet_width_mm: Decimal
@@ -114,7 +117,8 @@ def list_materials(request: HttpRequest):
 @router.post("/materials", response=MaterialOut)
 def save_material(request: HttpRequest, payload: MaterialIn):
     try:
-        return services.upsert_material(actor=request.user, **payload.dict())
+        fields = {key: value for key, value in payload.dict().items() if value is not None}
+        return services.upsert_material(actor=request.user, **fields)
     except ValidationError as exc:
         raise _invalid(exc) from exc
 

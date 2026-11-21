@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import BrandIcon from "@/components/BrandIcon.vue";
 import OrderStatusBadge from "@/components/OrderStatusBadge.vue";
-import { formatDate, formatMoney, ORDER_STATUSES, STATUS_LABELS, WORKSHOP_STATUSES } from "@/domain/orders";
+import { formatDate, formatMoney, ORDER_STATUSES, statusLabel, WORKSHOP_STATUSES } from "@/domain/orders";
 import { useOrdersStore } from "@/stores/orders";
 
+const { t } = useI18n();
 const store = useOrdersStore();
 const filter = ref("");
 
 // الأعداد والتصفية من الخادم: القائمة صفحات، وما حُمّل منها ليس الجدول كله.
 const filters = computed(() => [
-  { value: "", label: "الكل", count: store.totalAll },
+  { value: "", label: t("orders.list.all"), count: store.totalAll },
   ...ORDER_STATUSES.map((status) => ({
     value: status as string,
-    label: STATUS_LABELS[status],
+    label: statusLabel(status),
     count: store.countByStatus[status] ?? 0,
   })).filter(
     (option) =>
@@ -31,11 +33,11 @@ onMounted(() => store.load());
 
 <template>
   <div class="page-head">
-    <h1>الطلبات</h1>
-    <RouterLink class="btn primary" :to="{ name: 'order-new' }">طلب جديد</RouterLink>
+    <h1>{{ t("orders.list.heading") }}</h1>
+    <RouterLink class="btn primary" :to="{ name: 'order-new' }">{{ t("orders.list.newOrder") }}</RouterLink>
   </div>
 
-  <div class="filters" role="group" aria-label="تصفية بالحالة">
+  <div class="filters" role="group" :aria-label="t('orders.list.filterLabel')">
     <button
       v-for="option in filters"
       :key="option.value"
@@ -51,13 +53,13 @@ onMounted(() => store.load());
 
   <div v-if="store.loadError" class="notice" role="alert">
     {{ store.loadError }}
-    <button type="button" class="btn retry" @click="store.load(filter)">إعادة المحاولة</button>
+    <button type="button" class="btn retry" @click="store.load(filter)">{{ t("orders.retry") }}</button>
   </div>
-  <p v-else-if="store.loading && !store.loaded" class="muted" role="status">يحمّل الطلبات…</p>
+  <p v-else-if="store.loading && !store.loaded" class="muted" role="status">{{ t("orders.list.loading") }}</p>
   <div v-else-if="store.totalAll === 0" class="empty">
-    <div class="inner"><div class="mark" aria-hidden="true"></div><p>لا طلبات بعد. ابدأ باسم تريد أن تراه محفورًا.</p></div>
+    <div class="inner"><div class="mark" aria-hidden="true"></div><p>{{ t("orders.list.empty") }}</p></div>
   </div>
-  <p v-else-if="store.orders.length === 0" class="panel muted">لا طلبات بهذه الحالة.</p>
+  <p v-else-if="store.orders.length === 0" class="panel muted">{{ t("orders.list.emptyFiltered") }}</p>
 
   <ul v-if="!store.loadError && store.orders.length > 0" class="orders" :aria-busy="store.loading">
     <li v-for="order in store.orders" :key="order.id">
@@ -66,18 +68,18 @@ onMounted(() => store.load());
         <BrandIcon name="order" v-else />
         <span class="who">
           <strong>{{ order.customer_name }}</strong>
-          <span class="muted">طلب {{ order.id }} · {{ order.items.length }} بند</span>
+          <span class="muted">{{ t("orders.list.rowMeta", { id: order.id, count: order.items.length }, order.items.length) }}</span>
         </span>
-        <span v-if="order.occasion_date" class="muted">المناسبة: {{ formatDate(order.occasion_date) }}</span>
+        <span v-if="order.occasion_date" class="muted">{{ t("orders.list.occasion", { date: formatDate(order.occasion_date) }) }}</span>
         <OrderStatusBadge :status="order.status" />
         <span class="total">{{ formatMoney(order.total) }}</span>
       </RouterLink>
     </li>
   </ul>
   <div v-if="!store.loadError && store.hasMore" class="more">
-    <span class="muted num">يعرض {{ store.orders.length }} من {{ store.total }}</span>
+    <span class="muted num">{{ t("orders.list.showing", { shown: store.orders.length, total: store.total }) }}</span>
     <button type="button" class="btn" :disabled="store.loading || store.loadingMore" @click="store.loadMore()">
-      {{ store.loadingMore ? "يحمّل…" : "تحميل المزيد" }}
+      {{ store.loadingMore ? t("orders.list.loadingMore") : t("orders.list.loadMore") }}
     </button>
   </div>
 </template>

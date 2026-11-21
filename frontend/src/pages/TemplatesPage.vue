@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { errorMessage } from "@/api/client";
 import BrandIcon from "@/components/BrandIcon.vue";
 import {
   buildTemplateDraft,
   describeField,
   emptyTemplateForm,
-  FIELD_TYPE_LABELS,
   FIELD_TYPES,
+  fieldTypeLabel,
   newSchemaField,
   templateFormFrom,
   templateIcon,
+  templateName,
   type Errors,
   type TemplateForm,
 } from "@/domain/catalog";
@@ -19,6 +21,7 @@ import type { ProductTemplate } from "@/services/catalog";
 import { useCatalogStore } from "@/stores/catalog";
 
 const catalog = useCatalogStore();
+const { t } = useI18n();
 
 /** القالب قبل التعديل؛ null لقالب جديد. `editing` يفتح النموذج. */
 const original = ref<ProductTemplate | null>(null);
@@ -53,7 +56,7 @@ async function submit(): Promise<void> {
   const result = buildTemplateDraft(form, original.value ?? undefined);
   errors.value = result.errors;
   if (!result.draft) {
-    saveError.value = "صحّح الحقول المعلَّمة ثم أعد الحفظ";
+    saveError.value = t("catalog.templates.fixMarked");
     return;
   }
   saving.value = true;
@@ -70,126 +73,139 @@ async function submit(): Promise<void> {
 
 <template>
   <div class="page-head">
-    <h1>القوالب</h1>
-    <button v-if="catalog.loaded && !editing" type="button" class="btn primary" @click="open()">قالب جديد</button>
+    <h1>{{ t("catalog.templates.heading") }}</h1>
+    <button v-if="catalog.loaded && !editing" type="button" class="btn primary" @click="open()">{{ t("catalog.templates.new") }}</button>
   </div>
 
   <form v-if="editing" class="panel editor" novalidate @submit.prevent="submit">
-    <h2>{{ original ? "تعديل القالب" : "قالب جديد" }}</h2>
+    <h2>{{ original ? t("catalog.templates.edit") : t("catalog.templates.new") }}</h2>
     <div class="form-grid">
       <label class="field">
-        <span>المعرّف (slug)</span>
+        <span>{{ t("catalog.templates.slug") }}</span>
         <input v-model="form.slug" type="text" maxlength="64" dir="ltr" :disabled="original !== null" :aria-invalid="Boolean(errors.slug)" />
         <span v-if="errors.slug" class="error">{{ errors.slug }}</span>
       </label>
       <label class="field">
-        <span>الاسم</span>
+        <span>{{ t("catalog.templates.name") }}</span>
         <input v-model="form.name" type="text" maxlength="120" :aria-invalid="Boolean(errors.name)" />
         <span v-if="errors.name" class="error">{{ errors.name }}</span>
       </label>
       <label class="field">
-        <span>مفتاح المولّد</span>
+        <span>{{ t("catalog.templates.nameEn") }}</span>
+        <input v-model="form.nameEn" type="text" maxlength="120" dir="ltr" lang="en" :aria-invalid="Boolean(errors.nameEn)" />
+        <span v-if="errors.nameEn" class="error">{{ errors.nameEn }}</span>
+      </label>
+      <label class="field">
+        <span>{{ t("catalog.templates.generator") }}</span>
         <input v-model="form.generator" type="text" maxlength="64" dir="ltr" :aria-invalid="Boolean(errors.generator)" />
         <span v-if="errors.generator" class="error">{{ errors.generator }}</span>
       </label>
       <label class="field">
-        <span>العرض (مم)</span>
+        <span>{{ t("catalog.templates.width") }}</span>
         <input v-model.number="form.width" type="number" min="1" step="0.1" inputmode="decimal" :aria-invalid="Boolean(errors.width)" />
         <span v-if="errors.width" class="error">{{ errors.width }}</span>
       </label>
       <label class="field">
-        <span>الارتفاع (مم)</span>
+        <span>{{ t("catalog.templates.height") }}</span>
         <input v-model.number="form.height" type="number" min="1" step="0.1" inputmode="decimal" :aria-invalid="Boolean(errors.height)" />
         <span v-if="errors.height" class="error">{{ errors.height }}</span>
       </label>
       <label class="field">
-        <span>السعر الأساسي (ر.ق)</span>
+        <span>{{ t("catalog.templates.basePrice") }}</span>
         <input v-model.number="form.basePrice" type="number" min="0" step="0.01" inputmode="decimal" :aria-invalid="Boolean(errors.basePrice)" />
         <span v-if="errors.basePrice" class="error">{{ errors.basePrice }}</span>
       </label>
     </div>
 
-    <h3>حقول الطلب</h3>
-    <p v-if="form.fields.length === 0" class="hint">لا حقول: القالب يُطلب بلا معاملات.</p>
+    <h3>{{ t("catalog.templates.orderFields") }}</h3>
+    <p v-if="form.fields.length === 0" class="hint">{{ t("catalog.templates.noFields") }}</p>
     <fieldset v-for="(field, index) in form.fields" :key="field.key" class="schema-field">
-      <legend>الحقل {{ index + 1 }}</legend>
+      <legend>{{ t("catalog.templates.fieldNumber", { number: index + 1 }) }}</legend>
       <div class="form-grid">
         <label class="field">
-          <span>الاسم البرمجي</span>
+          <span>{{ t("catalog.templates.fieldName") }}</span>
           <input v-model="field.name" type="text" dir="ltr" :aria-invalid="Boolean(errors[`field:${field.key}`])" />
         </label>
         <label class="field">
-          <span>التسمية الظاهرة (اختياري)</span>
+          <span>{{ t("catalog.templates.fieldLabel") }}</span>
           <input v-model="field.label" type="text" />
         </label>
         <label class="field">
-          <span>النوع</span>
+          <span>{{ t("catalog.templates.fieldLabelEn") }}</span>
+          <input v-model="field.labelEn" type="text" dir="ltr" lang="en" />
+        </label>
+        <label class="field">
+          <span>{{ t("catalog.templates.fieldType") }}</span>
           <select v-model="field.type">
-            <option v-for="type in FIELD_TYPES" :key="type" :value="type">{{ FIELD_TYPE_LABELS[type] }}</option>
+            <option v-for="type in FIELD_TYPES" :key="type" :value="type">{{ fieldTypeLabel(type) }}</option>
           </select>
         </label>
         <label v-if="field.type === 'text'" class="field">
-          <span>أقصى طول (اختياري)</span>
+          <span>{{ t("catalog.templates.maxLength") }}</span>
           <input v-model.number="field.maxLength" type="number" min="1" step="1" inputmode="numeric" />
         </label>
         <template v-if="field.type === 'int'">
           <label class="field">
-            <span>الحد الأدنى (اختياري)</span>
+            <span>{{ t("catalog.templates.min") }}</span>
             <input v-model.number="field.min" type="number" step="1" inputmode="numeric" />
           </label>
           <label class="field">
-            <span>الحد الأقصى (اختياري)</span>
+            <span>{{ t("catalog.templates.max") }}</span>
             <input v-model.number="field.max" type="number" step="1" inputmode="numeric" />
           </label>
         </template>
         <label v-if="field.type === 'choice'" class="field wide">
-          <span>الخيارات (خيار في كل سطر)</span>
+          <span>{{ t("catalog.templates.choices") }}</span>
           <textarea v-model="field.choices" rows="3"></textarea>
+        </label>
+        <label v-if="field.type === 'choice'" class="field wide">
+          <span>{{ t("catalog.templates.choicesEn") }}</span>
+          <textarea v-model="field.choicesEn" rows="3" dir="ltr" lang="en"></textarea>
         </label>
         <label v-if="field.type !== 'bool'" class="check">
           <input v-model="field.required" type="checkbox" />
-          <span>مطلوب</span>
+          <span>{{ t("catalog.templates.required") }}</span>
         </label>
       </div>
       <span v-if="errors[`field:${field.key}`]" class="error" role="alert">{{ errors[`field:${field.key}`] }}</span>
-      <button type="button" class="btn danger remove" @click="form.fields.splice(index, 1)">حذف الحقل</button>
+      <button type="button" class="btn danger remove" @click="form.fields.splice(index, 1)">{{ t("catalog.templates.removeField") }}</button>
     </fieldset>
-    <button type="button" class="btn" @click="addField">إضافة حقل</button>
+    <button type="button" class="btn" @click="addField">{{ t("catalog.templates.addField") }}</button>
 
     <p v-if="original" class="hint">
-      تغيير الحقول لا يعدّل الطلبات المحفوظة؛ حذف حقل أو تضييق حدوده يسري على الطلبات الجديدة فقط.
+      {{ t("catalog.templates.editHint") }}
     </p>
     <div v-if="saveError" class="notice" role="alert">{{ saveError }}</div>
     <div class="form-actions">
-      <button type="submit" class="btn primary" :disabled="saving">{{ saving ? "يحفظ…" : "حفظ القالب" }}</button>
-      <button type="button" class="btn" :disabled="saving" @click="close">إلغاء</button>
+      <button type="submit" class="btn primary" :disabled="saving">{{ saving ? t("catalog.actions.saving") : t("catalog.templates.save") }}</button>
+      <button type="button" class="btn" :disabled="saving" @click="close">{{ t("catalog.actions.cancel") }}</button>
     </div>
   </form>
 
   <div v-if="catalog.loadError" class="notice" role="alert">
     {{ catalog.loadError }}
-    <button type="button" class="btn retry" @click="catalog.load()">إعادة المحاولة</button>
+    <button type="button" class="btn retry" @click="catalog.load()">{{ t("dashboard.retry") }}</button>
   </div>
-  <p v-else-if="!catalog.loaded" class="muted" role="status">يحمّل القوالب…</p>
+  <p v-else-if="!catalog.loaded" class="muted" role="status">{{ t("catalog.templates.loading") }}</p>
   <div v-else-if="catalog.templates.length === 0" class="empty">
-    <div class="inner"><div class="mark" aria-hidden="true"></div><p>لا قوالب بعد. ابدأ بـ«قالب جديد».</p></div>
+    <div class="inner"><div class="mark" aria-hidden="true"></div><p>{{ t("catalog.templates.empty") }}</p></div>
   </div>
 
   <ul v-else class="cards">
     <li v-for="template in catalog.templates" :key="template.id" class="panel template">
       <BrandIcon :name="templateIcon(template.generator)" />
       <div class="what">
-        <strong>{{ template.name }}</strong>
+        <strong>{{ templateName(template) }}</strong>
         <span class="muted">
           <span dir="ltr">{{ template.slug }}</span> ·
-          <span class="num">{{ template.width_mm }} × {{ template.height_mm }} مم</span> ·
+          <span class="num">{{ t("catalog.units.size", { width: template.width_mm, height: template.height_mm }) }}</span> ·
           <span class="num">{{ formatMoney(template.base_price) }}</span>
         </span>
         <span v-if="template.param_schema.length" class="fields">
-          {{ template.param_schema.map(describeField).join("، ") }}
+          {{ template.param_schema.map(describeField).join(t("catalog.listSeparator")) }}
         </span>
       </div>
-      <button type="button" class="btn" @click="open(template)">تعديل</button>
+      <button type="button" class="btn" @click="open(template)">{{ t("catalog.actions.edit") }}</button>
     </li>
   </ul>
 </template>

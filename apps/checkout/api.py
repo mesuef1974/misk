@@ -114,6 +114,7 @@ class CartItemOut(Schema):
     name_en: str
     material_id: int
     material_name: str
+    material_name_en: str
     params: dict[str, Any]
     quantity: int
     unit_price: Decimal

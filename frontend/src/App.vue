@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
+import { useI18n } from "vue-i18n";
+import { useRoute, useRouter } from "vue-router";
 import { errorMessage } from "@/api/client";
 import BrandIcon from "@/components/BrandIcon.vue";
 import BrandLockup from "@/components/BrandLockup.vue";
 import BrandMark from "@/components/BrandMark.vue";
 import LiveNotice from "@/components/LiveNotice.vue";
 import ThemePicker from "@/components/ThemePicker.vue";
+import { localeParam, otherLocale, type Locale } from "@/domain/locale";
 import { useAppStore } from "@/stores/app";
 import { useCatalogStore } from "@/stores/catalog";
 import { useOrdersStore } from "@/stores/orders";
@@ -18,6 +20,23 @@ const store = useAppStore();
 const session = useSessionStore();
 const theme = useThemeStore();
 const router = useRouter();
+const route = useRoute();
+const { t, locale } = useI18n();
+const siteName = computed(() => store.title(locale.value as Locale));
+// عنوان التبويب يتبع اللغة والاسم الآتي من الخادم.
+watchEffect(() => {
+  if (siteName.value) document.title = siteName.value;
+});
+
+// الصفحة نفسها باللغة الأخرى. «غير موجودة» بلا مسار مقابل فلا مبدِّل فيها.
+const alternate = computed(() => {
+  if (!route.meta.localized || !route.name) return null;
+  const target = otherLocale(locale.value as Locale);
+  return {
+    lang: target,
+    to: { name: route.name, params: { ...route.params, locale: localeParam(target) }, query: route.query, hash: route.hash },
+  };
+});
 const leaving = ref(false);
 const logoutError = ref("");
 
@@ -48,7 +67,7 @@ async function logout(): Promise<void> {
     await router.push({ name: "login" });
   } catch (error) {
     // تعذّر الوصول إلى الخادم: الجلسة ما زالت قائمة والزر يبقى ظاهرًا لإعادة المحاولة.
-    logoutError.value = `لم يتم الخروج: ${errorMessage(error)}`;
+    logoutError.value = t("nav.logoutFailed", { reason: errorMessage(error) });
   } finally {
     leaving.value = false;
   }
@@ -59,35 +78,39 @@ async function logout(): Promise<void> {
   <div class="shell">
     <aside class="side">
       <!-- القفل (الرمز وكلمة «مسك») مسارات بلا نص حي: الاسم المقروء على الرابط نفسه. وهو رابط الرئيسية. -->
-      <RouterLink class="brand" to="/" :aria-label="store.siteTitle"><BrandLockup class="sima-mark-intro" :height="36" /></RouterLink>
-      <nav class="main" aria-label="أقسام المنصة">
-        <RouterLink class="nav-item" to="/orders"><BrandIcon name="order" /><span>الطلبات</span></RouterLink>
-        <RouterLink class="nav-item" to="/production"><BrandIcon name="laser-engrave" /><span>الإنتاج</span></RouterLink>
-        <RouterLink class="nav-item" to="/materials"><BrandIcon name="leather" /><span>المواد</span></RouterLink>
-        <RouterLink class="nav-item" to="/templates"><BrandIcon name="name" /><span>القوالب</span></RouterLink>
+      <RouterLink class="brand" :to="{ name: 'home' }" :aria-label="siteName"><BrandLockup class="sima-mark-intro" :height="36" /></RouterLink>
+      <nav class="main" :aria-label="t('nav.sections')">
+        <RouterLink class="nav-item" :to="{ name: 'orders' }"><BrandIcon name="order" /><span>{{ t("nav.orders") }}</span></RouterLink>
+        <RouterLink class="nav-item" :to="{ name: 'production' }"><BrandIcon name="laser-engrave" /><span>{{ t("nav.production") }}</span></RouterLink>
+        <RouterLink class="nav-item" :to="{ name: 'materials' }"><BrandIcon name="leather" /><span>{{ t("nav.materials") }}</span></RouterLink>
+        <RouterLink class="nav-item" :to="{ name: 'templates' }"><BrandIcon name="name" /><span>{{ t("nav.templates") }}</span></RouterLink>
       </nav>
-      <nav class="aux" aria-label="الحساب والإعدادات">
-        <RouterLink class="nav-item" to="/about">عن المنصة</RouterLink>
+      <nav class="aux" :aria-label="t('nav.account')">
+        <RouterLink class="nav-item" :to="{ name: 'about' }">{{ t("nav.about") }}</RouterLink>
+        <!-- اسم اللغة الأخرى بلغتها هي (lang عليه)، ووجهته الصفحة نفسها بتلك اللغة. -->
+        <RouterLink v-if="alternate" class="nav-item" :to="alternate.to" :lang="alternate.lang" :aria-label="t('language.switchLabel')">
+          {{ t("language.switchTo") }}
+        </RouterLink>
         <!-- المفتاحان نفساهما يحكمان لوحة Django: الاختيار محفوظ في المتصفح بما تقرؤه اللوحة. -->
         <ThemePicker />
         <!-- لوحة Django صفحة يخدمها الخادم لا مسار في الواجهة: رابط عادي بتحميل كامل. -->
-        <a v-if="session.user?.admin_url" class="nav-item" :href="session.user.admin_url">لوحة الإدارة</a>
+        <a v-if="session.user?.admin_url" class="nav-item" :href="session.user.admin_url">{{ t("nav.admin") }}</a>
         <template v-if="session.user">
-          <button type="button" class="nav-item" :disabled="leaving" @click="logout">خروج</button>
+          <button type="button" class="nav-item" :disabled="leaving" @click="logout">{{ t("nav.logout") }}</button>
           <LiveNotice class="logout-error" :message="logoutError" />
           <div class="user">
             <span class="avatar" aria-hidden="true"></span>
-            <div class="who"><b>{{ session.user.username }}</b><span class="muted">{{ store.siteTitle }}</span></div>
+            <div class="who"><b>{{ session.user.username }}</b><span class="muted">{{ siteName }}</span></div>
           </div>
         </template>
-        <RouterLink v-else-if="session.checked" class="nav-item" to="/login">دخول</RouterLink>
+        <RouterLink v-else-if="session.checked" class="nav-item" :to="{ name: 'login' }">{{ t("nav.login") }}</RouterLink>
       </nav>
     </aside>
     <main class="wrap">
       <!-- رأس الورقة المطبوعة وتذييلها كما في شاشة الطباعة من الدليل؛ لا يظهران على الشاشة. -->
       <div class="print-only print-head" aria-hidden="true"><BrandMark :size="48" /></div>
       <RouterView />
-      <div class="print-only print-foot" aria-hidden="true"><span>يُرسم اسمك ثم يُحفر</span></div>
+      <div class="print-only print-foot" aria-hidden="true"><span>{{ t("site.slogan") }}</span></div>
     </main>
   </div>
 </template>

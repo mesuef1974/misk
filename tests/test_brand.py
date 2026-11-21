@@ -94,7 +94,7 @@ def test_ten_day_palettes_are_declared_once_and_named_alike():
             rf'\[data-palette="{name}"\]\s*{{\s*--day-color:\s*var\(--palette-{name}\);', tokens
         ), name
     domain = (ROOT / "frontend" / "src" / "domain" / "theme.ts").read_text(encoding="utf-8")
-    assert re.findall(r'{ id: "([\w-]+)", label: "[^"]+" }', domain) == PALETTE_ORDER
+    assert re.findall(r'{ id: "([\w-]+)" }', domain) == PALETTE_ORDER
     init = (ROOT / "apps" / "core" / "static" / "core" / "theme-init.js").read_text(encoding="utf-8")
     listed = re.search(r"var palettes = \[([^\]]+)\];", init)
     assert listed and re.findall(r'"([\w-]+)"', listed.group(1)) == PALETTE_ORDER

@@ -63,6 +63,7 @@ _PARAM_CODES = {
 class StoreMaterialOut(Schema):
     id: int
     name: str
+    name_en: str
     kind: str
     thickness_mm: Decimal
 

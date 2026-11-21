@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { errorMessage } from "@/api/client";
 import OrderItemEditor from "@/components/OrderItemEditor.vue";
@@ -8,6 +9,7 @@ import { buildDraft, estimateTotal, newItem, type FormErrors, type OrderForm } f
 import { useCatalogStore } from "@/stores/catalog";
 import { useOrdersStore } from "@/stores/orders";
 
+const { t } = useI18n();
 const router = useRouter();
 const catalog = useCatalogStore();
 const orders = useOrdersStore();
@@ -41,7 +43,7 @@ async function submit(): Promise<void> {
   const result = buildDraft(form, clientRef, catalog.templates);
   errors.value = result.errors;
   if (!result.draft) {
-    submitError.value = "صحّح الحقول المعلَّمة ثم أعد الحفظ";
+    submitError.value = t("orders.create.fixFields");
     return;
   }
   submitting.value = true;
@@ -58,23 +60,23 @@ async function submit(): Promise<void> {
 
 <template>
   <div class="page-head">
-    <h1>طلب جديد</h1>
-    <RouterLink class="btn" :to="{ name: 'orders' }">رجوع للطلبات</RouterLink>
+    <h1>{{ t("orders.create.heading") }}</h1>
+    <RouterLink class="btn" :to="{ name: 'orders' }">{{ t("orders.back") }}</RouterLink>
   </div>
 
   <div v-if="catalog.loadError" class="notice" role="alert">
     {{ catalog.loadError }}
-    <button type="button" class="btn retry" @click="catalog.load()">إعادة المحاولة</button>
+    <button type="button" class="btn retry" @click="catalog.load()">{{ t("orders.retry") }}</button>
   </div>
-  <p v-else-if="!catalog.loaded" class="muted" role="status">يحمّل القوالب والمواد…</p>
+  <p v-else-if="!catalog.loaded" class="muted" role="status">{{ t("orders.create.loadingCatalog") }}</p>
   <p v-else-if="catalogEmpty" class="panel muted">
-    لا يمكن إنشاء طلب قبل تعريف قالب واحد ومادة واحدة على الأقل في الكتالوج.
+    {{ t("orders.create.catalogEmpty") }}
   </p>
 
   <form v-else novalidate @submit.prevent="submit">
     <section class="panel customer">
       <label class="field">
-        <span>اسم العميل</span>
+        <span>{{ t("orders.create.customerName") }}</span>
         <input
           v-model="form.customerName"
           type="text"
@@ -85,11 +87,11 @@ async function submit(): Promise<void> {
         <span v-if="errors.customerName" class="error">{{ errors.customerName }}</span>
       </label>
       <label class="field">
-        <span>تاريخ المناسبة (اختياري)</span>
+        <span>{{ t("orders.create.occasionDate") }}</span>
         <input v-model="form.occasionDate" type="date" />
       </label>
       <label class="field notes">
-        <span>ملاحظات (اختياري)</span>
+        <span>{{ t("orders.create.notes") }}</span>
         <textarea v-model="form.notes" rows="2"></textarea>
       </label>
     </section>
@@ -108,14 +110,14 @@ async function submit(): Promise<void> {
       @remove="removeItem(index)"
     />
 
-    <button type="button" class="btn" @click="addItem">إضافة بند</button>
+    <button type="button" class="btn" @click="addItem">{{ t("orders.create.addItem") }}</button>
 
     <div v-if="submitError" class="notice" role="alert">{{ submitError }}</div>
 
     <div class="footer">
-      <span class="estimate">المجموع التقديري: <strong>{{ estimate }}</strong></span>
+      <span class="estimate">{{ t("orders.create.estimate") }} <strong>{{ estimate }}</strong></span>
       <button type="submit" class="btn primary" :disabled="submitting">
-        {{ submitting ? "يحفظ…" : "حفظ الطلب مسودةً" }}
+        {{ submitting ? t("orders.create.saving") : t("orders.create.save") }}
       </button>
     </div>
   </form>
