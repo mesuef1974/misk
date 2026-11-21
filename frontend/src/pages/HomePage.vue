@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import BrandIcon from "@/components/BrandIcon.vue";
 import BrandLockupRibbon from "@/components/BrandLockupRibbon.vue";
 import BrandPanel from "@/components/BrandPanel.vue";
 import StatusCard from "@/components/StatusCard.vue";
-import { ORDER_STATUSES, STATUS_LABELS } from "@/domain/orders";
+import { ORDER_STATUSES, statusLabel } from "@/domain/orders";
 import { useAppStore } from "@/stores/app";
 import { useCatalogStore } from "@/stores/catalog";
 import { useOrdersStore } from "@/stores/orders";
 import { useProductionStore } from "@/stores/production";
 import { useSessionStore } from "@/stores/session";
 
+const { t } = useI18n();
+const TRAITS = ["precise", "warm", "elegant"] as const;
 const store = useAppStore();
 const session = useSessionStore();
 const orders = useOrdersStore();
@@ -21,7 +24,7 @@ const catalog = useCatalogStore();
 const OPEN = ["draft", "confirmed", "in_production", "ready"] as const satisfies readonly (typeof ORDER_STATUSES)[number][];
 
 const orderTiles = computed(() =>
-  OPEN.map((status) => ({ status, label: STATUS_LABELS[status], count: orders.countByStatus[status] ?? 0 })),
+  OPEN.map((status) => ({ status, label: statusLabel(status), count: orders.countByStatus[status] ?? 0 })),
 );
 const plannedSheets = computed(() => production.countByStatus.planned ?? 0);
 const loadError = computed(() => orders.loadError || production.loadError || catalog.loadError);
@@ -46,16 +49,16 @@ watch(
     <div class="page-head">
       <!-- الاسم قفلَ الهوية بإكساء الشريط بحبر السمة المختارة لا نصًّا؛ الاسم المقروء في aria-label. -->
       <h1 class="home-logo" :aria-label="store.siteTitle"><BrandLockupRibbon :height="88" /></h1>
-      <RouterLink class="btn primary" :to="{ name: 'order-new' }">طلب جديد</RouterLink>
+      <RouterLink class="btn primary" :to="{ name: 'order-new' }">{{ t("dashboard.newOrder") }}</RouterLink>
     </div>
 
     <div v-if="loadError" class="notice" role="alert">
       {{ loadError }}
-      <button type="button" class="btn retry" @click="loadAll()">إعادة المحاولة</button>
+      <button type="button" class="btn retry" @click="loadAll()">{{ t("dashboard.retry") }}</button>
     </div>
 
     <section aria-labelledby="home-orders">
-      <h2 id="home-orders">الطلبات المفتوحة</h2>
+      <h2 id="home-orders">{{ t("dashboard.openOrders") }}</h2>
       <div class="tiles">
         <RouterLink v-for="tile in orderTiles" :key="tile.status" class="list-row tile" :to="{ name: 'orders' }">
           <BrandIcon name="order" />
@@ -65,19 +68,19 @@ watch(
     </section>
 
     <section aria-labelledby="home-work">
-      <h2 id="home-work">الورشة</h2>
+      <h2 id="home-work">{{ t("dashboard.workshop") }}</h2>
       <div class="tiles">
         <RouterLink class="list-row tile" :to="{ name: 'production' }">
           <BrandIcon name="laser-engrave" />
-          <span class="what"><b class="num">{{ production.loaded ? plannedSheets : "—" }}</b><span class="muted">ألواح تنتظر التشغيل</span></span>
+          <span class="what"><b class="num">{{ production.loaded ? plannedSheets : "—" }}</b><span class="muted">{{ t("dashboard.plannedSheets") }}</span></span>
         </RouterLink>
         <RouterLink class="list-row tile" :to="{ name: 'materials' }">
           <BrandIcon name="leather" />
-          <span class="what"><b class="num">{{ catalog.loaded ? catalog.materials.length : "—" }}</b><span class="muted">مواد</span></span>
+          <span class="what"><b class="num">{{ catalog.loaded ? catalog.materials.length : "—" }}</b><span class="muted">{{ t("dashboard.materials") }}</span></span>
         </RouterLink>
         <RouterLink class="list-row tile" :to="{ name: 'templates' }">
           <BrandIcon name="name" />
-          <span class="what"><b class="num">{{ catalog.loaded ? catalog.templates.length : "—" }}</b><span class="muted">قوالب</span></span>
+          <span class="what"><b class="num">{{ catalog.loaded ? catalog.templates.length : "—" }}</b><span class="muted">{{ t("dashboard.templates") }}</span></span>
         </RouterLink>
       </div>
     </section>
@@ -86,17 +89,18 @@ watch(
   <!-- صفحة الزائر على شاشة landing من الدليل: الشعار اللفظي، العنوان، الزران، بطاقات الشخصية، ولوح الرمز. -->
   <div v-else-if="session.checked" class="landing">
     <div class="pitch">
-      <p class="slogan">يُرسم اسمك ثم يُحفر</p>
-      <h1>اسمك، مرسومًا ثم محفورًا.</h1>
-      <p class="lead">إدارة طلبات ورشة الليزر: الكتالوج، الطلبات، وتخطيط الألواح وتشغيلها.</p>
+      <p class="slogan">{{ t("site.slogan") }}</p>
+      <h1>{{ t("home.heading") }}</h1>
+      <p class="lead">{{ t("home.lead") }}</p>
       <div class="cta">
-        <RouterLink class="btn primary" :to="{ name: 'login' }">دخول المشرف</RouterLink>
-        <RouterLink class="btn" :to="{ name: 'about' }">عن المنصة</RouterLink>
+        <RouterLink class="btn primary" :to="{ name: 'login' }">{{ t("home.staffLogin") }}</RouterLink>
+        <RouterLink class="btn" :to="{ name: 'about' }">{{ t("nav.about") }}</RouterLink>
       </div>
       <div class="traits">
-        <div class="panel"><h2>دقيقة</h2><p>نراجع إملاء كل اسم مع صاحبه قبل الحفر، ونذكر المقاس والخامة والعدد وموعد الاستلام بأرقامها.</p></div>
-        <div class="panel"><h2>دافئة</h2><p>نسأل عن المناسبة وصاحبها قبل أن نقترح، ونترك الخامة الطبيعية تظهر بلونها وملمسها.</p></div>
-        <div class="panel"><h2>أنيقة</h2><p>نختار للاسم خطًّا واحدًا يليق به ونترك حوله فراغًا، ونقول ما يلزم بجملة قصيرة.</p></div>
+        <div v-for="trait in TRAITS" :key="trait" class="panel">
+          <h2>{{ t(`home.traits.${trait}.title`) }}</h2>
+          <p>{{ t(`home.traits.${trait}.body`) }}</p>
+        </div>
       </div>
     </div>
     <BrandPanel />

@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { errorMessage } from "@/api/client";
 import BrandPanel from "@/components/BrandPanel.vue";
-import { safeNext } from "@/domain/navigation";
+import { DEFAULT_AFTER_LOGIN, safeNext } from "@/domain/navigation";
 import { useSessionStore } from "@/stores/session";
 
 const session = useSessionStore();
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 
 const username = ref("");
 const password = ref("");
@@ -21,7 +23,9 @@ async function submit(): Promise<void> {
   busy.value = true;
   try {
     await session.login(username.value.trim(), password.value);
-    await router.replace(safeNext(route.query.next));
+    // بلا وجهة مطلوبة: الرئيسية بلغة صفحة الدخول نفسها.
+    const next = safeNext(route.query.next);
+    await router.replace(next === DEFAULT_AFTER_LOGIN ? { name: "home" } : next);
   } catch (error) {
     failure.value = errorMessage(error);
   } finally {
@@ -36,14 +40,14 @@ async function submit(): Promise<void> {
   <!-- صفحة مقسومة: النموذج في نصف ولوح الهوية بلون السمة في النصف الآخر (يختفي على الجوال). -->
   <div class="login-split">
   <div class="login-side">
-  <h1>تسجيل الدخول</h1>
+  <h1>{{ t("login.heading") }}</h1>
   <form class="panel login" novalidate @submit.prevent="submit">
     <label class="field">
-      <span>اسم المستخدم</span>
+      <span>{{ t("login.username") }}</span>
       <input v-model="username" type="text" name="username" autocomplete="username" maxlength="150" required dir="ltr" />
     </label>
     <label class="field">
-      <span>كلمة المرور</span>
+      <span>{{ t("login.passLabel") }}</span>
       <input
         v-model="password"
         type="password"
@@ -56,7 +60,7 @@ async function submit(): Promise<void> {
     </label>
     <div v-if="failure" class="notice" role="alert">{{ failure }}</div>
     <button type="submit" class="btn primary" :disabled="busy || !username.trim() || !password">
-      {{ busy ? "يتحقق…" : "دخول" }}
+      {{ busy ? t("login.checking") : t("login.submit") }}
     </button>
   </form>
   </div>

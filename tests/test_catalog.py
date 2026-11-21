@@ -176,6 +176,10 @@ def test_catalog_api_roundtrip(client, staff_user):
         {"name": "c", "type": "choice", "choices": ["a", {"b": 1}]},
         {"name": "c", "type": "choice", "choices": ["a", 1.5]},
         {"name": "c", "type": "choice", "choices": ["a", "a"]},
+        {"name": "c", "type": "choice", "choices": ["a", "b"], "choices_en": ["A"]},
+        {"name": "c", "type": "choice", "choices": ["a"], "choices_en": [""]},
+        {"name": "c", "type": "choice", "choices": ["a"], "choices_en": "A"},
+        {"name": "t", "type": "text", "label_en": 5},
     ],
 )
 def test_validate_schema_rejects_bad_bounds_and_choices(field):
@@ -187,6 +191,14 @@ def test_validate_schema_accepts_int_bounds_and_scalar_choices():
     schema = [
         {"name": "n", "type": "int", "min": 1, "max": 9},
         {"name": "c", "type": "choice", "choices": ["a", 1, "1"]},
+        {
+            "name": "e",
+            "type": "choice",
+            "label": "خط",
+            "label_en": "Font",
+            "choices": ["أ", "ب"],
+            "choices_en": ["A", "B"],
+        },
     ]
     assert domain.validate_schema(schema) == schema
 
@@ -222,6 +234,8 @@ def test_seed_catalog_is_idempotent_and_audited():
     assert ProductTemplate.objects.count() == 5
     assert not Calibration.objects.exists()
     assert not Material.objects.exclude(notes="").exists()
+    assert not Material.objects.filter(name_en="").exists()
+    assert not ProductTemplate.objects.filter(name_en="").exists()
     assert AuditLog.objects.filter(action="catalog.template.upsert").count() == 10
 
 
@@ -279,3 +293,16 @@ def test_template_storefront_fields_survive_workshop_edit(client, staff_user):
         "تُعلَّق",
         True,
     )
+
+
+@pytest.mark.django_db
+def test_material_english_name_survives_edit_without_it(client, staff_user):
+    client.force_login(staff_user)
+    base = {"name": "خشب زيزفون", "kind": "wood", "thickness_mm": "3.0"}
+    res = client.post(
+        "/api/catalog/materials", {**base, "name_en": "Basswood"}, content_type="application/json"
+    )
+    assert res.status_code == 200 and res.json()["name_en"] == "Basswood"
+    res = client.post("/api/catalog/materials", {**base, "sheet_cost": "30"}, content_type="application/json")
+    assert res.json()["name_en"] == "Basswood" and Decimal(res.json()["sheet_cost"]) == 30
+    assert Material.objects.count() == 1

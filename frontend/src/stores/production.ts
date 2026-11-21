@@ -2,6 +2,8 @@ import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import { ApiError, errorMessage } from "@/api/client";
 import { appendPage } from "@/api/paging";
+import { i18n } from "@/i18n";
+import arProduction from "@/i18n/locales/ar/production";
 import {
   productionService,
   type PlanJob,
@@ -13,7 +15,8 @@ import {
 
 /** فترات استطلاع مهمة التخطيط: سريعة أولًا ثم كل ثلاث ثوانٍ، ودقيقتان حدًّا (مهلة العامل خمس دقائق). */
 export const PLAN_POLL_MS = [500, 1000, 1000, 2000, 2000, ...Array<number>(38).fill(3000)];
-export const PLAN_TIMEOUT_MESSAGE = "التخطيط يستغرق أطول من المعتاد. حدّث الصفحة بعد قليل لترى الألواح.";
+/** النص العربي لرسالة انتهاء المهلة (للاختبارات)؛ ما يُعرض يأتي من `production.plan.timeout` بلغة الصفحة. */
+export const PLAN_TIMEOUT_MESSAGE = arProduction.plan.timeout;
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -44,7 +47,7 @@ async function settled(job: PlanJob, alive: () => boolean): Promise<PlanOutcome>
   // أُوقف أثناء آخر رد: لا 504 ولا 422 تعيد الصفحة المُزالة إلى التحميل.
   if (!alive()) throw new PlanCancelled();
   if (job.status === "failed") throw new ApiError(422, job.error);
-  if (job.status === "pending") throw new ApiError(504, PLAN_TIMEOUT_MESSAGE);
+  if (job.status === "pending") throw new ApiError(504, i18n.global.t("production.plan.timeout"));
   return { sheets: job.sheets, waiting: job.waiting };
 }
 

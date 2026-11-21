@@ -70,6 +70,7 @@ class TrackItemOut(Schema):
     name: str
     name_en: str
     material_name: str
+    material_name_en: str
     quantity: int
     line_total: Decimal
 

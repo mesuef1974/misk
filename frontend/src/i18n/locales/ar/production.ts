@@ -1,0 +1,82 @@
+// نصوص قسم الإنتاج: الصفحة، ورسم اللوح، ونموذج تسجيل التشغيل، ورسائل التحقق.
+const production = {
+  title: "الإنتاج",
+  sheetStatus: {
+    planned: "مخطَّط",
+    done: "نُفِّذ",
+    scrapped: "تالف",
+  },
+  outcome: {
+    ok: "نجح",
+    failed: "فشل",
+  },
+  duration: {
+    seconds: "{seconds} ث",
+    minutes: "{minutes} د",
+    both: "{minutes} د {seconds} ث",
+  },
+  material: {
+    named: "{name} ({thickness} مم)",
+    unknown: "مادة {id}",
+  },
+  plan: {
+    label: "تخطيط ألواح جديدة لمادة",
+    choose: "اختر المادة",
+    busy: "يخطّط…",
+    submit: "تخطيط الألواح",
+    planned: "خُطِّطت {pieces} قطعة على {sheets} لوح.",
+    alreadyPlanned: "لا جديد للتخطيط: قطع هذه المادة مخطَّطة سلفًا على {waiting} لوح ينتظر القصّ.",
+    nothing: "لا قطع تنتظر التخطيط لهذه المادة. تُخطَّط بنود الطلبات المؤكَّدة وقيد التنفيذ فقط.",
+    timeout: "التخطيط يستغرق أطول من المعتاد. حدّث الصفحة بعد قليل لترى الألواح.",
+  },
+  filter: {
+    label: "تصفية بالحالة",
+    all: "الكل",
+  },
+  list: {
+    retry: "إعادة المحاولة",
+    loading: "يحمّل الألواح…",
+    empty: "لا ألواح بعد. أكِّد طلبًا ثم خطِّط ألواح مادته من الأعلى.",
+    noneInStatus: "لا ألواح بهذه الحالة.",
+    showing: "يعرض {shown} من {total}",
+    loadingMore: "يحمّل…",
+    loadMore: "تحميل المزيد",
+  },
+  sheet: {
+    title: "لوح {id}",
+    usage: "{pieces} قطعة · مستعمل {used}",
+    diagram: "لوح {id}: {pieces} قطعة على {width} × {height} مم",
+    groupTitle: "{template} — {customer}",
+    order: "طلب {id}",
+    runsLabel: "سجل تشغيل اللوح {id}",
+    runs: "سجل التشغيل",
+    materialCost: "كلفة المادة {cost}",
+    recordRun: "تسجيل تشغيل",
+    scrapWarning: "تُرفع قطع اللوح لتُخطَّط على لوح جديد، ولا رجعة.",
+    confirmScrap: "تأكيد الإتلاف",
+    cancelScrap: "تراجع",
+    scrap: "إتلاف اللوح",
+  },
+  run: {
+    title: "تسجيل تشغيل اللوح {id}",
+    minutes: "المدة: دقائق",
+    seconds: "ثوانٍ",
+    outcome: "النتيجة",
+    calibration: "المعايرة المستعملة (اختياري)",
+    noCalibration: "بلا معايرة",
+    calibrationOption: "{operation} · {power}% · {speed} مم/ث · {date}",
+    calibrationsFailed: "تعذّر جلب المعايرات: {reason}",
+    notes: "ملاحظات (اختياري)",
+    hint: "النجاح يغلق اللوح نهائيًّا. الفشل يبقيه مخطَّطًا لإعادة التشغيل.",
+    saving: "يسجّل…",
+    save: "حفظ التشغيل",
+    cancel: "إلغاء",
+    errors: {
+      durationRange: "دقائق صحيحة، وثوانٍ بين 0 و59",
+      durationRequired: "مدة التشغيل مطلوبة",
+      outcome: "اختر النتيجة",
+    },
+  },
+};
+
+export default production;

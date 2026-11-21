@@ -2,10 +2,12 @@
 // منتقي المظهر: السمة (عشر، لكل منها نهارها وليلها) والوضع (تلقائي، نهاري، ليلي). الاختيار يسري فورًا ويُحفظ في المتصفح
 // بالمفتاحين اللذين تقرؤهما لوحة Django. اللوحة popover أصلي: تُغلق بـ Esc وبالنقر خارجها ويعود التركيز إلى الزر.
 // أزرار راديو حقيقية: الأسهم تنتقل بين السمات والقارئ الآلي يعلن الاسم والحالة.
-import { PALETTES, paletteLabel, THEME_LABELS, THEMES } from "@/domain/theme";
+import { useI18n } from "vue-i18n";
+import { PALETTES, THEMES } from "@/domain/theme";
 import { useThemeStore } from "@/stores/theme";
 
 const theme = useThemeStore();
+const { t } = useI18n();
 </script>
 
 <template>
@@ -13,14 +15,14 @@ const theme = useThemeStore();
     type="button"
     class="nav-item theme-switch"
     popovertarget="theme-picker"
-    :aria-label="`المظهر: السمة ${paletteLabel(theme.palette)}، الوضع ${THEME_LABELS[theme.theme]}. اضغط للتغيير`"
+    :aria-label="t('theme.buttonLabel', { palette: t(`theme.palettes.${theme.palette}`), mode: t(`theme.modes.${theme.theme}`) })"
   >
     <span class="tint current" aria-hidden="true"></span>
-    <span>المظهر</span>
+    <span>{{ t("theme.button") }}</span>
   </button>
-  <div id="theme-picker" class="picker" popover role="dialog" aria-label="مظهر المنصة">
+  <div id="theme-picker" class="picker" popover role="dialog" :aria-label="t('theme.dialog')">
     <fieldset class="group">
-      <legend>السمة</legend>
+      <legend>{{ t("theme.palette") }}</legend>
       <div class="swatches">
         <label v-for="p in PALETTES" :key="p.id" class="swatch" :data-palette="p.id">
           <input
@@ -32,12 +34,12 @@ const theme = useThemeStore();
             @change="theme.setPalette(p.id)"
           />
           <span class="tint" aria-hidden="true"></span>
-          <span class="name">{{ p.label }}</span>
+          <span class="name">{{ t(`theme.palettes.${p.id}`) }}</span>
         </label>
       </div>
     </fieldset>
     <fieldset class="group">
-      <legend>الوضع</legend>
+      <legend>{{ t("theme.mode") }}</legend>
       <div class="modes">
         <label v-for="mode in THEMES" :key="mode" class="mode">
           <input
@@ -48,10 +50,10 @@ const theme = useThemeStore();
             :checked="theme.theme === mode"
             @change="theme.setTheme(mode)"
           />
-          <span>{{ THEME_LABELS[mode] }}</span>
+          <span>{{ t(`theme.modes.${mode}`) }}</span>
         </label>
       </div>
-      <p class="hint">لكل سمة نهارها وليلها.</p>
+      <p class="hint">{{ t("theme.hint") }}</p>
     </fieldset>
   </div>
 </template>

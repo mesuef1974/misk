@@ -32,10 +32,12 @@ def validate_schema(schema: Any) -> list[dict[str, Any]]:
             continue
         seen.add(name)
         kind = field.get("type")
-        if kind not in FIELD_TYPES:
+        if not all(isinstance(field.get(label, ""), str) for label in ("label", "label_en")):
+            errors[key] = "label وlabel_en نصّان"
+        elif kind not in FIELD_TYPES:
             errors[key] = f"النوع يجب أن يكون أحد {sorted(FIELD_TYPES)}"
         elif kind == "choice":
-            error = _choices_error(field.get("choices"))
+            error = _choices_error(field.get("choices")) or _choices_en_error(field)
             if error:
                 errors[key] = error
         elif kind == "int":
@@ -119,6 +121,16 @@ def _choices_error(choices: Any) -> str:
     if len({(type(choice), choice) for choice in choices}) != len(choices):
         return "خيارات مكررة"
     return ""
+
+
+def _choices_en_error(field: dict[str, Any]) -> str:
+    """`choices_en` تسميات إنجليزية للعرض تقابل `choices` موضعًا بموضع؛ القيمة المحفوظة تبقى الخيار نفسه."""
+    if "choices_en" not in field:
+        return ""
+    labels = field["choices_en"]
+    if not isinstance(labels, list) or not all(isinstance(label, str) and label for label in labels):
+        return "choices_en قائمة نصوص غير فارغة"
+    return "" if len(labels) == len(field["choices"]) else "choices_en بعدد choices"
 
 
 def _is_int(value: Any, *, minimum: int | None = None) -> bool:

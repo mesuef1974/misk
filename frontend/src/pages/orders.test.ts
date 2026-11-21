@@ -22,6 +22,7 @@ const materials: Material[] = [
   {
     id: 7,
     name: "جلد نباتي",
+    name_en: "",
     kind: "leather",
     thickness_mm: "2.0",
     sheet_width_mm: "600.0",
@@ -36,6 +37,7 @@ const templates: ProductTemplate[] = [
     id: 1,
     slug: "card",
     name: "بطاقة مقوّسة",
+    name_en: "Arched card",
     generator: "card",
     width_mm: "90.0",
     height_mm: "55.0",

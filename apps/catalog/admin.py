@@ -12,7 +12,7 @@ class CalibrationInline(admin.TabularInline):
 class MaterialAdmin(admin.ModelAdmin):
     list_display = ("name", "kind", "thickness_mm", "sheet_cost", "is_active")
     list_filter = ("kind", "is_active")
-    search_fields = ("name", "supplier")
+    search_fields = ("name", "name_en", "supplier")
     inlines = [CalibrationInline]
 
 

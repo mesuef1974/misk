@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { errorMessage } from "@/api/client";
 import {
   buildCalibrationDraft,
@@ -14,6 +15,7 @@ import { useCatalogStore } from "@/stores/catalog";
 
 const props = defineProps<{ materialId: number }>();
 const catalog = useCatalogStore();
+const { t } = useI18n();
 
 const loading = ref(true);
 const loadError = ref("");
@@ -57,28 +59,28 @@ async function submit(): Promise<void> {
 
 <template>
   <section class="calibrations">
-    <h3>المعايرات</h3>
+    <h3>{{ t("catalog.calibrations.heading") }}</h3>
 
     <div v-if="loadError" class="notice" role="alert">
       {{ loadError }}
-      <button type="button" class="btn retry" @click="load()">إعادة المحاولة</button>
+      <button type="button" class="btn retry" @click="load()">{{ t("dashboard.retry") }}</button>
     </div>
-    <p v-else-if="loading" class="muted" role="status">يحمّل المعايرات…</p>
+    <p v-else-if="loading" class="muted" role="status">{{ t("catalog.calibrations.loading") }}</p>
     <p v-else-if="rows.length === 0" class="muted">
-      لا معايرة بعد. الطلب على هذه المادة لا يُؤكَّد قبل تسجيل نتيجة قصاصة اختبار.
+      {{ t("catalog.calibrations.empty") }}
     </p>
     <div v-else class="scroll">
       <table>
         <thead>
           <tr>
-            <th>التاريخ</th>
-            <th>العملية</th>
-            <th>القدرة</th>
-            <th>السرعة</th>
-            <th>المرات</th>
-            <th>خطوط/سم</th>
-            <th>أصغر خط</th>
-            <th>ملاحظات</th>
+            <th>{{ t("catalog.calibrations.columns.date") }}</th>
+            <th>{{ t("catalog.calibrations.columns.operation") }}</th>
+            <th>{{ t("catalog.calibrations.columns.power") }}</th>
+            <th>{{ t("catalog.calibrations.columns.speed") }}</th>
+            <th>{{ t("catalog.calibrations.columns.passes") }}</th>
+            <th>{{ t("catalog.calibrations.columns.linesPerCm") }}</th>
+            <th>{{ t("catalog.calibrations.columns.minLine") }}</th>
+            <th>{{ t("catalog.calibrations.columns.notes") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -86,10 +88,10 @@ async function submit(): Promise<void> {
             <td>{{ formatDate(row.measured_on) }}</td>
             <td>{{ operationLabel(row.operation) }}</td>
             <td class="num">{{ row.power_pct }}%</td>
-            <td class="num">{{ row.speed_mm_s }} مم/ث</td>
+            <td class="num">{{ t("catalog.units.mmPerSecond", { value: row.speed_mm_s }) }}</td>
             <td class="num">{{ row.passes }}</td>
             <td class="num">{{ row.lines_per_cm ?? "—" }}</td>
-            <td class="num">{{ row.min_line_mm }} مم</td>
+            <td class="num">{{ t("catalog.units.mm", { value: row.min_line_mm }) }}</td>
             <td class="note">{{ row.notes }}</td>
           </tr>
         </tbody>
@@ -97,12 +99,12 @@ async function submit(): Promise<void> {
     </div>
 
     <form novalidate @submit.prevent="submit">
-      <h4>تسجيل معايرة</h4>
+      <h4>{{ t("catalog.calibrations.record") }}</h4>
       <div class="form-grid">
         <label class="field">
-          <span>العملية</span>
+          <span>{{ t("catalog.calibrations.operation") }}</span>
           <select v-model="form.operation" :aria-invalid="Boolean(errors.operation)">
-            <option value="">اختر العملية</option>
+            <option value="">{{ t("catalog.calibrations.chooseOperation") }}</option>
             <option v-for="operation in OPERATIONS" :key="operation" :value="operation">
               {{ operationLabel(operation) }}
             </option>
@@ -110,43 +112,43 @@ async function submit(): Promise<void> {
           <span v-if="errors.operation" class="error">{{ errors.operation }}</span>
         </label>
         <label class="field">
-          <span>القدرة (%)</span>
+          <span>{{ t("catalog.calibrations.power") }}</span>
           <input v-model.number="form.power" type="number" min="1" max="100" step="1" inputmode="numeric" :aria-invalid="Boolean(errors.power)" />
           <span v-if="errors.power" class="error">{{ errors.power }}</span>
         </label>
         <label class="field">
-          <span>السرعة (مم/ث)</span>
+          <span>{{ t("catalog.calibrations.speed") }}</span>
           <input v-model.number="form.speed" type="number" min="0.1" step="0.1" inputmode="decimal" :aria-invalid="Boolean(errors.speed)" />
           <span v-if="errors.speed" class="error">{{ errors.speed }}</span>
         </label>
         <label class="field">
-          <span>عدد المرات</span>
+          <span>{{ t("catalog.calibrations.passes") }}</span>
           <input v-model.number="form.passes" type="number" min="1" step="1" inputmode="numeric" :aria-invalid="Boolean(errors.passes)" />
           <span v-if="errors.passes" class="error">{{ errors.passes }}</span>
         </label>
         <label class="field">
-          <span>خطوط/سم (اختياري)</span>
+          <span>{{ t("catalog.calibrations.linesPerCm") }}</span>
           <input v-model.number="form.linesPerCm" type="number" min="1" step="1" inputmode="numeric" :aria-invalid="Boolean(errors.linesPerCm)" />
           <span v-if="errors.linesPerCm" class="error">{{ errors.linesPerCm }}</span>
         </label>
         <label class="field">
-          <span>أصغر خط مقروء (مم)</span>
+          <span>{{ t("catalog.calibrations.minLine") }}</span>
           <input v-model.number="form.minLine" type="number" min="0.01" step="0.01" inputmode="decimal" :aria-invalid="Boolean(errors.minLine)" />
           <span v-if="errors.minLine" class="error">{{ errors.minLine }}</span>
         </label>
         <label class="field">
-          <span>تاريخ القياس</span>
+          <span>{{ t("catalog.calibrations.measuredOn") }}</span>
           <input v-model="form.measuredOn" type="date" :aria-invalid="Boolean(errors.measuredOn)" />
           <span v-if="errors.measuredOn" class="error">{{ errors.measuredOn }}</span>
         </label>
         <label class="field wide">
-          <span>ملاحظات (اختياري)</span>
+          <span>{{ t("catalog.calibrations.notes") }}</span>
           <textarea v-model="form.notes" rows="2"></textarea>
         </label>
       </div>
       <div v-if="saveError" class="notice" role="alert">{{ saveError }}</div>
       <div class="form-actions">
-        <button type="submit" class="btn primary" :disabled="saving">{{ saving ? "يحفظ…" : "حفظ المعايرة" }}</button>
+        <button type="submit" class="btn primary" :disabled="saving">{{ saving ? t("catalog.actions.saving") : t("catalog.calibrations.save") }}</button>
       </div>
     </form>
   </section>

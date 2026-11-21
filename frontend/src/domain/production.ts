@@ -1,18 +1,24 @@
 // الإنتاج: تسميات الحالات، وحسابات اللوح، ونموذج تسجيل التشغيل. منطق خالص يُختبر بلا واجهة.
+import { i18n } from "@/i18n";
 import type { RunDraft, Sheet } from "@/services/production";
 
 export const SHEET_STATUSES = ["planned", "done", "scrapped"] as const;
-export const SHEET_STATUS_LABELS: Record<string, string> = {
-  planned: "مخطَّط",
-  done: "نُفِّذ",
-  scrapped: "تالف",
-};
+export type SheetStatus = (typeof SHEET_STATUSES)[number];
 
 export const OUTCOMES = ["ok", "failed"] as const;
-export const OUTCOME_LABELS: Record<string, string> = { ok: "نجح", failed: "فشل" };
+export type Outcome = (typeof OUTCOMES)[number];
 
+// التسميات تُقرأ وقت العرض لا عند تحميل الوحدة: تتبع لغة الصفحة. قيمة لا تعرفها الواجهة تُعرض كما وردت.
 export function sheetStatusLabel(status: string): string {
-  return SHEET_STATUS_LABELS[status] ?? status;
+  return (SHEET_STATUSES as readonly string[]).includes(status)
+    ? i18n.global.t(`production.sheetStatus.${status as SheetStatus}`)
+    : status;
+}
+
+export function outcomeLabel(outcome: string): string {
+  return (OUTCOMES as readonly string[]).includes(outcome)
+    ? i18n.global.t(`production.outcome.${outcome as Outcome}`)
+    : outcome;
 }
 
 /** نسبة مساحة القطع من مساحة اللوح، بين 0 و1. */
@@ -29,8 +35,9 @@ export function usedFraction(sheet: Sheet): number {
 export function formatDuration(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const rest = seconds % 60;
-  if (minutes === 0) return `${rest} ث`;
-  return rest === 0 ? `${minutes} د` : `${minutes} د ${rest} ث`;
+  if (minutes === 0) return i18n.global.t("production.duration.seconds", { seconds: rest });
+  if (rest === 0) return i18n.global.t("production.duration.minutes", { minutes });
+  return i18n.global.t("production.duration.both", { minutes, seconds: rest });
 }
 
 /** قطع اللوح مجموعةً بحسب بند الطلب، بترتيب أول ظهور. `number` رقم المجموعة المرسوم على القطعة. */
@@ -79,9 +86,9 @@ export function buildRunDraft(form: RunForm): { draft: RunDraft | null; errors: 
   const minutes = form.minutes === "" ? 0 : form.minutes;
   const seconds = form.seconds === "" ? 0 : form.seconds;
   const whole = (value: number, max: number) => Number.isInteger(value) && value >= 0 && value <= max;
-  if (!whole(minutes, 6000) || !whole(seconds, 59)) errors.duration = "دقائق صحيحة، وثوانٍ بين 0 و59";
-  else if (minutes * 60 + seconds < 1) errors.duration = "مدة التشغيل مطلوبة";
-  if (!(OUTCOMES as readonly string[]).includes(form.outcome)) errors.outcome = "اختر النتيجة";
+  if (!whole(minutes, 6000) || !whole(seconds, 59)) errors.duration = i18n.global.t("production.run.errors.durationRange");
+  else if (minutes * 60 + seconds < 1) errors.duration = i18n.global.t("production.run.errors.durationRequired");
+  if (!(OUTCOMES as readonly string[]).includes(form.outcome)) errors.outcome = i18n.global.t("production.run.errors.outcome");
   if (Object.keys(errors).length > 0) return { draft: null, errors };
   return {
     draft: {

@@ -5,6 +5,8 @@ import type { ParamField } from "@/domain/params";
 export interface Material {
   id: number;
   name: string;
+  /** الاسم في الصفحات الإنجليزية؛ فارغ يعني عرض العربي. */
+  name_en: string;
   kind: string;
   thickness_mm: string;
   sheet_width_mm: string;
@@ -17,6 +19,7 @@ export interface Material {
 /** الحفظ upsert على (الاسم، السماكة): إرسال الزوج نفسه يحدّث المادة ولا يكرّرها. */
 export interface MaterialDraft {
   name: string;
+  name_en: string;
   kind: string;
   thickness_mm: string;
   sheet_cost: string;
@@ -52,6 +55,8 @@ export interface ProductTemplate {
   id: number;
   slug: string;
   name: string;
+  /** الاسم في الصفحات الإنجليزية؛ فارغ يعني عرض العربي. */
+  name_en: string;
   generator: string;
   width_mm: string;
   height_mm: string;
@@ -64,6 +69,7 @@ export interface ProductTemplate {
 export interface TemplateDraft {
   slug: string;
   name: string;
+  name_en: string;
   generator: string;
   width_mm: string;
   height_mm: string;

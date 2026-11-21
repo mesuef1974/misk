@@ -1,12 +1,15 @@
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
+
 defineProps<{ ok: boolean | null }>();
+const { t } = useI18n();
 </script>
 
 <template>
   <div class="card" :class="{ ok: ok === true, bad: ok === false }" role="status">
-    <strong v-if="ok === null">يتحقق من الخادم…</strong>
-    <strong v-else-if="ok">الخادم يعمل</strong>
-    <strong v-else>الخادم لا يستجيب</strong>
+    <strong v-if="ok === null">{{ t("status.checking") }}</strong>
+    <strong v-else-if="ok">{{ t("status.up") }}</strong>
+    <strong v-else>{{ t("status.down") }}</strong>
   </div>
 </template>
 

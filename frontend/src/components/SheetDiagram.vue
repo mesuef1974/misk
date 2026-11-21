@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { groupPlacements } from "@/domain/production";
 import type { Sheet } from "@/services/production";
 
 const props = defineProps<{ sheet: Sheet }>();
+const { t } = useI18n();
 
 const width = computed(() => Number(props.sheet.width_mm));
 const height = computed(() => Number(props.sheet.height_mm));
@@ -34,7 +36,7 @@ const pieces = computed(() => {
     dir="ltr"
     :viewBox="`0 0 ${width} ${height}`"
     role="img"
-    :aria-label="`لوح ${sheet.id}: ${pieces.length} قطعة على ${sheet.width_mm} × ${sheet.height_mm} مم`"
+    :aria-label="t('production.sheet.diagram', { id: sheet.id, pieces: pieces.length, width: sheet.width_mm, height: sheet.height_mm })"
   >
     <rect class="board" x="0" y="0" :width="width" :height="height" />
     <g v-for="piece in pieces" :key="piece.key">

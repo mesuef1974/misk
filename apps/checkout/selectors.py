@@ -37,6 +37,7 @@ def cart_view(order: Order | None, *, now: datetime) -> dict[str, Any]:
             "name_en": item.template.name_en,
             "material_id": item.material_id,
             "material_name": item.material.name,
+            "material_name_en": item.material.name_en,
             "params": item.params,
             "quantity": item.quantity,
             "unit_price": item.unit_price,

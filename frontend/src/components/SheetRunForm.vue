@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { errorMessage } from "@/api/client";
 import LiveNotice from "@/components/LiveNotice.vue";
 import { operationLabel } from "@/domain/catalog";
 import { formatDate } from "@/domain/orders";
-import { buildRunDraft, emptyRunForm, OUTCOME_LABELS, OUTCOMES, type RunForm } from "@/domain/production";
+import { buildRunDraft, emptyRunForm, outcomeLabel, OUTCOMES, type RunForm } from "@/domain/production";
 import type { Run, Sheet } from "@/services/production";
 import { useCatalogStore } from "@/stores/catalog";
 import { useProductionStore } from "@/stores/production";
@@ -14,6 +15,7 @@ const emit = defineEmits<{ recorded: [run: Run]; cancel: [] }>();
 
 const catalog = useCatalogStore();
 const production = useProductionStore();
+const { t } = useI18n();
 
 // مفتاح واحد لعمر النموذج: إعادة الإرسال بعد انقطاع تعيد السجل نفسه ولا تسجّل تشغيلًا ثانيًا.
 const requestId = crypto.randomUUID();
@@ -56,44 +58,44 @@ async function submit(): Promise<void> {
 
 <template>
   <form class="run" novalidate @submit.prevent="submit">
-    <h3>تسجيل تشغيل اللوح {{ sheet.id }}</h3>
+    <h3>{{ t("production.run.title", { id: sheet.id }) }}</h3>
     <div class="form-grid">
       <label class="field">
-        <span>المدة: دقائق</span>
+        <span>{{ t("production.run.minutes") }}</span>
         <input ref="firstField" v-model.number="form.minutes" type="number" min="0" step="1" inputmode="numeric" :aria-invalid="Boolean(errors.duration)" />
       </label>
       <label class="field">
-        <span>ثوانٍ</span>
+        <span>{{ t("production.run.seconds") }}</span>
         <input v-model.number="form.seconds" type="number" min="0" max="59" step="1" inputmode="numeric" :aria-invalid="Boolean(errors.duration)" />
         <span v-if="errors.duration" class="error">{{ errors.duration }}</span>
       </label>
       <label class="field">
-        <span>النتيجة</span>
+        <span>{{ t("production.run.outcome") }}</span>
         <select v-model="form.outcome" :aria-invalid="Boolean(errors.outcome)">
-          <option v-for="outcome in OUTCOMES" :key="outcome" :value="outcome">{{ OUTCOME_LABELS[outcome] }}</option>
+          <option v-for="outcome in OUTCOMES" :key="outcome" :value="outcome">{{ outcomeLabel(outcome) }}</option>
         </select>
         <span v-if="errors.outcome" class="error">{{ errors.outcome }}</span>
       </label>
       <label class="field">
-        <span>المعايرة المستعملة (اختياري)</span>
+        <span>{{ t("production.run.calibration") }}</span>
         <select v-model="form.calibrationId">
-          <option value="">بلا معايرة</option>
+          <option value="">{{ t("production.run.noCalibration") }}</option>
           <option v-for="row in calibrations" :key="row.id" :value="row.id">
-            {{ operationLabel(row.operation) }} · {{ row.power_pct }}% · {{ row.speed_mm_s }} مم/ث · {{ formatDate(row.measured_on) }}
+            {{ t("production.run.calibrationOption", { operation: operationLabel(row.operation), power: row.power_pct, speed: row.speed_mm_s, date: formatDate(row.measured_on) }) }}
           </option>
         </select>
-        <span v-if="calibrationsError" class="error">تعذّر جلب المعايرات: {{ calibrationsError }}</span>
+        <span v-if="calibrationsError" class="error">{{ t("production.run.calibrationsFailed", { reason: calibrationsError }) }}</span>
       </label>
       <label class="field wide">
-        <span>ملاحظات (اختياري)</span>
+        <span>{{ t("production.run.notes") }}</span>
         <textarea v-model="form.notes" rows="2"></textarea>
       </label>
     </div>
-    <p class="hint">النجاح يغلق اللوح نهائيًّا. الفشل يبقيه مخطَّطًا لإعادة التشغيل.</p>
+    <p class="hint">{{ t("production.run.hint") }}</p>
     <LiveNotice :message="saveError" />
     <div class="form-actions">
-      <button type="submit" class="btn primary" :disabled="saving">{{ saving ? "يسجّل…" : "حفظ التشغيل" }}</button>
-      <button type="button" class="btn" :disabled="saving" @click="emit('cancel')">إلغاء</button>
+      <button type="submit" class="btn primary" :disabled="saving">{{ saving ? t("production.run.saving") : t("production.run.save") }}</button>
+      <button type="button" class="btn" :disabled="saving" @click="emit('cancel')">{{ t("production.run.cancel") }}</button>
     </div>
   </form>
 </template>

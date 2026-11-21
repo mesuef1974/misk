@@ -19,6 +19,8 @@ class Material(TimeStampedModel):
         OTHER = "other", "أخرى"
 
     name = models.CharField(max_length=120)
+    # الاسم المعروض في الصفحات الإنجليزية؛ فارغ يعني عرض العربي. ليس من مفتاح المادة.
+    name_en = models.CharField(max_length=120, blank=True)
     kind = models.CharField(max_length=16, choices=Kind.choices)
     thickness_mm = models.DecimalField(
         max_digits=5, decimal_places=2, validators=[MinValueValidator(Decimal("0.1"))]

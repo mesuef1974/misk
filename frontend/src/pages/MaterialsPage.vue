@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { errorMessage } from "@/api/client";
 import BrandIcon from "@/components/BrandIcon.vue";
 import MaterialCalibrations from "@/components/MaterialCalibrations.vue";
@@ -9,6 +10,7 @@ import {
   KIND_ICONS,
   kindLabel,
   MATERIAL_KINDS,
+  materialName,
   materialFormFrom,
   type Errors,
   type MaterialForm,
@@ -18,6 +20,7 @@ import type { Material } from "@/services/catalog";
 import { useCatalogStore } from "@/stores/catalog";
 
 const catalog = useCatalogStore();
+const { t } = useI18n();
 
 /** null: النموذج مغلق. "new": مادة جديدة. رقم: تعديل المادة بهذا المعرّف. */
 const editing = ref<number | "new" | null>(null);
@@ -59,20 +62,25 @@ async function submit(): Promise<void> {
 
 <template>
   <div class="page-head">
-    <h1>المواد</h1>
-    <button v-if="catalog.loaded && editing === null" type="button" class="btn primary" @click="open()">مادة جديدة</button>
+    <h1>{{ t("catalog.materials.heading") }}</h1>
+    <button v-if="catalog.loaded && editing === null" type="button" class="btn primary" @click="open()">{{ t("catalog.materials.new") }}</button>
   </div>
 
   <form v-if="editing !== null" class="panel editor" novalidate @submit.prevent="submit">
-    <h2>{{ editing === "new" ? "مادة جديدة" : "تعديل المادة" }}</h2>
+    <h2>{{ editing === "new" ? t("catalog.materials.new") : t("catalog.materials.edit") }}</h2>
     <div class="form-grid">
       <label class="field">
-        <span>الاسم</span>
+        <span>{{ t("catalog.materials.name") }}</span>
         <input v-model="form.name" type="text" maxlength="120" :disabled="editing !== 'new'" :aria-invalid="Boolean(errors.name)" />
         <span v-if="errors.name" class="error">{{ errors.name }}</span>
       </label>
       <label class="field">
-        <span>السماكة (مم)</span>
+        <span>{{ t("catalog.materials.nameEn") }}</span>
+        <input v-model="form.nameEn" type="text" maxlength="120" dir="ltr" lang="en" :aria-invalid="Boolean(errors.nameEn)" />
+        <span v-if="errors.nameEn" class="error">{{ errors.nameEn }}</span>
+      </label>
+      <label class="field">
+        <span>{{ t("catalog.materials.thickness") }}</span>
         <input
           v-model.number="form.thickness"
           type="number"
@@ -85,43 +93,43 @@ async function submit(): Promise<void> {
         <span v-if="errors.thickness" class="error">{{ errors.thickness }}</span>
       </label>
       <label class="field">
-        <span>النوع</span>
+        <span>{{ t("catalog.materials.kind") }}</span>
         <select v-model="form.kind" :aria-invalid="Boolean(errors.kind)">
-          <option value="">اختر النوع</option>
+          <option value="">{{ t("catalog.materials.chooseKind") }}</option>
           <option v-for="kind in MATERIAL_KINDS" :key="kind" :value="kind">{{ kindLabel(kind) }}</option>
         </select>
         <span v-if="errors.kind" class="error">{{ errors.kind }}</span>
       </label>
       <label class="field">
-        <span>كلفة اللوح (ر.ق)</span>
+        <span>{{ t("catalog.materials.sheetCost") }}</span>
         <input v-model.number="form.sheetCost" type="number" min="0" step="0.01" inputmode="decimal" :aria-invalid="Boolean(errors.sheetCost)" />
         <span v-if="errors.sheetCost" class="error">{{ errors.sheetCost }}</span>
       </label>
       <label class="field">
-        <span>المورّد (اختياري)</span>
+        <span>{{ t("catalog.materials.supplier") }}</span>
         <input v-model="form.supplier" type="text" maxlength="160" :aria-invalid="Boolean(errors.supplier)" />
         <span v-if="errors.supplier" class="error">{{ errors.supplier }}</span>
       </label>
       <label class="field wide">
-        <span>ملاحظات (اختياري)</span>
+        <span>{{ t("catalog.materials.notes") }}</span>
         <textarea v-model="form.notes" rows="2"></textarea>
       </label>
     </div>
-    <p v-if="editing !== 'new'" class="hint">الاسم والسماكة مفتاح المادة ولا يتغيران؛ لسماكة أخرى أضف مادة جديدة.</p>
+    <p v-if="editing !== 'new'" class="hint">{{ t("catalog.materials.keyHint") }}</p>
     <div v-if="saveError" class="notice" role="alert">{{ saveError }}</div>
     <div class="form-actions">
-      <button type="submit" class="btn primary" :disabled="saving">{{ saving ? "يحفظ…" : "حفظ المادة" }}</button>
-      <button type="button" class="btn" :disabled="saving" @click="close">إلغاء</button>
+      <button type="submit" class="btn primary" :disabled="saving">{{ saving ? t("catalog.actions.saving") : t("catalog.materials.save") }}</button>
+      <button type="button" class="btn" :disabled="saving" @click="close">{{ t("catalog.actions.cancel") }}</button>
     </div>
   </form>
 
   <div v-if="catalog.loadError" class="notice" role="alert">
     {{ catalog.loadError }}
-    <button type="button" class="btn retry" @click="catalog.load()">إعادة المحاولة</button>
+    <button type="button" class="btn retry" @click="catalog.load()">{{ t("dashboard.retry") }}</button>
   </div>
-  <p v-else-if="!catalog.loaded" class="muted" role="status">يحمّل المواد…</p>
+  <p v-else-if="!catalog.loaded" class="muted" role="status">{{ t("catalog.materials.loading") }}</p>
   <div v-else-if="catalog.materials.length === 0" class="empty">
-    <div class="inner"><div class="mark" aria-hidden="true"></div><p>لا مواد بعد. ابدأ بـ«مادة جديدة».</p></div>
+    <div class="inner"><div class="mark" aria-hidden="true"></div><p>{{ t("catalog.materials.empty") }}</p></div>
   </div>
 
   <ul v-else class="cards">
@@ -129,24 +137,24 @@ async function submit(): Promise<void> {
       <div class="row">
         <BrandIcon v-if="KIND_ICONS[material.kind]" :name="KIND_ICONS[material.kind]" />
         <div class="what">
-          <strong>{{ material.name }} <span class="num">({{ material.thickness_mm }} مم)</span></strong>
+          <strong>{{ materialName(material) }} <span class="num">{{ t("catalog.materials.thicknessValue", { value: material.thickness_mm }) }}</span></strong>
           <span class="muted">
-            {{ kindLabel(material.kind) }} · لوح
-            <span class="num">{{ material.sheet_width_mm }} × {{ material.sheet_height_mm }} مم</span> ·
+            {{ kindLabel(material.kind) }} · {{ t("catalog.materials.sheet") }}
+            <span class="num">{{ t("catalog.units.size", { width: material.sheet_width_mm, height: material.sheet_height_mm }) }}</span> ·
             <span class="num">{{ formatMoney(material.sheet_cost) }}</span>
             <template v-if="material.supplier"> · {{ material.supplier }}</template>
           </span>
           <span v-if="material.notes" class="notes">{{ material.notes }}</span>
         </div>
         <div class="buttons">
-          <button type="button" class="btn" @click="open(material)">تعديل</button>
+          <button type="button" class="btn" @click="open(material)">{{ t("catalog.actions.edit") }}</button>
           <button
             type="button"
             class="btn"
             :aria-expanded="opened === material.id"
             @click="opened = opened === material.id ? null : material.id"
           >
-            {{ opened === material.id ? "إخفاء المعايرات" : "المعايرات" }}
+            {{ opened === material.id ? t("catalog.materials.hideCalibrations") : t("catalog.materials.showCalibrations") }}
           </button>
         </div>
       </div>

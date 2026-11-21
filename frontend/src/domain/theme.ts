@@ -6,7 +6,6 @@
 export type Theme = "auto" | "light" | "dark";
 
 export const THEME_KEY = "theme";
-export const THEME_LABELS: Record<Theme, string> = { auto: "تلقائي", light: "نهاري", dark: "ليلي" };
 export const THEMES: Theme[] = ["auto", "light", "dark"];
 
 export function parseTheme(value: unknown): Theme {
@@ -42,17 +41,18 @@ export function applyTheme(theme: Theme): void {
 
 // السمات العشر بترتيب جدول الهوية؛ ألوانها في static/brand/tokens.css (--palette-<id>) لا هنا.
 // الأسماء نفسها في tokens.css وapps/core/static/core/theme-init.js (tests/test_brand.py يطابقها).
+// أسماؤها المعروضة في ملفات الترجمة (`theme.palettes`).
 export const PALETTES = [
-  { id: "navy", label: "كحلي" },
-  { id: "royal-blue", label: "أزرق ملكي" },
-  { id: "teal", label: "فيروزي" },
-  { id: "emerald", label: "زمردي" },
-  { id: "olive", label: "زيتوني" },
-  { id: "purple", label: "بنفسجي" },
-  { id: "rose", label: "وردي" },
-  { id: "chocolate", label: "شوكولاتي" },
-  { id: "black", label: "أسود" },
-  { id: "oud", label: "عودي" },
+  { id: "navy" },
+  { id: "royal-blue" },
+  { id: "teal" },
+  { id: "emerald" },
+  { id: "olive" },
+  { id: "purple" },
+  { id: "rose" },
+  { id: "chocolate" },
+  { id: "black" },
+  { id: "oud" },
 ] as const;
 
 export type Palette = (typeof PALETTES)[number]["id"];
@@ -62,10 +62,6 @@ export const DEFAULT_PALETTE: Palette = "oud";
 
 export function parsePalette(value: unknown): Palette {
   return PALETTES.find((p) => p.id === value)?.id ?? DEFAULT_PALETTE;
-}
-
-export function paletteLabel(palette: Palette): string {
-  return PALETTES.find((p) => p.id === palette)?.label ?? "";
 }
 
 export function readStoredPalette(): Palette {
