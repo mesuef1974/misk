@@ -17,8 +17,14 @@ from apps.core.models import TimeStampedModel
 
 
 class Customer(TimeStampedModel):
+    class Language(models.TextChoices):
+        AR = "ar", "العربية"
+        EN = "en", "English"
+
     name = models.CharField(max_length=120)
     notes = models.TextField(blank=True)
+    # لغة الواجهة عند الدفع؛ بها تُكتب إشعارات الطلب.
+    language = models.CharField("اللغة", max_length=2, choices=Language.choices, default=Language.AR)
 
     class Meta:
         verbose_name = "عميل"

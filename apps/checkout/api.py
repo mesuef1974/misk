@@ -255,6 +255,7 @@ def checkout(request: HttpRequest, payload: CheckoutIn):
         notes=payload.notes,
         source=payload.source,
         delivery_zone_id=payload.delivery_zone_id,
+        lang=payload.lang,
     )
     try:
         payment = services.start_checkout(cart_ref=_cart_ref(request), form=form)
