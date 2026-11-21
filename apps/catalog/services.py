@@ -62,6 +62,8 @@ def upsert_template(
     *, slug: str, param_schema: list[dict[str, Any]], actor=None, **fields: Any
 ) -> ProductTemplate:
     domain.validate_schema(param_schema)
+    if "material_kinds" in fields:
+        domain.validate_material_kinds(fields["material_kinds"], set(Material.Kind.values))
     template, _ = ProductTemplate.objects.update_or_create(
         slug=slug, defaults={"param_schema": param_schema, **fields}
     )
