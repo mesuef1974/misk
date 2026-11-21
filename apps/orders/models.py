@@ -94,6 +94,8 @@ class OrderItem(TimeStampedModel):
         max_digits=8, decimal_places=2, validators=[MinValueValidator(Decimal("0"))]
     )
     svg_sha256 = models.CharField(max_length=64, blank=True)
+    # أسباب المراجعة اليدوية من المصمِّم (نص ديني، لفظ الجلالة في اسم). غير فارغ = الطلب يمر بطابور المراجعة.
+    review_reasons = models.JSONField(default=list, blank=True)
 
     class Meta:
         verbose_name = "بند طلب"

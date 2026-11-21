@@ -15,8 +15,9 @@ from apps.production.models import Placement, RunLog, Sheet
 from . import domain
 from .models import CapacityConfig, Closure, DailyCapacity, OperatingWindow
 
-# ما دُفع أو أُكِّد ولم يكتمل قصّه يحجز من السعة.
+# ما دُفع أو أُكِّد ولم يكتمل قصّه يحجز من السعة، وكذلك ما فُتحت له جلسة دفع: مهلته تحرّره إن لم يُدفع.
 LOAD_STATUSES = (
+    Order.Status.AWAITING_PAYMENT,
     Order.Status.PAID,
     Order.Status.UNDER_REVIEW,
     Order.Status.CONFIRMED,

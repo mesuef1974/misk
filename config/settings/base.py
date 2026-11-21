@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "apps.production",
     "apps.designs",
     "apps.capacity",
+    "apps.checkout",
 ]
 
 MIDDLEWARE = [
@@ -246,6 +247,13 @@ CELERY_RESULT_EXPIRES = 60 * 60
 # تخطيط الألواح في عامل Celery بدل الطلب نفسه (قاعدة 300ms). يشترط عاملًا وRedis مشتركًا بين الويب والعامل،
 # فهو معطَّل افتراضًا: بلاهما تبقى المهمة في طابور لا يقرؤه أحد ويتعطّل التخطيط كله.
 PLANNING_ASYNC = env_bool("PLANNING_ASYNC", False)
+
+# الدفع خلف واجهة مزوّد (apps/checkout/providers.py). فارغ = الدفع معطَّل ومسار فتحه يجيب 503.
+# «test» مزوّد الاختبار حتى تُختار البوابة، ويشترط سرّ التوقيع: بلاه لا يُقبل إشعار فيبقى معطَّلًا.
+PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", "")
+PAYMENT_WEBHOOK_SECRET = env("PAYMENT_WEBHOOK_SECRET", "")
+# مهلة الطلب غير المدفوع بالدقائق؛ بعدها يُلغى وتتحرر سعته.
+CHECKOUT_TTL_MIN = int(env("CHECKOUT_TTL_MIN", "30"))
 
 SITE_TITLE = "مسك"
 

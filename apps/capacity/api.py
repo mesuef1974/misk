@@ -31,25 +31,16 @@ class EarliestOut(Schema):
     ready_on: date | None  # null: لا يتسع الأفق
 
 
-def _ensure_summary(today: date) -> None:
-    """أول استعمال يبني الملخص في الطلب نفسه؛ ملخص أمس يُجدَّد في الخلفية ويُجاب من القائم."""
-    state = selectors.summary_state(today)
-    if state == "missing":
-        services.refresh_summary()
-    elif state == "stale":
-        services.request_refresh()
-
-
 def _earliest(minutes: int) -> dict:
     now = timezone.localtime()
-    _ensure_summary(now.date())
+    services.ensure_summary(now.date())
     return {"minutes": minutes, "ready_on": selectors.earliest_ready(minutes, now=now)}
 
 
 @router.get("/days", response=list[DayOut])
 def list_days(request: HttpRequest, days: int = Query(30, ge=1, le=MAX_DAYS)):
     today = timezone.localdate()
-    _ensure_summary(today)
+    services.ensure_summary(today)
     return selectors.summary(today, days)
 
 

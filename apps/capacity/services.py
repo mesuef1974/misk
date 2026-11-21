@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from django.conf import settings
 from django.db import transaction
@@ -50,3 +50,12 @@ def request_refresh() -> None:
             refresh_summary()
 
     transaction.on_commit(run)
+
+
+def ensure_summary(today: date) -> None:
+    """أول استعمال يبني الملخص في الطلب نفسه؛ ملخص أمس يُجدَّد في الخلفية ويُجاب من القائم."""
+    state = selectors.summary_state(today)
+    if state == "missing":
+        refresh_summary()
+    elif state == "stale":
+        request_refresh()
