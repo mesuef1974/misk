@@ -23,6 +23,7 @@ from .models import Customer, Order, OrderItem
 Status = Order.Status
 
 Channel = Order.Channel
+CURRENCY = "QAR"
 
 TRANSITIONS: dict[str, set[str]] = {
     Status.DRAFT: {Status.CONFIRMED, Status.AWAITING_PAYMENT, Status.CANCELLED},

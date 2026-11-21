@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
 from django.db.models import Count, Q, QuerySet
@@ -43,8 +44,18 @@ def _utc_offset_h(day: date) -> float:
     return offset.total_seconds() / 3600 if offset else 0.0
 
 
-def day_capacities(start: date, days: int, *, now: datetime | None = None) -> list[tuple[date, int]]:
-    """دقائق الماكينة لكل يوم من `start`. `now` (محلي) يقصّ ما مضى من نافذة يومه."""
+@dataclass(frozen=True)
+class OperatingDay:
+    """يوم حضور: نافذته وتوقفات صلاته بالدقائق من منتصف الليل المحلي."""
+
+    day: date
+    opens: float
+    closes: float
+    breaks: tuple[tuple[float, float], ...]
+
+
+def operating_days(start: date, days: int) -> list[OperatingDay]:
+    """أيام الحضور من `start`. يوم بلا نافذة أو داخل إغلاق لا يظهر."""
     cfg = config()
     windows = {window.weekday: window for window in OperatingWindow.objects.all()}
     end = start + timedelta(days=days - 1)
@@ -54,11 +65,7 @@ def day_capacities(start: date, days: int, *, now: datetime | None = None) -> li
         day = start + timedelta(days=offset)
         window = windows.get(day.weekday())
         if window is None or any(c.start_date <= day <= c.end_date for c in closures):
-            out.append((day, 0))
             continue
-        opens = _minutes(window.opens)
-        if now is not None and now.date() == day:
-            opens = max(opens, _minutes(now.time()))
         prayers = domain.prayer_minutes(
             day,
             latitude=float(cfg.latitude),
@@ -71,8 +78,26 @@ def day_capacities(start: date, days: int, *, now: datetime | None = None) -> li
             break_min=cfg.prayer_break_min,
             friday_break_min=cfg.friday_prayer_break_min,
         )
-        open_min = domain.open_minutes(opens, _minutes(window.closes), breaks)
-        out.append((day, domain.machine_minutes(open_min, cfg.machine_ratio_pct)))
+        out.append(OperatingDay(day, _minutes(window.opens), _minutes(window.closes), tuple(breaks)))
+    return out
+
+
+def day_capacities(start: date, days: int, *, now: datetime | None = None) -> list[tuple[date, int]]:
+    """دقائق الماكينة لكل يوم من `start`. `now` (محلي) يقصّ ما مضى من نافذة يومه."""
+    ratio = config().machine_ratio_pct
+    open_days = {row.day: row for row in operating_days(start, days)}
+    out = []
+    for offset in range(days):
+        day = start + timedelta(days=offset)
+        row = open_days.get(day)
+        if row is None:
+            out.append((day, 0))
+            continue
+        opens = row.opens
+        if now is not None and now.date() == day:
+            opens = max(opens, _minutes(now.time()))
+        open_min = domain.open_minutes(opens, row.closes, row.breaks)
+        out.append((day, domain.machine_minutes(open_min, ratio)))
     return out
 
 
