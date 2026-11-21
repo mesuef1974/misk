@@ -780,8 +780,8 @@ def test_media_bucket_falls_back_to_aws_names(monkeypatch):
         assert storage["OPTIONS"]["bucket_name"] == "bucket-from-railway"
         assert storage["OPTIONS"]["endpoint_url"] == "https://storage.example.test"
         assert storage["OPTIONS"]["region_name"] == "auto"
-        assert storage["OPTIONS"]["access_key"] == "aws-id"
-        assert storage["OPTIONS"]["secret_key"] == "aws-secret"
+        assert storage["OPTIONS"]["access_key"] == aws["AWS_ACCESS_KEY_ID"]
+        assert storage["OPTIONS"]["secret_key"] == aws["AWS_SECRET_ACCESS_KEY"]
 
         monkeypatch.setenv("MEDIA_S3_BUCKET", "misk-media")  # الاسم الأساسي يسبق البديل
         assert importlib.reload(base).STORAGES["default"]["OPTIONS"]["bucket_name"] == "misk-media"
