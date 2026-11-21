@@ -10,6 +10,7 @@
 - `misk-lockup.svg` الرمز والكلمة معًا (الرمز على اليمين في RTL).
 - `favicon.svg`، `favicon.ico` (16/32/48)، `favicon-32.png`، `apple-touch-icon.png`، `icon-192.png`، `icon-512.png`، `maskable-512.png`، `site.webmanifest`.
 - `lockup-ribbon/misk-lockup-ribbon-<سمة>.png` القفل بإكساء الشريط (ساتان بحبر السمة وذهبي على الثنيات)، عشر سمات، 4800×1712 شفافة، ومعها لوحة المعاينة `misk-lockup-ribbon-sheet.png`. اعتمدها المالك 2026-11-20. نسخ الويب بعرض 1600 في `frontend/src/static/brand/logo/`. هي صورة عرض وترويج، والصيغ المسطّحة أعلاه هي الأصل: قاعدة «لا ظل، لا تدرج» أدناه تخصّ تلك الصيغ.
+- القفل الإنجليزي «Misk DESIGN» (العقدة يسار الكلمة، من حزمة المالك 2026-11-21): نسخ الويب العشر `frontend/src/static/brand/logo/misk-lockup-ribbon-en-<سمة>.png` بالمقاس والهامش نفسيهما (1600×571)، مشتقة من أصل الحزمة العودي بحبر كل سمة من القفل العربي، والنسخة الأحادية في `BrandLockupLatin.vue`. تظهر في مسارات `/en` وحدها.
 - `tokens.css` متغيرات الألوان، `BrandMark.vue` مكوّن Vue 3 للرمز، و`BrandLockup.vue` للقفل (إن وُجد قفل).
 - أين تجدها: كلها في حزمة سِمة (`package/` من الإصدار). في مشروع استلم بأمر التسليم: ملفات SVG وهذا الملف و`tokens.css` بجواره في `brand/misk/`، والأيقونات و`site.webmanifest` في `frontend/public/`، والمكوّنان في `frontend/src/components/`.
 
