@@ -4,6 +4,7 @@
 export default {
   nav: {
     products: "المنتجات",
+    designs: "تصاميم جاهزة",
     cart: "السلة",
     cartCount: "السلة، فيها {count}",
     store: "المتجر",
@@ -35,6 +36,25 @@ export default {
     size: "{width} × {height} مم",
     design: "صمِّمه باسمك",
     religious: "يقبل النص الديني",
+  },
+  designs: {
+    heading: "تصاميم جاهزة",
+    lead: "قطع نقصّها ونجمّعها لك كما تراها في الصورة.",
+    empty: "لا تصاميم معروضة الآن.",
+    from: "من {price}",
+    view: "التفاصيل",
+  },
+  design: {
+    loading: "يحمّل التصميم…",
+    back: "كل التصاميم",
+    size: "المقاس بعد التجميع",
+    sizeValue: "{width} × {height} مم",
+    sizeValueDeep: "{width} × {height} × {depth} مم",
+    options: "النسخ والخامات",
+    variant: "نسخة {code}",
+    material: "{name}، {thickness} مم",
+    soon: "الطلب قريبًا",
+    soonNote: "نعرض التصاميم الآن، وطلبها من المتجر يُفتح قريبًا.",
   },
   product: {
     loading: "يحمّل المنتج…",

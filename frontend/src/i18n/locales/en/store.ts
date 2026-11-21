@@ -3,6 +3,7 @@ import type { Messages } from "@/i18n";
 const store: Messages["store"] = {
   nav: {
     products: "Products",
+    designs: "Ready designs",
     cart: "Cart",
     cartCount: "Cart, {count} inside",
     store: "Store",
@@ -34,6 +35,25 @@ const store: Messages["store"] = {
     size: "{width} × {height} mm",
     design: "Design it with your name",
     religious: "Accepts religious text",
+  },
+  designs: {
+    heading: "Ready designs",
+    lead: "Pieces we cut and assemble for you, just as pictured.",
+    empty: "No designs on show right now.",
+    from: "From {price}",
+    view: "Details",
+  },
+  design: {
+    loading: "Loading design…",
+    back: "All designs",
+    size: "Assembled size",
+    sizeValue: "{width} × {height} mm",
+    sizeValueDeep: "{width} × {height} × {depth} mm",
+    options: "Versions and materials",
+    variant: "Version {code}",
+    material: "{name}, {thickness} mm",
+    soon: "Ordering opens soon",
+    soonNote: "The designs are on show now, and ordering them from the store opens soon.",
   },
   product: {
     loading: "Loading the product…",

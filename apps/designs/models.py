@@ -10,6 +10,8 @@ from django.db import models
 from apps.catalog.models import Material, ProductTemplate
 from apps.core.models import TimeStampedModel
 
+from .validators import validate_showcase_image
+
 
 class DesignSource(TimeStampedModel):
     """البائع. مفتاح ألوانه يحوّل لون الخط إلى عملية ومادة: {"#e30613": {"operation": "cut", "material": "wood"}}."""
@@ -63,6 +65,11 @@ class Design(TimeStampedModel):
     )
     name_original = models.CharField(max_length=200)
     name_ar = models.CharField(max_length=200, blank=True)
+    # ما يراه العميل في المتجر. `slug` يولَّد عند النشر من الاسم الإنجليزي؛ null قبله.
+    name_en = models.CharField(max_length=200, blank=True)
+    slug = models.SlugField(max_length=80, null=True, blank=True, unique=True)
+    description = models.TextField(blank=True)
+    description_en = models.TextField(blank=True)
     category = models.CharField(max_length=80, blank=True)
     occasion = models.CharField(max_length=80, blank=True)
     tags = models.JSONField(default=list, blank=True)
@@ -76,6 +83,12 @@ class Design(TimeStampedModel):
         ProductTemplate, on_delete=models.SET_NULL, null=True, blank=True, related_name="designs"
     )
     notes = models.TextField(blank=True)
+    # أجرة تجميع القطعة بعد القص، تدخل سعر كل نسخة (docs/ready-designs-plan.md).
+    assembly_fee = models.DecimalField(
+        max_digits=8, decimal_places=2, default=Decimal("0"), validators=[MinValueValidator(Decimal("0"))]
+    )
+    # النشر في المتجر غير الاعتماد: المعتمد لا يظهر حتى يُنشر (`services.list_design`).
+    is_listed = models.BooleanField(default=False, db_index=True)
 
     class Meta:
         verbose_name = "تصميم"
@@ -99,6 +112,10 @@ class DesignVariant(TimeStampedModel):
     analysis = models.JSONField(default=dict, blank=True)
     analysis_error = models.TextField(blank=True)
     analyzed_at = models.DateTimeField(null=True, blank=True)
+    # سعر يدوي يغلب المعادلة على كل مادة.
+    manual_price = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(Decimal("0.01"))]
+    )
 
     class Meta:
         verbose_name = "نسخة تصميم"
@@ -156,6 +173,8 @@ class VariantEstimate(TimeStampedModel):
     material_area_mm2 = models.DecimalField(max_digits=12, decimal_places=1, default=Decimal("0"))
     material_cost = models.DecimalField(max_digits=9, decimal_places=2, default=Decimal("0"))
     calibration_ids = models.JSONField(default=list)
+    # سعر البيع من `pricing.price`. فارغ: التقدير ناقص أو لا إعداد تسعير، فلا تُعرض النسخة على هذه المادة.
+    price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
 
     class Meta:
         verbose_name = "تقدير نسخة"
@@ -167,3 +186,47 @@ class VariantEstimate(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.variant} / {self.material}"
+
+
+class DesignImage(TimeStampedModel):
+    """صورة عرض يرفعها المالك للمنتج بعد قصّه. وحدها تُخدَم للزائر؛ ملفات التصميم لا تخرج من الإدارة."""
+
+    design = models.ForeignKey(Design, on_delete=models.CASCADE, related_name="images")
+    file = models.FileField(upload_to="designs/showcase/", validators=[validate_showcase_image])
+    alt_ar = models.CharField(max_length=200, blank=True)
+    alt_en = models.CharField(max_length=200, blank=True)
+    sort = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "صورة عرض"
+        verbose_name_plural = "صور العرض"
+        ordering = ["sort", "id"]
+
+    def __str__(self) -> str:
+        return f"صورة {self.design}"
+
+
+class DesignPricing(TimeStampedModel):
+    """إعداد التسعير، صف واحد (المفتاح 1). بلاه لا يُحسب سعر ولا يُنشر تصميم."""
+
+    minute_rate = models.DecimalField(
+        "أجرة دقيقة الماكينة", max_digits=6, decimal_places=2, validators=[MinValueValidator(Decimal("0"))]
+    )
+    margin_pct = models.DecimalField(
+        "الهامش ٪", max_digits=5, decimal_places=1, validators=[MinValueValidator(Decimal("0"))]
+    )
+    round_to = models.DecimalField(
+        "التقريب إلى أعلى لأقرب",
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("5"),
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+
+    class Meta:
+        verbose_name = "إعداد تسعير التصاميم"
+        verbose_name_plural = "إعداد تسعير التصاميم"
+        constraints = [models.CheckConstraint(condition=models.Q(id=1), name="design_pricing_single_row")]
+
+    def __str__(self) -> str:
+        return f"{self.minute_rate} ر.ق/د، هامش {self.margin_pct}٪"

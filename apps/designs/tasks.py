@@ -20,3 +20,11 @@ def analyze_variant_async(variant_id: int, actor_id: int | None = None) -> str:
     actor = get_user_model().objects.filter(pk=actor_id).first() if actor_id else None
     services.analyze_variant(variant, actor=actor)
     return "error" if variant.analysis_error else "ok"
+
+
+@shared_task(
+    name="designs.reprice_all", autoretry_for=(OperationalError,), max_retries=3, default_retry_delay=10
+)
+def reprice_all_async() -> int:
+    """بعد تغيير إعداد التسعير أو أجرة تجميع أو سعر لوح. idempotent: الناتج من المدخلات القائمة وحدها."""
+    return services.reprice_all()
