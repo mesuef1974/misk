@@ -48,6 +48,8 @@ const production: typeof ar = {
     usage: "{pieces} pieces · {used} used",
     diagram: "Sheet {id}: {pieces} pieces on {width} × {height} mm",
     groupTitle: "{template} — {customer}",
+    cutFile: "Cut file",
+    cutFilePart: "Cut file {part}",
     order: "Order {id}",
     runsLabel: "Run log for sheet {id}",
     runs: "Run log",

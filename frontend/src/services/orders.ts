@@ -6,6 +6,9 @@ import type { ParamValues } from "@/domain/params";
 export interface OrderItem {
   id: number;
   template_slug: string;
+  /** اسم القالب من الخادم: به يُسمّى بند التصميم الجاهز، وقالبه ليس في قائمة القوالب. */
+  name: string;
+  variant_code: string;
   material_id: number;
   params: ParamValues;
   quantity: number;

@@ -69,6 +69,7 @@ class StepOut(Schema):
 class TrackItemOut(Schema):
     name: str
     name_en: str
+    variant_code: str
     material_name: str
     material_name_en: str
     quantity: int

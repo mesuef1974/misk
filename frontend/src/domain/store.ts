@@ -2,12 +2,18 @@
 import { ApiError } from "@/api/client";
 import type { Locale } from "@/domain/locale";
 import type { ParamField, ParamValue, ParamValues } from "@/domain/params";
-import { currentLocale } from "@/i18n";
+import { currentLocale, i18n } from "@/i18n";
 import type { FieldLimit } from "@/services/store";
 
 /** الاسم بلغة الصفحة: الإنجليزي في الصفحة الإنجليزية إن أُدخل، وإلا العربي. */
 export function localized(arabic: string, english: string, locale: Locale = currentLocale()): string {
   return (locale === "en" && english) || arabic;
+}
+
+/** اسم البند كما يُعرض في السلة والتتبّع: نسخة التصميم الجاهز المسمّاة تُذكر برمزها. */
+export function lineName(item: { name: string; name_en: string; variant_code?: string }): string {
+  const name = localized(item.name, item.name_en);
+  return item.variant_code ? i18n.global.t("store.design.named", { name, code: item.variant_code }) : name;
 }
 
 /** خطأ مسارات المتجر: رمز ثابت، ورسالة بلغة الطلب، وأخطاء الحقول، وقوالب مقترحة، وأقرب جاهزية. */

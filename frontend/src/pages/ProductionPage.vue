@@ -6,6 +6,7 @@ import LiveNotice from "@/components/LiveNotice.vue";
 import SheetDiagram from "@/components/SheetDiagram.vue";
 import SheetRunForm from "@/components/SheetRunForm.vue";
 import { materialName, templateName } from "@/domain/catalog";
+import { lineName } from "@/domain/store";
 import { formatInstant, formatMoney } from "@/domain/orders";
 import {
   formatDuration,
@@ -53,9 +54,11 @@ const filters = computed(() => [
   })),
 ]);
 
-function templateLabel(slug: string): string {
-  const template = catalog.templateBySlug(slug);
-  return template ? templateName(template) : slug;
+/** قالب التصميم الجاهز ليس في قائمة القوالب: اسمه ورمز نسخته من الخادم. */
+function templateLabel(group: { templateSlug: string; name: string; variantCode: string }): string {
+  const template = catalog.templateBySlug(group.templateSlug);
+  if (template) return templateName(template);
+  return lineName({ name: group.name || group.templateSlug, name_en: "", variant_code: group.variantCode });
 }
 
 /** الألواح جاهزة للعرض: اسم المادة، نسبة الاستعمال، مفتاح الرسم بأسماء الطلبات، وسجل التشغيل. */
@@ -69,7 +72,7 @@ const cards = computed(() =>
       groups: groupPlacements(sheet).map((group) => ({
         ...group,
         title: t("production.sheet.groupTitle", {
-          template: templateLabel(group.templateSlug),
+          template: templateLabel(group),
           customer: group.customerName,
         }),
       })),
@@ -273,6 +276,9 @@ async function scrap(sheetId: number): Promise<void> {
           <span class="tag num">{{ group.number }}</span>
           <span>{{ group.title }}</span>
           <span class="muted num">× {{ group.copies }}</span>
+          <a v-for="(url, index) in group.cutFiles" :key="url" :href="url" target="_blank" rel="noopener">
+            {{ group.cutFiles.length > 1 ? t("production.sheet.cutFilePart", { part: index + 1 }) : t("production.sheet.cutFile") }}
+          </a>
           <RouterLink :to="{ name: 'order-detail', params: { id: group.orderId } }">
             {{ t("production.sheet.order", { id: group.orderId }) }}
           </RouterLink>

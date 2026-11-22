@@ -170,6 +170,7 @@ def test_tracking_shows_progress_without_personal_data(client, case, material, p
         {
             "name": "كفر جلد",
             "name_en": "Leather case",
+            "variant_code": "",
             "material_name": "جلد نباتي",
             "material_name_en": "",
             "quantity": 1,

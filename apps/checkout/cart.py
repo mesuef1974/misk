@@ -16,6 +16,8 @@ from apps.catalog import designer
 from apps.catalog import domain as catalog_domain
 from apps.catalog import selectors as catalog_selectors
 from apps.catalog.models import Material
+from apps.designs import selectors as design_selectors
+from apps.designs import services as design_services
 from apps.orders import services as orders_services
 from apps.orders.models import Customer, Order, OrderItem
 
@@ -95,18 +97,7 @@ def add_item(
     if not hmac.compare_digest(rendered.sha256, sha256):
         raise CartError("preview_mismatch")
 
-    order = _locked(cart_ref)
-    if order is not None and order.status == Status.AWAITING_PAYMENT:
-        raise CartError("cart_locked")
-    if order is None or order.status != Status.DRAFT:
-        # لا سلة، أو سلة سابقة دُفعت أو أُلغيت: سلة جديدة.
-        order = Order.objects.create(
-            customer=Customer.objects.create(name=GUEST_NAME),
-            channel=Order.Channel.STOREFRONT,
-            tracking_token=orders_services.new_tracking_token(),
-        )
-    elif order.items.count() >= MAX_LINES:
-        raise CartError("cart_full")
+    order = _open(cart_ref)
     OrderItem.objects.create(
         order=order,
         template=template,
@@ -117,6 +108,60 @@ def add_item(
         svg_sha256=rendered.sha256,
         review_reasons=rendered.review_reasons,
     )
+    return order
+
+
+@transaction.atomic
+def add_design_item(
+    *,
+    cart_ref: uuid.UUID | None,
+    design_slug: str,
+    variant_code: str,
+    material_id: int,
+    quantity: int,
+    acknowledged: bool,
+) -> Order:
+    """يضيف تصميمًا جاهزًا: لا معاينة ولا بصمة معاينة، والإقرار إقرار بالمقاس والخامة.
+
+    السعر من تقدير النسخة على المادة لحظة الإضافة، والبصمة بصمة ملف النسخة. يُرفض ما ليس منشورًا أو بلا سعر.
+    """
+    if not acknowledged:
+        raise CartError("size_not_acknowledged")
+    _check_quantity(quantity)
+    found = design_selectors.offer(design_slug, variant_code, material_id)
+    if found is None:
+        raise CartError("not_for_sale")
+    design, variant, offer = found
+    price = offer.price
+    if price is None:  # العرض لا يحمل إلا ما له سعر؛ الفحص للنوع
+        raise CartError("not_for_sale")
+    template = design_services.ensure_sale_template(design)
+    order = _open(cart_ref)
+    OrderItem.objects.create(
+        order=order,
+        template=template,
+        material=offer.material,
+        design_variant=variant,
+        quantity=quantity,
+        unit_price=price,
+        svg_sha256=variant.svg_sha256,
+    )
+    return order
+
+
+def _open(cart_ref: uuid.UUID | None) -> Order:
+    """السلة التي يُضاف إليها، مقفولةً: القائمة إن كانت مسودة، وإلا سلة جديدة (لا سلة، أو دُفعت أو أُلغيت)."""
+    order = _locked(cart_ref)
+    if order is not None and order.status == Status.AWAITING_PAYMENT:
+        raise CartError("cart_locked")
+    if order is None or order.status != Status.DRAFT:
+        return Order.objects.create(
+            customer=Customer.objects.create(name=GUEST_NAME),
+            channel=Order.Channel.STOREFRONT,
+            tracking_token=orders_services.new_tracking_token(),
+        )
+    if order.items.count() >= MAX_LINES:
+        raise CartError("cart_full")
     return order
 
 

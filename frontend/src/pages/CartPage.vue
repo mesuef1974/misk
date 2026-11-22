@@ -4,7 +4,7 @@ import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import LiveNotice from "@/components/LiveNotice.vue";
 import { formatMoney } from "@/domain/orders";
-import { formatDay, localized, safePaymentUrl, storeError } from "@/domain/store";
+import { formatDay, lineName, localized, safePaymentUrl, storeError } from "@/domain/store";
 import type { CartItem } from "@/services/store";
 import { useCartStore } from "@/stores/cart";
 
@@ -20,7 +20,7 @@ const paymentUrl = computed(() => safePaymentUrl(view.value?.payment_url));
 
 onMounted(() => cart.load());
 
-const itemName = (item: CartItem) => localized(item.name, item.name_en);
+const itemName = (item: CartItem) => lineName(item);
 
 /** قيم الحقول كما كتبها العميل، بترتيب المخطط المحفوظ؛ المنطقي والفارغ لا يُعرضان. */
 function paramsText(item: CartItem): string {

@@ -205,8 +205,8 @@ describe("اسم المادة وتسميات الحقول بلغة الصفحة"
 });
 
 describe("حسابات اللوح", () => {
-  const sara = { order_item_id: 10, order_id: 3, customer_name: "أم سارة", template_slug: "card" };
-  const noor = { order_item_id: 11, order_id: 4, customer_name: "نور", template_slug: "tag" };
+  const sara = { order_item_id: 10, order_id: 3, customer_name: "أم سارة", template_slug: "card", name: "بطاقة", variant_code: "", cut_file_url: "" };
+  const noor = { order_item_id: 11, order_id: 4, customer_name: "نور", template_slug: "design-4", name: "علبة هدية", variant_code: "02", cut_file_url: "/media/designs/files/a.svg" };
   const sheet: Sheet = {
     id: 1,
     material_id: 7,
@@ -225,8 +225,8 @@ describe("حسابات اللوح", () => {
     expect(usedFraction(sheet)).toBeCloseTo(0.55);
     expect(usedFraction({ ...sheet, width_mm: "0" })).toBe(0);
     expect(groupPlacements(sheet)).toEqual([
-      { number: 1, orderItemId: 10, orderId: 3, customerName: "أم سارة", templateSlug: "card", copies: 2 },
-      { number: 2, orderItemId: 11, orderId: 4, customerName: "نور", templateSlug: "tag", copies: 1 },
+      { number: 1, orderItemId: 10, orderId: 3, customerName: "أم سارة", templateSlug: "card", name: "بطاقة", variantCode: "", cutFiles: [], copies: 2 },
+      { number: 2, orderItemId: 11, orderId: 4, customerName: "نور", templateSlug: "design-4", name: "علبة هدية", variantCode: "02", cutFiles: ["/media/designs/files/a.svg"], copies: 1 },
     ]);
   });
 

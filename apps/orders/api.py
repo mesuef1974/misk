@@ -46,6 +46,8 @@ class TransitionIn(Schema):
 class ItemOut(Schema):
     id: int
     template_slug: str
+    name: str
+    variant_code: str  # غير فارغ لنسخة مسمّاة من تصميم جاهز
     material_id: int
     params: dict[str, Any]
     quantity: int
@@ -55,6 +57,14 @@ class ItemOut(Schema):
     @staticmethod
     def resolve_template_slug(obj) -> str:
         return obj.template.slug
+
+    @staticmethod
+    def resolve_name(obj) -> str:
+        return obj.template.name
+
+    @staticmethod
+    def resolve_variant_code(obj) -> str:
+        return obj.design_variant.code if obj.design_variant else ""
 
 
 class OrderOut(Schema):

@@ -90,10 +90,10 @@ const order: Order = {
   occasion_date: null,
   notes: "",
   total: "50.00",
-  items: [{ id: 10, template_slug: "card", material_id: 7, params: { name: "سارة" }, quantity: 2, unit_price: "25.00" }],
+  items: [{ id: 10, template_slug: "card", name: "بطاقة", variant_code: "", material_id: 7, params: { name: "سارة" }, quantity: 2, unit_price: "25.00" }],
 };
 
-const piece = { order_item_id: 10, order_id: 4, customer_name: "أم سارة", template_slug: "card" };
+const piece = { order_item_id: 10, order_id: 4, customer_name: "أم سارة", template_slug: "card", name: "بطاقة", variant_code: "", cut_file_url: "" };
 
 function sheet(overrides: Partial<Sheet> = {}): Sheet {
   return {

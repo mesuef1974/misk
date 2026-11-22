@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.db.models import QuerySet
 
+from .domain import READY_DESIGN_GENERATOR
 from .models import Calibration, Material, ProductTemplate
 
 
@@ -12,7 +13,8 @@ def active_materials() -> QuerySet[Material]:
 
 
 def active_templates() -> QuerySet[ProductTemplate]:
-    return ProductTemplate.objects.filter(is_active=True)
+    """قوالب المصمِّم الفعّالة. قوالب «تصاميم جاهزة» تُطلب من صفحة التصميم لا من هنا، فلا تتكرر في القوائم."""
+    return ProductTemplate.objects.filter(is_active=True).exclude(generator=READY_DESIGN_GENERATOR)
 
 
 def calibrations_for(material_id: int) -> QuerySet[Calibration]:
@@ -29,7 +31,7 @@ def calibrated_material_ids(material_ids: set[int]) -> set[int]:
 
 
 def template_by_slug(slug: str) -> ProductTemplate | None:
-    return ProductTemplate.objects.filter(slug=slug, is_active=True).first()
+    return active_templates().filter(slug=slug).first()
 
 
 def engrave_calibration(material_id: int) -> Calibration | None:

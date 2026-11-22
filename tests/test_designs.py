@@ -1,3 +1,4 @@
+import json
 import math
 import zipfile
 from datetime import date
@@ -8,9 +9,14 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
+from django.db.models import ProtectedError
+from django.test import Client
 
+from apps.capacity import selectors as capacity_selectors
 from apps.catalog import services as catalog_services
 from apps.catalog.models import ProductTemplate
+from apps.checkout import providers
+from apps.checkout.models import Payment
 from apps.core.models import AuditLog
 from apps.designs import estimate, pricing, scan, selectors, services, svg, tasks, validators
 from apps.designs.models import (
@@ -21,6 +27,11 @@ from apps.designs.models import (
     DesignSource,
     VariantEstimate,
 )
+from apps.orders import services as order_services
+from apps.orders.models import Order
+from apps.production import services as production_services
+from apps.production.models import Placement
+from tests.test_checkout import SECRET, _checkout, _json, _notify
 
 KEY = {
     "#e30613": {"operation": "cut", "material": "wood"},
@@ -768,12 +779,14 @@ def test_fit_to_sheet_picks_largest_whole_percent_and_is_idempotent(media, sourc
     wood.sheet_width_mm, wood.sheet_height_mm = Decimal("200"), Decimal("120")
     wood.save()
     short, long = sorted((variant.sheet_width_mm, variant.sheet_height_mm))
-    expected = Decimal(int(min(Decimal("120") / short, Decimal("200") / long) * 100))
+    # اللوح بعد هامش الترصيف 5 مم من كل جهة: 190 × 110.
+    expected = Decimal(int(min(Decimal("110") / short, Decimal("190") / long) * 100))
     assert services.fit_to_sheet(variant) == expected
     services.analyze_variant(variant)
     variant.refresh_from_db()
-    assert max(variant.sheet_width_mm, variant.sheet_height_mm) <= Decimal("200")
-    assert min(variant.sheet_width_mm, variant.sheet_height_mm) <= Decimal("120")
+    assert max(variant.sheet_width_mm, variant.sheet_height_mm) <= Decimal("190")
+    assert min(variant.sheet_width_mm, variant.sheet_height_mm) <= Decimal("110")
+    assert selectors.fits_material(variant, wood)
     audits = AuditLog.objects.filter(action="designs.variant.sale_scale").count()
     assert services.fit_to_sheet(variant) == expected  # من مقاس الملف لا من المقاس المصغَّر
     assert AuditLog.objects.filter(action="designs.variant.sale_scale").count() == audits
@@ -799,3 +812,195 @@ def test_sale_scale_bounds_and_admin_reanalyzes(media, source, pack_folder, wood
     variant.refresh_from_db()
     assert variant.sale_scale_percent is not None
     assert max(variant.sheet_width_mm, variant.sheet_height_mm) <= Decimal("200")  # المهمة أعادت التحليل
+
+
+# ——— الطلب 2: السلة والإنتاج ———
+
+
+@pytest.fixture
+def pay(settings):
+    settings.PAYMENT_PROVIDER = "test"
+    settings.PAYMENT_WEBHOOK_SECRET = SECRET
+    return providers.TestProvider(SECRET)
+
+
+@pytest.fixture
+def listed(box_design):
+    _make_listable(box_design)
+    return services.list_design(box_design)
+
+
+def _add_design(client, design, material, **extra):
+    variant = design.variants.get()
+    body = {
+        "design_slug": design.slug,
+        "variant_code": variant.code,
+        "material_id": material.pk,
+        "acknowledged": True,
+        **extra,
+    }
+    return _json(client, "post", "/api/store/cart/design-items", body)
+
+
+def _confirmed_design_order(client, pay, design, material, quantity=1) -> Order:
+    assert _add_design(client, design, material, quantity=quantity).status_code == 200
+    assert _checkout(client).status_code == 200
+    payment = Payment.objects.select_related("order").latest("id")
+    assert _notify(client, pay, payment).json()["outcome"] == "confirmed"
+    return Order.objects.get(pk=payment.order_id)
+
+
+def test_listing_creates_sale_template_hidden_from_product_lists(client, listed, staff_user):
+    template = listed.product_template
+    assert template.slug == f"design-{listed.pk}" and template.generator == "ready_design"
+    assert (template.name, template.name_en) == ("علبة هدية", "Gift Box")
+    assert (template.width_mm, template.height_mm) == (Decimal("100.0"), Decimal("50.0"))
+    assert template.material_kinds == ["wood"] and template.base_price == 0
+
+    assert client.get("/api/store/templates").json() == []
+    assert client.get(f"/api/store/templates/{template.slug}").status_code == 404
+    client.force_login(staff_user)
+    assert client.get("/api/catalog/templates").json() == []
+
+    # إعادة النشر لا تكتب القالب ثانية، وتغيير الاسم يحدّثه على المفتاح نفسه.
+    writes = AuditLog.objects.filter(action="catalog.template.upsert").count()
+    services.list_design(listed)
+    assert AuditLog.objects.filter(action="catalog.template.upsert").count() == writes
+    listed.name_ar = "علبة هدايا"
+    listed.save()
+    assert services.ensure_sale_template(listed).name == "علبة هدايا"
+    assert ProductTemplate.objects.count() == 1
+
+
+def test_variant_larger_than_the_sheet_has_no_price(box_design, wood):
+    _make_listable(box_design)
+    variant = box_design.variants.get()
+    assert VariantEstimate.objects.get(variant=variant, material=wood).price is not None
+    wood.sheet_width_mm, wood.sheet_height_mm = Decimal("105"), Decimal("105")  # يسع 95 بعد الهامش
+    wood.save()
+    variant.manual_price = Decimal("80")  # السعر اليدوي لا يبيع ما لا يُرصَّف
+    variant.save()
+    services.refresh_estimates(variant)
+    assert VariantEstimate.objects.get(variant=variant, material=wood).price is None
+
+
+def test_cart_takes_a_listed_design_at_the_server_price(client, listed, wood, material):
+    variant = listed.variants.get()
+    price = VariantEstimate.objects.get(variant=variant, material=wood).price
+
+    refused = _add_design(client, listed, wood, acknowledged=False)
+    assert refused.status_code == 422 and refused.json()["code"] == "size_not_acknowledged"
+    assert _add_design(client, listed, material).json()["code"] == "not_for_sale"  # خامة بلا سعر
+    assert _add_design(client, listed, wood, variant_code="zz").json()["code"] == "not_for_sale"
+    assert (
+        _json(
+            client,
+            "post",
+            "/api/store/cart/design-items",
+            {"design_slug": "nope", "material_id": wood.pk, "acknowledged": True},
+        ).json()["code"]
+        == "not_for_sale"
+    )
+
+    cart = _add_design(client, listed, wood, quantity=2).json()
+    (line,) = cart["items"]
+    assert line["design_slug"] == listed.slug and line["variant_code"] == variant.code
+    assert line["name"] == "علبة هدية" and line["name_en"] == "Gift Box"
+    assert Decimal(line["unit_price"]) == price and Decimal(cart["total"]) == 2 * price
+    assert not line["needs_review"] and line["params"] == {}
+    item = Order.objects.get().items.get()
+    assert item.design_variant == variant and item.svg_sha256 == variant.svg_sha256
+    assert "svg" not in json.dumps(cart) and variant.svg_sha256 not in json.dumps(cart)
+
+    services.unlist_design(listed)
+    assert _add_design(client, listed, wood).json()["code"] == "not_for_sale"
+
+
+def test_checkout_refuses_design_whose_price_or_listing_changed(client, listed, wood, pay):
+    variant = listed.variants.get()
+    assert _add_design(client, listed, wood).status_code == 200
+    variant.manual_price = Decimal("500")
+    variant.save()
+    services.refresh_estimates(variant)
+    changed = _checkout(client)
+    assert changed.status_code == 422 and changed.json()["code"] == "design_changed"
+
+    variant.manual_price = None
+    variant.save()
+    services.refresh_estimates(variant)
+    services.unlist_design(listed)
+    assert _checkout(client).json()["code"] == "design_changed"
+    services.list_design(listed)
+    assert _checkout(client).status_code == 200
+
+
+def test_design_order_is_paid_planned_cut_and_delivered(client, listed, wood, pay, staff_user):
+    variant = listed.variants.get()
+    estimate = VariantEstimate.objects.get(variant=variant, material=wood)
+    order = _confirmed_design_order(client, pay, listed, wood, quantity=3)
+    assert order.status == "confirmed"
+
+    # السعة بزمن النسخة المقدَّر لا بتقدير مساحة القالب.
+    expected = math.ceil(3 * float(estimate.total_seconds) * capacity_selectors.correction_factor() / 60)
+    assert capacity_selectors.order_minutes(order.pk) == expected
+    assert capacity_selectors.backlog_minutes() == [expected]
+
+    (sheet,) = production_services.plan_sheets(material_id=wood.pk)
+    placements = list(Placement.objects.filter(sheet=sheet))
+    assert sorted(p.copy_index for p in placements) == [0, 1, 2]
+    assert {(p.width_mm, p.height_mm) for p in placements} == {(Decimal("100.0"), Decimal("50.0"))}
+    assert production_services.plan_sheets(material_id=wood.pk) == []
+
+    client.force_login(staff_user)
+    (row,) = client.get("/api/production/sheets").json()["items"]
+    ready = variant.files.get(role=DesignFile.Role.READY_CUT)
+    for placed in row["placements"]:
+        assert placed["name"] == "علبة هدية" and placed["cut_file_url"] == f"/media/{ready.file.name}"
+    assert client.get(row["placements"][0]["cut_file_url"]).status_code == 200
+    (staff_item,) = client.get(f"/api/orders/{order.pk}").json()["items"]
+    assert staff_item["name"] == "علبة هدية" and staff_item["template_slug"] == f"design-{listed.pk}"
+
+    production_services.record_run(sheet_id=sheet.pk, request_id="run-1", duration_s=600, outcome="ok")
+    for status in ("ready", "ready_for_pickup", "delivered"):
+        order_services.transition(order_id=order.pk, to_status=status, actor=staff_user, system=True)
+    order.refresh_from_db()
+    assert order.status == "delivered"
+
+    track = Client().get(f"/api/store/track/{order.tracking_token}").json()
+    assert track["items"][0]["name"] == "علبة هدية" and track["items"][0]["variant_code"] == variant.code
+    # تصميم عليه طلب لا يُحذف ولا تُحذف نسخته.
+    with pytest.raises(ProtectedError):
+        listed.delete()
+
+
+def test_multi_part_variant_plans_a_piece_per_part_and_rotates_to_fit(client, listed, wood, pay, staff_user):
+    variant = listed.variants.get()
+    variant.analysis["parts"] = [
+        {"name": "side.svg", "width_mm": 100.0, "height_mm": 50.0},
+        {"name": "lid.svg", "width_mm": 60.0, "height_mm": 300.0},  # أطول من اللوح: يُدار
+    ]
+    variant.save()
+    wood.sheet_height_mm = Decimal("200")  # 600 × 200: يسع 590 × 190
+    wood.save()
+    assert selectors.fits_material(variant, wood)
+    order = _confirmed_design_order(client, pay, listed, wood, quantity=2)
+
+    estimate = VariantEstimate.objects.get(variant=variant, material=wood)
+    factor = capacity_selectors.correction_factor()
+    assert capacity_selectors.order_minutes(order.pk) == math.ceil(
+        2 * float(estimate.total_seconds) * factor / 60
+    )
+
+    production_services.plan_sheets(material_id=wood.pk)
+    sizes = {p.copy_index: (p.width_mm, p.height_mm) for p in Placement.objects.all()}
+    assert sizes == {
+        0: (Decimal("100.0"), Decimal("50.0")),
+        1: (Decimal("300.0"), Decimal("60.0")),
+        2: (Decimal("100.0"), Decimal("50.0")),
+        3: (Decimal("300.0"), Decimal("60.0")),
+    }
+    # الجزء بلا ملف قص جاهز رابطه فارغ، ولا يأخذ ملف جزء آخر.
+    assert selectors.cut_file_urls(variant) == ["", ""]
+    order_services.transition(order_id=order.pk, to_status="in_production", actor=staff_user)
+    with pytest.raises(order_services.OrderError, match="4"):  # بقيت أربع قطع لم تُقصّ
+        order_services.transition(order_id=order.pk, to_status="ready", actor=staff_user)

@@ -12,6 +12,7 @@ from ninja.errors import HttpError
 from apps.catalog.models import Calibration, Material
 from apps.core.auth import request_id, staff_auth
 from apps.core.paging import PageQuery, page_of
+from apps.designs import selectors as design_selectors
 
 from . import jobs, selectors, services
 from .models import RunLog, Sheet
@@ -28,6 +29,9 @@ class PlacementOut(Schema):
     order_id: int
     customer_name: str
     template_slug: str
+    name: str
+    variant_code: str  # غير فارغ لنسخة مسمّاة من تصميم جاهز
+    cut_file_url: str  # ملف القص الجاهز لقطعة تصميم جاهز (للمشرفين)؛ فارغ لقطعة المصمِّم
     copy_index: int
     x_mm: Decimal
     y_mm: Decimal
@@ -45,6 +49,23 @@ class PlacementOut(Schema):
     @staticmethod
     def resolve_template_slug(obj) -> str:
         return obj.order_item.template.slug
+
+    @staticmethod
+    def resolve_name(obj) -> str:
+        return obj.order_item.template.name
+
+    @staticmethod
+    def resolve_variant_code(obj) -> str:
+        variant = obj.order_item.design_variant
+        return variant.code if variant else ""
+
+    @staticmethod
+    def resolve_cut_file_url(obj) -> str:
+        variant = obj.order_item.design_variant
+        if variant is None:
+            return ""
+        urls = design_selectors.cut_file_urls(variant)
+        return urls[obj.copy_index % len(urls)]
 
 
 class RunOut(Schema):

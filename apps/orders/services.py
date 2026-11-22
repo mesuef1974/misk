@@ -13,7 +13,7 @@ from django.db import IntegrityError, transaction
 
 from apps.catalog import domain as catalog_domain
 from apps.catalog import selectors as catalog_selectors
-from apps.catalog.models import Material, ProductTemplate
+from apps.catalog.models import Material
 from apps.core.columns import column_length
 from apps.core.services import record_audit
 
@@ -133,7 +133,7 @@ def create_order(
     if len(notes) > MAX_NOTES_LENGTH:
         raise OrderError(f"الملاحظات أطول من {MAX_NOTES_LENGTH} حرف")
 
-    templates = ProductTemplate.objects.filter(is_active=True).in_bulk(
+    templates = catalog_selectors.active_templates().in_bulk(
         {item.template_slug for item in items}, field_name="slug"
     )
     materials = Material.objects.filter(is_active=True).in_bulk({item.material_id for item in items})

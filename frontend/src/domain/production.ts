@@ -47,6 +47,10 @@ export interface PieceGroup {
   orderId: number;
   customerName: string;
   templateSlug: string;
+  name: string;
+  variantCode: string;
+  /** ملفات القص الجاهزة لقطع المجموعة، بلا تكرار: ملف لكل جزء من نسخة التصميم. */
+  cutFiles: string[];
   copies: number;
 }
 
@@ -54,14 +58,19 @@ export function groupPlacements(sheet: Sheet): PieceGroup[] {
   const groups = new Map<number, PieceGroup>();
   for (const placement of sheet.placements) {
     const group = groups.get(placement.order_item_id);
-    if (group) group.copies += 1;
-    else {
+    if (group) {
+      group.copies += 1;
+      if (placement.cut_file_url && !group.cutFiles.includes(placement.cut_file_url)) group.cutFiles.push(placement.cut_file_url);
+    } else {
       groups.set(placement.order_item_id, {
         number: groups.size + 1,
         orderItemId: placement.order_item_id,
         orderId: placement.order_id,
         customerName: placement.customer_name,
         templateSlug: placement.template_slug,
+        name: placement.name,
+        variantCode: placement.variant_code,
+        cutFiles: placement.cut_file_url ? [placement.cut_file_url] : [],
         copies: 1,
       });
     }

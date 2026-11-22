@@ -47,6 +47,8 @@ const production = {
     usage: "{pieces} قطعة · مستعمل {used}",
     diagram: "لوح {id}: {pieces} قطعة على {width} × {height} مم",
     groupTitle: "{template} — {customer}",
+    cutFile: "ملف القص",
+    cutFilePart: "ملف القص {part}",
     order: "طلب {id}",
     runsLabel: "سجل تشغيل اللوح {id}",
     runs: "سجل التشغيل",

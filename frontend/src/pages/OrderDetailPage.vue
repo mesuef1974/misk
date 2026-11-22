@@ -5,6 +5,7 @@ import { errorMessage } from "@/api/client";
 import BrandIcon from "@/components/BrandIcon.vue";
 import OrderStatusBadge from "@/components/OrderStatusBadge.vue";
 import { materialName, templateName } from "@/domain/catalog";
+import { lineName } from "@/domain/store";
 import {
   formatDate,
   formatMoney,
@@ -40,7 +41,7 @@ const lines = computed(() =>
     const material = catalog.materialById(item.material_id);
     return {
       id: item.id,
-      template: template ? templateName(template) : item.template_slug,
+      template: template ? templateName(template) : lineName({ name: item.name || item.template_slug, name_en: "", variant_code: item.variant_code }),
       material: material ? materialName(material) : t("orders.detail.materialFallback", { id: item.material_id }),
       params: Object.entries(item.params).map(([name, value]) => ({
         name,

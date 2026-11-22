@@ -36,6 +36,7 @@ vi.mock("@/services/store", () => ({
     design: vi.fn(),
     cart: vi.fn(),
     addItem: vi.fn(),
+    addDesignItem: vi.fn(),
     setQuantity: vi.fn(),
     removeItem: vi.fn(),
     checkout: vi.fn(),
@@ -110,6 +111,8 @@ const line: CartItem = {
   template_slug: "name-plaque",
   name: "لوحة اسم",
   name_en: "Name plaque",
+  design_slug: null,
+  variant_code: "",
   material_id: 3,
   material_name: "خشب زان",
   material_name_en: "Beech",
@@ -146,7 +149,7 @@ function tracking(overrides: Partial<Tracking> = {}): Tracking {
       { status: "ready", label: "جاهز", reached: true, at: null },
       { status: "delivered", label: "مُسلَّم", reached: false, at: null },
     ],
-    items: [{ name: "لوحة اسم", name_en: "Name plaque", material_name: "خشب زان", material_name_en: "Beech", quantity: 2, line_total: "240.00" }],
+    items: [{ name: "لوحة اسم", name_en: "Name plaque", variant_code: "", material_name: "خشب زان", material_name_en: "Beech", quantity: 2, line_total: "240.00" }],
     subtotal: "240.00",
     delivery_fee: "0.00",
     total: "240.00",
@@ -251,15 +254,54 @@ describe("التصاميم الجاهزة", () => {
     page.unmount();
   });
 
-  it("صفحة التصميم تعرض المقاس وسعر كل خامة، والطلب معطَّل", async () => {
+  it("صفحة التصميم تعرض المقاس وسعر كل خامة", async () => {
     const page = await show(DesignPage, "/en/designs/gift-box", { slug: "gift-box" });
     expect(storeService.design).toHaveBeenCalledWith("gift-box", "en");
     expect(page.get("h1").text()).toBe("Gift box");
     expect(page.text()).toContain("150 × 70 × 150 mm");
     expect(page.get(".offers li").text()).toContain("Birch, 3 mm");
     expect(page.get(".offers li").text()).toContain("25.00");
-    expect(button(page, "Ordering opens soon").attributes("disabled")).toBeDefined();
     expect(page.get(".page-head a").attributes("href")).toBe("/en/designs");
+    page.unmount();
+  });
+
+  it("العرض الوحيد مختار، والإضافة تشترط الإقرار بالمقاس والخامة ثم تفتح السلة", async () => {
+    vi.mocked(storeService.addDesignItem).mockResolvedValue(cartOf());
+    const page = await show(DesignPage, "/designs/gift-box", { slug: "gift-box" });
+    expect((page.get('input[name="offer"]').element as HTMLInputElement).checked).toBe(true);
+    expect(button(page, "أضف إلى السلة").attributes("disabled")).toBeDefined();
+
+    await page.get('input[name="quantity"]').setValue("2");
+    expect(page.get(".sums .grand").text()).toContain("50.00");
+    await page.get('input[name="acknowledged"]').setValue(true);
+    await page.get("form").trigger("submit");
+    await flushPromises();
+    expect(storeService.addDesignItem).toHaveBeenCalledWith(
+      { design_slug: "gift-box", variant_code: "3mm", material_id: 4, quantity: 2, acknowledged: true },
+      "ar",
+    );
+    expect(router.currentRoute.value.name).toBe("cart");
+    page.unmount();
+  });
+
+  it("عرض سحبه الخادم يعيد تحميل الصفحة ويُسقط الإقرار، ونسختان بلا اختيار مسبق", async () => {
+    const second = { ...giftBox.variants[0], code: "5mm" };
+    vi.mocked(storeService.design).mockResolvedValue({ ...giftBox, variants: [giftBox.variants[0], second] });
+    vi.mocked(storeService.addDesignItem).mockRejectedValue(rejection(422, { code: "not_for_sale", detail: "هذا المنتج غير معروض للبيع الآن" }));
+    const page = await show(DesignPage, "/designs/gift-box", { slug: "gift-box" });
+    const radios = page.findAll('input[name="offer"]');
+    expect(radios.map((radio) => (radio.element as HTMLInputElement).checked)).toEqual([false, false]);
+    expect((page.get('input[name="acknowledged"]').element as HTMLInputElement).disabled).toBe(true);
+
+    await radios[1].setValue(true);
+    await page.get('input[name="acknowledged"]').setValue(true);
+    await page.get("form").trigger("submit");
+    await flushPromises();
+    expect(vi.mocked(storeService.addDesignItem).mock.calls[0][0]).toMatchObject({ variant_code: "5mm" });
+    expect(page.get('[role="status"], [role="alert"]').text()).toContain("غير معروض للبيع");
+    expect(storeService.design).toHaveBeenCalledTimes(2);
+    expect((page.get('input[name="acknowledged"]').element as HTMLInputElement).checked).toBe(false);
+    expect(router.currentRoute.value.name).toBe("design");
     page.unmount();
   });
 

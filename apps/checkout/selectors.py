@@ -35,6 +35,8 @@ def cart_view(order: Order | None, *, now: datetime) -> dict[str, Any]:
             "template_slug": item.template.slug,
             "name": item.template.name,
             "name_en": item.template.name_en,
+            "design_slug": item.design_variant.design.slug if item.design_variant else None,
+            "variant_code": item.design_variant.code if item.design_variant else "",
             "material_id": item.material_id,
             "material_name": item.material.name,
             "material_name_en": item.material.name_en,
@@ -44,7 +46,7 @@ def cart_view(order: Order | None, *, now: datetime) -> dict[str, Any]:
             "line_total": item.unit_price * item.quantity,
             "needs_review": bool(item.review_reasons),
         }
-        for item in order.items.select_related("template", "material")
+        for item in order.items.select_related("template", "material", "design_variant__design")
     ]
     subtotal = sum((row["line_total"] for row in items), Decimal("0"))
     live = None

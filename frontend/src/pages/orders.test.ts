@@ -62,7 +62,7 @@ function order(overrides: Partial<Order> = {}): Order {
     notes: "",
     total: "50.00",
     items: [
-      { id: 10, template_slug: "card", material_id: 7, params: { name: "سارة" }, quantity: 2, unit_price: "25.00" },
+      { id: 10, template_slug: "card", name: "بطاقة", variant_code: "", material_id: 7, params: { name: "سارة" }, quantity: 2, unit_price: "25.00" },
     ],
     ...overrides,
   };

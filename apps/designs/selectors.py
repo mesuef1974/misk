@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+from pathlib import PurePosixPath
+
+from django.conf import settings
 from django.db.models import Exists, OuterRef, Prefetch, QuerySet
 
+from apps.catalog import domain as catalog_domain
+from apps.catalog.models import Material
+
 from . import pricing
-from .models import Design, DesignImage, DesignPricing, DesignSource, DesignVariant, VariantEstimate
+from .models import (
+    Design,
+    DesignFile,
+    DesignImage,
+    DesignPricing,
+    DesignSource,
+    DesignVariant,
+    VariantEstimate,
+)
 
 
 def rates() -> pricing.Rates | None:
@@ -24,6 +39,39 @@ def is_sellable(variant: DesignVariant) -> bool:
     return (
         variant.analyzed_at is not None and not variant.analysis_error and len(material_kinds(variant)) == 1
     )
+
+
+def piece_sizes(variant: DesignVariant) -> list[tuple[Decimal, Decimal]]:
+    """ما يُرصَّف لنسخة واحدة: لوح لكل جزء بمقاسه، أو لوح النسخة إن كانت ملفًّا واحدًا. بمقاس البيع."""
+    parts = variant.analysis.get("parts") or []
+    if parts:
+        return [(Decimal(str(part["width_mm"])), Decimal(str(part["height_mm"]))) for part in parts]
+    return [(variant.sheet_width_mm or Decimal("0"), variant.sheet_height_mm or Decimal("0"))]
+
+
+def fits_material(variant: DesignVariant, material: Material) -> bool:
+    """كل أجزاء النسخة يسعها لوح المادة بعد هامش الترصيف."""
+    return all(
+        catalog_domain.fits_sheet(width, height, material.sheet_width_mm, material.sheet_height_mm)
+        for width, height in piece_sizes(variant)
+    )
+
+
+def ready_cut_name(original_name: str) -> str:
+    return f"{PurePosixPath(original_name).stem}-ready.svg"
+
+
+def cut_file_urls(variant: DesignVariant) -> list[str]:
+    """روابط ملفات القص الجاهزة بترتيب `piece_sizes`، تحت `/media/` (للمشرفين وحدهم). الفارغ: لا ملف للجزء."""
+    ready = {
+        row.name: f"{settings.MEDIA_URL}{row.file.name}"
+        for row in variant.files.all()
+        if row.role == DesignFile.Role.READY_CUT and row.file
+    }
+    parts = variant.analysis.get("parts") or []
+    if not parts:
+        return list(ready.values())[:1] or [""]
+    return [ready.get(ready_cut_name(part["name"])[:255], "") for part in parts]
 
 
 def _offers() -> QuerySet[VariantEstimate]:
@@ -66,6 +114,29 @@ def listed_designs() -> QuerySet[Design]:
         )
         .order_by("name_ar", "id")
     )
+
+
+def _offer_in(design: Design | None, variant_of, material_id: int):
+    if design is None:
+        return None
+    for variant in design.variants.all():
+        if variant_of(variant):
+            row = next((row for row in offers(variant) if row.material_id == material_id), None)
+            return (design, variant, row) if row else None
+    return None
+
+
+def offer(slug: str, code: str, material_id: int) -> tuple[Design, DesignVariant, VariantEstimate] | None:
+    """عرض نسخة منشورة على مادة كما يراه الزائر الآن. `None`: التصميم أو النسخة أو سعرها غير معروض."""
+    design = listed_designs().filter(slug=slug).first()
+    return _offer_in(design, lambda variant: variant.code == code, material_id)
+
+
+def current_price(variant_id: int, material_id: int) -> Decimal | None:
+    """سعر النسخة على المادة إن كان تصميمها ما زال منشورًا ومعروضًا عليها."""
+    design = listed_designs().filter(variants=variant_id).first()
+    found = _offer_in(design, lambda variant: variant.pk == variant_id, material_id)
+    return found[2].price if found else None
 
 
 def listing_blockers(design: Design) -> list[str]:

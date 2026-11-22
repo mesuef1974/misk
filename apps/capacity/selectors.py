@@ -10,6 +10,8 @@ from django.db.models import Count, Q, QuerySet
 from django.utils import timezone
 
 from apps.catalog.models import Calibration
+from apps.designs.models import VariantEstimate
+from apps.orders import selectors as order_selectors
 from apps.orders.models import Order, OrderItem
 from apps.production.models import Placement, RunLog, Sheet
 
@@ -29,6 +31,8 @@ CORRECTION_RUNS = 50
 CORRECTION_BOUNDS = (0.5, 3.0)
 
 Passes = dict[tuple[int, str], domain.Pass]
+# زمن نسخة التصميم الجاهز على المادة بالثواني: (النسخة، المادة).
+DesignSeconds = dict[tuple[int, int], float]
 
 
 def config() -> CapacityConfig:
@@ -112,7 +116,25 @@ def _passes(material_ids: set[int]) -> Passes:
     return latest
 
 
-def _piece_seconds(item: OrderItem, passes: Passes, cfg: CapacityConfig) -> float:
+def _design_seconds(items: list[OrderItem]) -> DesignSeconds:
+    """تقدير `VariantEstimate` لبنود التصاميم الجاهزة، باستعلام واحد."""
+    variant_ids = {item.design_variant_id for item in items if item.design_variant_id}
+    if not variant_ids:
+        return {}
+    rows = VariantEstimate.objects.filter(variant_id__in=variant_ids, complete=True)
+    return {
+        (variant_id, material_id): float(total)
+        for variant_id, material_id, total in rows.values_list("variant_id", "material_id", "total_seconds")
+    }
+
+
+def _piece_seconds(item: OrderItem, passes: Passes, cfg: CapacityConfig, designs: DesignSeconds) -> float:
+    """زمن قطعة واحدة مما يُرصَّف للبند. نسخة التصميم زمنها المقدَّر موزَّعًا على قطعها، لا تقدير مساحة القالب."""
+    if item.design_variant_id is not None:
+        total = designs.get((item.design_variant_id, item.material_id))
+        if total is None:
+            return cfg.fallback_piece_min * 60
+        return total / len(order_selectors.piece_sizes(item))
     template = item.template
     seconds = domain.piece_seconds(
         width_mm=float(template.width_mm),
@@ -137,10 +159,11 @@ def correction_factor() -> float:
         return 1.0
     sheet_ids = {sheet_id for sheet_id, _ in runs}
     pieces = _placed_pieces(Q(sheet_id__in=sheet_ids))
-    items = list(OrderItem.objects.filter(pk__in=pieces).select_related("template"))
+    items = list(OrderItem.objects.filter(pk__in=pieces).select_related("template", "design_variant"))
     cfg = config()
     passes = _passes({item.material_id for item in items})
-    estimated = sum(_piece_seconds(item, passes, cfg) * pieces[item.pk] for item in items)
+    designs = _design_seconds(items)
+    estimated = sum(_piece_seconds(item, passes, cfg, designs) * pieces[item.pk] for item in items)
     if estimated <= 0:
         return 1.0
     low, high = CORRECTION_BOUNDS
@@ -154,7 +177,7 @@ def _placed_pieces(where: Q) -> dict[int, int]:
 
 def _orders_minutes(orders: QuerySet[Order], *, remaining_only: bool) -> dict[int, int]:
     """دقائق كل طلب من بنوده. `remaining_only` يطرح القطع المقصوصة على ألواح منفَّذة."""
-    items = list(OrderItem.objects.filter(order__in=orders).select_related("template"))
+    items = list(OrderItem.objects.filter(order__in=orders).select_related("template", "design_variant"))
     cut = (
         _placed_pieces(Q(order_item__order__in=orders, sheet__status=Sheet.Status.DONE))
         if remaining_only
@@ -163,10 +186,12 @@ def _orders_minutes(orders: QuerySet[Order], *, remaining_only: bool) -> dict[in
     cfg = config()
     factor = correction_factor()
     passes = _passes({item.material_id for item in items})
+    designs = _design_seconds(items)
     seconds: dict[int, float] = {}
     for item in items:
-        pieces = max(item.quantity - cut.get(item.pk, 0), 0)
-        seconds[item.order_id] = seconds.get(item.order_id, 0.0) + pieces * _piece_seconds(item, passes, cfg)
+        pieces = max(order_selectors.piece_count(item) - cut.get(item.pk, 0), 0)
+        piece = _piece_seconds(item, passes, cfg, designs)
+        seconds[item.order_id] = seconds.get(item.order_id, 0.0) + pieces * piece
     return {order_id: math.ceil(total * factor / 60) for order_id, total in seconds.items()}
 
 
