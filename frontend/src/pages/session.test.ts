@@ -194,6 +194,23 @@ describe("رابط لوحة الإدارة في القائمة", () => {
   });
 });
 
+describe("رابط التصاميم الجاهزة في القائمة", () => {
+  async function designsLinks(user: SessionUser | null) {
+    vi.mocked(sessionService.me).mockResolvedValue(user);
+    const { default: App } = await import("@/App.vue");
+    const app = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
+    const links = app.findAll('aside nav a[href="/designs"]');
+    app.unmount();
+    return links;
+  }
+
+  it("يظهر مرة واحدة للمشرف وللزائر", async () => {
+    expect(await designsLinks(staff)).toHaveLength(1);
+    expect(await designsLinks(null)).toHaveLength(1);
+  });
+});
+
 describe("الخروج من القائمة", () => {
   it("يعلن تعذّر الخروج ويبقي الزر لإعادة المحاولة", async () => {
     vi.mocked(sessionService.me).mockResolvedValue(staff);
