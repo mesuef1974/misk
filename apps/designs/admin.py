@@ -139,7 +139,7 @@ class EstimateInline(admin.TabularInline):
 
 @admin.register(DesignVariant)
 class DesignVariantAdmin(admin.ModelAdmin):
-    list_display = ["__str__", "sheet_width_mm", "sheet_height_mm", "analyzed_at"]
+    list_display = ["__str__", "sheet_width_mm", "sheet_height_mm", "sale_scale_percent", "analyzed_at"]
     list_filter = ["design__source"]
     readonly_fields = [
         "design",
@@ -153,15 +153,31 @@ class DesignVariantAdmin(admin.ModelAdmin):
         "analyzed_at",
     ]
     inlines = [FileInline, EstimateInline]
-    actions = ["analyze"]
+    actions = ["analyze", "fit_to_sheet"]
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        if "manual_price" in form.changed_data:
+        if "sale_scale_percent" in form.changed_data:
+            # المقاس والأطوال وملف القص تتبع النسبة: تحليل كامل في الخلفية، وهو يعيد التقدير.
+            tasks.analyze_variant_async.delay(obj.pk, request.user.pk)
+        elif "manual_price" in form.changed_data:
             services.refresh_estimates(obj)
 
     def has_add_permission(self, request):
         return False
+
+    @admin.action(description="صغِّر مقاس البيع ليسعه اللوح")
+    def fit_to_sheet(self, request, queryset):
+        for variant in queryset:
+            before = variant.sale_scale_percent
+            try:
+                percent = services.fit_to_sheet(variant, actor=request.user)
+            except services.DesignError as exc:
+                self.message_user(request, f"{variant}: {exc}", messages.ERROR)
+                continue
+            if percent != before:
+                tasks.analyze_variant_async.delay(variant.pk, request.user.pk)
+            self.message_user(request, f"{variant}: {'مقاس الملف' if percent is None else f'{percent}٪'}")
 
     @admin.action(description="إعادة تحليل النسخ المحددة في الخلفية")
     def analyze(self, request, queryset):

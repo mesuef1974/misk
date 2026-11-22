@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from apps.catalog.models import Material, ProductTemplate
@@ -109,6 +109,16 @@ class DesignVariant(TimeStampedModel):
     svg_sha256 = models.CharField(max_length=64, unique=True)
     sheet_width_mm = models.DecimalField(max_digits=7, decimal_places=1, null=True, blank=True)
     sheet_height_mm = models.DecimalField(max_digits=7, decimal_places=1, null=True, blank=True)
+    # مقاس البيع نسبةً من مقاس الملف؛ الفارغ = مقاس الملف. يُطبَّق عند التحليل على المقاس والأطوال وملف القص.
+    sale_scale_percent = models.DecimalField(
+        "نسبة مقاس البيع ٪",
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("10")), MaxValueValidator(Decimal("100"))],
+        help_text="للتصميم الأكبر من اللوح. لا تصلح لما يتعاشق بسماكة المادة (صناديق وأرفف): فتحاته تصغر معه.",
+    )
     analysis = models.JSONField(default=dict, blank=True)
     analysis_error = models.TextField(blank=True)
     analyzed_at = models.DateTimeField(null=True, blank=True)

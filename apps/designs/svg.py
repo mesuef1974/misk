@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import re
 import xml.etree.ElementTree as ET  # noqa: S405 — يُقرأ بلا كيانات خارجية؛ expat يحدّ توسّع الكيانات.
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 SVG_NS = "{http://www.w3.org/2000/svg}"
 MM_PER_UNIT = {
@@ -590,6 +590,35 @@ def combine(parts: list[Analysis]) -> Analysis:
     )
 
 
+def scaled(analysis: Analysis, k: float) -> Analysis:
+    """التحليل نفسه بمقاس بيع غير مقاس الملف: الأطوال × k والمساحات × k².
+
+    يُطبَّق بعد التحليل لا قبله: المربع المرجعي يُعرَف بمقاسه في الملف الأصلي، و`reference_mm` يبقى مقاسه هناك.
+    """
+    if k == 1:
+        return analysis
+    operations = {
+        name: {
+            **group,
+            "length_mm": round(group["length_mm"] * k, 1),
+            "bbox_area_mm2": round(group["bbox_area_mm2"] * k * k, 1),
+        }
+        for name, group in analysis.operations.items()
+    }
+    elements = [
+        replace(el, polylines=[[(x * k, y * k) for x, y in line] for line in el.polylines])
+        for el in analysis.elements
+    ]
+    return replace(
+        analysis,
+        width_mm=analysis.width_mm * k,
+        height_mm=analysis.height_mm * k,
+        mm_per_unit=analysis.mm_per_unit * k,
+        operations=operations,
+        elements=elements,
+    )
+
+
 def outer_area_mm2(analysis: Analysis, material: str) -> float:
     """مساحة إحاطة القطع الخارجية بمادة: عناصر القص التي لا تقع إحاطتها داخل قطعة أخرى."""
     cuts = [el.bbox for el in analysis.elements if el.rule == ("cut", material)]
@@ -601,8 +630,11 @@ def outer_area_mm2(analysis: Analysis, material: str) -> float:
     return sum((x1 - x0) * (y1 - y0) for x0, y0, x1, y1 in outer)
 
 
-def ready_to_cut(data: bytes, color_key: dict[str, dict]) -> bytes:
-    """الأصل بلا المربع المرجعي، وبعرض وارتفاع بالمليمتر: يقرؤه كل برنامج قص بالمقاس نفسه."""
+def ready_to_cut(data: bytes, color_key: dict[str, dict], scale: float = 1.0) -> bytes:
+    """الأصل بلا المربع المرجعي، وبعرض وارتفاع بالمليمتر: يقرؤه كل برنامج قص بالمقاس نفسه.
+
+    `scale` مقاس البيع: العرض والارتفاع المصرَّحان يُضربان فيه و`viewBox` يبقى، فيصغر الرسم كله بالنسبة نفسها.
+    """
     root = parse_root(data)
     analysis = _analyze_root(root, color_key)
     parents = {child: parent for parent in root.iter() for child in parent}
@@ -610,6 +642,10 @@ def ready_to_cut(data: bytes, color_key: dict[str, dict]) -> bytes:
         if el.is_reference:
             parents[el.node].remove(el.node)
     ET.register_namespace("", SVG_NS[1:-1])
-    root.set("width", f"{analysis.width_mm:.3f}mm")
-    root.set("height", f"{analysis.height_mm:.3f}mm")
+    if scale != 1 and "viewBox" not in root.attrib:
+        # بلا viewBox لا يغيّر العرض والارتفاع مقاس الرسم: يُصرَّح به من وحدات الملف نفسها.
+        unit = analysis.mm_per_unit
+        root.set("viewBox", f"0 0 {analysis.width_mm / unit:.6f} {analysis.height_mm / unit:.6f}")
+    root.set("width", f"{analysis.width_mm * scale:.3f}mm")
+    root.set("height", f"{analysis.height_mm * scale:.3f}mm")
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)

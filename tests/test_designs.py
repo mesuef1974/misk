@@ -699,3 +699,103 @@ def test_store_admin_pages_and_actions(box_design, admin_client):
     )
     box_design.refresh_from_db()
     assert box_design.is_listed
+
+
+# ——— مقاس البيع ———
+
+
+def test_scaled_analysis_shrinks_lengths_linearly_and_areas_squared():
+    full = svg.analyze(SAMPLE, KEY)
+    half = svg.scaled(full, 0.5)
+    assert half.width_mm == pytest.approx(full.width_mm / 2)
+    for name, group in full.operations.items():
+        assert half.operations[name]["count"] == group["count"]
+        assert half.operations[name]["length_mm"] == pytest.approx(group["length_mm"] / 2, abs=0.1)
+        assert half.operations[name]["bbox_area_mm2"] == pytest.approx(group["bbox_area_mm2"] / 4, abs=0.1)
+    assert svg.outer_area_mm2(half, "wood") == pytest.approx(svg.outer_area_mm2(full, "wood") / 4, abs=0.1)
+    assert half.reference_mm == full.reference_mm  # المربع المرجعي يُعرَف بمقاس الملف
+    assert svg.scaled(full, 1) is full
+
+
+def test_ready_to_cut_at_sale_scale_reads_back_scaled():
+    ready = svg.ready_to_cut(SAMPLE, KEY, 0.5)
+    assert b'width="127.000mm"' in ready
+    again, full = svg.analyze(ready, KEY), svg.analyze(SAMPLE, KEY)
+    assert again.reference_mm is None
+    for name, group in full.operations.items():
+        assert again.operations[name]["length_mm"] == pytest.approx(group["length_mm"] / 2, abs=0.2)
+
+
+def test_ready_to_cut_scales_a_file_without_viewbox():
+    data = b'<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm"><path d="M0 0H100" stroke="#e30613" fill="none"/></svg>'
+    full = svg.analyze(data, KEY).operations["cut:wood"]["length_mm"]
+    again = svg.analyze(svg.ready_to_cut(data, KEY, 0.5), KEY)
+    assert again.width_mm == pytest.approx(50)
+    assert again.operations["cut:wood"]["length_mm"] == pytest.approx(full / 2, abs=0.1)
+
+
+def test_sale_scale_drives_size_estimate_and_cut_file(media, source, pack_folder, wood):
+    call_command("import_designs", str(pack_folder), source="Test Store")
+    variant = source.designs.get().variants.get()
+    before = VariantEstimate.objects.get(variant=variant, material=wood)
+
+    variant.sale_scale_percent = Decimal("50")
+    variant.save()
+    services.analyze_variant(variant)
+    variant.refresh_from_db()
+    assert variant.sheet_width_mm == Decimal("127.0")
+    assert variant.analysis["sale_scale_percent"] == 50
+    after = VariantEstimate.objects.get(variant=variant, material=wood)
+    assert after.seconds["cut"] == pytest.approx(before.seconds["cut"] / 2, abs=0.2)
+    assert after.material_cost == Decimal("0.13")  # ربع 0.52
+    ready = variant.files.get(role=DesignFile.Role.READY_CUT)
+    with ready.file.open("rb") as handle:
+        assert b'width="127.000mm"' in handle.read()
+
+    variant.sale_scale_percent = None  # العودة إلى مقاس الملف
+    variant.save()
+    services.analyze_variant(variant)
+    variant.refresh_from_db()
+    assert variant.sheet_width_mm == Decimal("254.0")
+    assert "sale_scale_percent" not in variant.analysis
+
+
+def test_fit_to_sheet_picks_largest_whole_percent_and_is_idempotent(media, source, pack_folder, wood):
+    call_command("import_designs", str(pack_folder), source="Test Store")
+    variant = source.designs.get().variants.get()
+    assert services.fit_to_sheet(variant) is None  # 254 مم يسعه لوح 600×400
+
+    wood.sheet_width_mm, wood.sheet_height_mm = Decimal("200"), Decimal("120")
+    wood.save()
+    short, long = sorted((variant.sheet_width_mm, variant.sheet_height_mm))
+    expected = Decimal(int(min(Decimal("120") / short, Decimal("200") / long) * 100))
+    assert services.fit_to_sheet(variant) == expected
+    services.analyze_variant(variant)
+    variant.refresh_from_db()
+    assert max(variant.sheet_width_mm, variant.sheet_height_mm) <= Decimal("200")
+    assert min(variant.sheet_width_mm, variant.sheet_height_mm) <= Decimal("120")
+    audits = AuditLog.objects.filter(action="designs.variant.sale_scale").count()
+    assert services.fit_to_sheet(variant) == expected  # من مقاس الملف لا من المقاس المصغَّر
+    assert AuditLog.objects.filter(action="designs.variant.sale_scale").count() == audits
+
+    wood.sheet_width_mm, wood.sheet_height_mm = Decimal("20"), Decimal("12")
+    wood.save()
+    with pytest.raises(services.DesignError):
+        services.fit_to_sheet(variant)
+
+
+def test_sale_scale_bounds_and_admin_reanalyzes(media, source, pack_folder, wood, admin_client):
+    call_command("import_designs", str(pack_folder), source="Test Store")
+    variant = source.designs.get().variants.get()
+    variant.sale_scale_percent = Decimal("5")
+    with pytest.raises(ValidationError):
+        variant.full_clean()
+
+    wood.sheet_width_mm, wood.sheet_height_mm = Decimal("200"), Decimal("120")
+    wood.save()
+    admin_client.post(
+        "/admin/designs/designvariant/", {"action": "fit_to_sheet", "_selected_action": [variant.pk]}
+    )
+    variant.refresh_from_db()
+    assert variant.sale_scale_percent is not None
+    assert max(variant.sheet_width_mm, variant.sheet_height_mm) <= Decimal("200")  # المهمة أعادت التحليل
