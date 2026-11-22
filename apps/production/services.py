@@ -7,18 +7,20 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
+from apps.catalog import domain as catalog_domain
 from apps.catalog.models import Calibration, Material
 from apps.core.columns import column_length
 from apps.core.selectors import audit_entries
 from apps.core.services import REQUEST_ID_LENGTH as AUDIT_REQUEST_ID_LENGTH
 from apps.core.services import record_audit
+from apps.orders import selectors as order_selectors
 from apps.orders import services as order_services
 from apps.orders.models import Order, OrderItem
 
 from . import domain
 from .models import Placement, RunLog, Sheet
 
-MARGIN_MM = Decimal("5")
+MARGIN_MM = catalog_domain.SHEET_MARGIN_MM
 GAP_MM = Decimal("3")
 MAX_DURATION_S = 7 * 24 * 60 * 60
 # مفتاح التخطيط يُقصّ ليتّسع العمود للاحقة إعادة التسليم (`+<رقم اللوح>`، حتى 20 خانة).
@@ -37,6 +39,25 @@ def _tenths(value: Decimal) -> int:
 
 def _mm(value: int) -> Decimal:
     return Decimal(value) / 10
+
+
+def _piece_sizes(item: OrderItem, material: Material) -> list[tuple[int, int]]:
+    """مقاسات قطع نسخة واحدة بعُشر المليمتر. لوح التصميم الجاهز يُدار ربع دورة إن لم يسعه اللوح إلا مدوَّرًا:
+
+    الترصيف لا يدوّر، وملف التصميم يُقصّ في أي اتجاه. قطعة المصمِّم تبقى باتجاهها.
+    """
+    sizes = order_selectors.piece_sizes(item)
+    if item.design_variant_id is None:
+        return [(_tenths(width), _tenths(height)) for width, height in sizes]
+    usable_width = material.sheet_width_mm - 2 * MARGIN_MM
+    usable_height = material.sheet_height_mm - 2 * MARGIN_MM
+    out = []
+    for width, height in sizes:
+        upright = width <= usable_width and height <= usable_height
+        if not upright and height <= usable_width and width <= usable_height:
+            width, height = height, width
+        out.append((_tenths(width), _tenths(height)))
+    return out
 
 
 @transaction.atomic
@@ -63,16 +84,19 @@ def plan_sheets(*, material_id: int, actor=None, request_id: str = "") -> list[S
     items = list(
         OrderItem.objects.select_for_update(of=("self",))
         .filter(material=material, order_id__in=order_ids)
-        .select_related("template")
+        .select_related("template", "design_variant")
         .prefetch_related("placements")
         .order_by("id")
     )
     pieces: list[domain.Piece] = []
     for item in items:
         done = {placement.copy_index for placement in item.placements.all()}
-        width, height = _tenths(item.template.width_mm), _tenths(item.template.height_mm)
+        # `copy_index` يعدّ القطع كلها: النسخة ذات الأجزاء تأخذ فهرسًا لكل جزء من كل نسخة.
+        sizes = _piece_sizes(item, material)
         pieces.extend(
-            domain.Piece((item.pk, copy), width, height) for copy in range(item.quantity) if copy not in done
+            domain.Piece((item.pk, index), *sizes[index % len(sizes)])
+            for index in range(item.quantity * len(sizes))
+            if index not in done
         )
     previous = _planned_by(target=target, request_id=request_id)
     if not pieces:

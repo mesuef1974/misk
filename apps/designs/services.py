@@ -15,7 +15,9 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from apps.catalog import domain as catalog_domain
+from apps.catalog import services as catalog_services
 from apps.catalog.models import Calibration, Material, ProductTemplate
+from apps.core.columns import column_length
 from apps.core.services import record_audit
 
 from . import estimate as estimating
@@ -274,9 +276,7 @@ def analyze_variant(variant: DesignVariant, *, actor=None) -> DesignVariant:
     variant.analysis_error, variant.analyzed_at = "", timezone.now()
     variant.save()
 
-    _replace_ready_cut(
-        variant, [(f"{PurePosixPath(name).stem}-ready.svg", ready) for name, _, ready in parts]
-    )
+    _replace_ready_cut(variant, [(selectors.ready_cut_name(name), ready) for name, _, ready in parts])
     refresh_estimates(variant)
     record_audit(action="designs.variant.analyze", actor=actor, target=f"variant:{variant.pk}")
     return variant
@@ -285,6 +285,8 @@ def analyze_variant(variant: DesignVariant, *, actor=None) -> DesignVariant:
 def fit_to_sheet(variant: DesignVariant, *, actor=None) -> Decimal | None:
     """يضبط نسبة البيع على أكبر نسبة صحيحة يسع بها أصغرُ لوح فعّال من مادة النسخة مقاسَ ملفها، بالتدوير.
 
+    اللوح هنا ما يبقى بعد هامش الترصيف (`SHEET_MARGIN_MM` من كل جهة): ما يملؤه إلى حافته لا يُرصَّف.
+
     يضبط النسبة وحدها؛ المقاس والتقدير وملف القص يتبعونها عند التحليل التالي. `None` = يسعه اللوح بمقاس الملف.
     """
     if not variant.sheet_width_mm or not variant.sheet_height_mm:
@@ -292,8 +294,9 @@ def fit_to_sheet(variant: DesignVariant, *, actor=None) -> Decimal | None:
     # المقاس المحفوظ مقاس البيع المطبَّق في آخر تحليل، لا مقاس الملف.
     applied = Decimal(str(variant.analysis.get("sale_scale_percent", 100))) / 100
     short, long = sorted((variant.sheet_width_mm / applied, variant.sheet_height_mm / applied))
+    margins = 2 * catalog_domain.SHEET_MARGIN_MM
     sheets = [
-        sorted((m.sheet_width_mm, m.sheet_height_mm))
+        sorted((m.sheet_width_mm - margins, m.sheet_height_mm - margins))
         for m in Material.objects.filter(is_active=True, kind__in=selectors.material_kinds(variant))
     ]
     if not sheets:
@@ -377,6 +380,7 @@ def refresh_estimates(variant: DesignVariant) -> list[VariantEstimate]:
                 "material_area_mm2": result.material_area_mm2,
                 "material_cost": result.material_cost,
                 "calibration_ids": result.calibration_ids,
+                # ما لا يسعه لوح المادة لا يُرصَّف، فلا سعر له عليها ولو كان السعر يدويًّا.
                 "price": pricing.price(
                     rates=rates,
                     material_cost=result.material_cost,
@@ -384,7 +388,9 @@ def refresh_estimates(variant: DesignVariant) -> list[VariantEstimate]:
                     complete=result.complete,
                     assembly_fee=variant.design.assembly_fee,
                     manual_price=variant.manual_price,
-                ),
+                )
+                if selectors.fits_material(variant, material)
+                else None,
             },
         )
         kept.append(row)
@@ -422,6 +428,45 @@ def link_template(design: Design, template: ProductTemplate, *, actor=None) -> D
     design.save(update_fields=["product_template", "updated_at"])
     record_audit(action="designs.design.link_template", actor=actor, target=f"design:{design.pk}")
     return design
+
+
+def _sale_template_fields(design: Design) -> dict:
+    variants = [variant for variant in design.variants.all() if selectors.is_sellable(variant)]
+    sizes = [size for variant in variants for size in selectors.piece_sizes(variant)]
+    kinds = {kind for variant in variants for kind in selectors.material_kinds(variant)}
+    return {
+        "name": design.name_ar[: column_length(ProductTemplate, "name")],
+        "name_en": design.name_en[: column_length(ProductTemplate, "name_en")],
+        "description": design.description,
+        "description_en": design.description_en,
+        "generator": catalog_domain.READY_DESIGN_GENERATOR,
+        # مقاس أكبر قطعة؛ الترصيف والزمن يقرآن النسخة نفسها لا هذا.
+        "width_mm": max([width for width, _ in sizes] + [Decimal("1")]),
+        "height_mm": max([height for _, height in sizes] + [Decimal("1")]),
+        "material_kinds": sorted(kinds & set(Material.Kind.values)),
+        "param_schema": [],
+        "base_price": Decimal("0"),  # السعر من تقدير النسخة؛ الصفر يمنع طلبه من مسار المصمِّم
+        "is_active": True,
+    }
+
+
+@transaction.atomic
+def ensure_sale_template(design: Design, *, actor=None) -> ProductTemplate:
+    """قالب البيع للتصميم المنشور: به يبقى اسم البند والتتبّع والإشعارات والدفع كما هي لكل بند.
+
+    idempotent: القالب المطابق يُعاد كما هو، وما تغيّر اسمه أو مقاسه يُحدَّث على المفتاح نفسه.
+    """
+    fields = _sale_template_fields(design)
+    current = design.product_template
+    if current is not None and all(getattr(current, name) == value for name, value in fields.items()):
+        return current
+    schema = fields.pop("param_schema")
+    template = catalog_services.upsert_template(
+        slug=f"design-{design.pk}", param_schema=schema, actor=actor, **fields
+    )
+    if design.product_template_id != template.pk:
+        link_template(design, template, actor=actor)
+    return template
 
 
 def reprice_all() -> int:
@@ -462,6 +507,7 @@ def list_design(design: Design, *, actor=None) -> Design:
     """ينشر التصميم في المتجر. إعادته لا تغيّر شيئًا، والرابط يثبت بعد أول نشر."""
     if missing := selectors.listing_blockers(design):
         raise DesignError("لا يُنشر، ينقصه: " + "، ".join(missing))
+    ensure_sale_template(design, actor=actor)
     if design.is_listed:
         return design
     design.slug = design.slug or _unique_slug(design)

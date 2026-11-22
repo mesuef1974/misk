@@ -2,7 +2,7 @@ import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import { errorMessage } from "@/api/client";
 import { currentLocale } from "@/i18n";
-import { storeService, type Cart, type CartItemDraft } from "@/services/store";
+import { storeService, type Cart, type CartItemDraft, type DesignItemDraft } from "@/services/store";
 
 /** سلة الضيف: حالتها في الخادم (معرّفها في كوكي الجلسة)، وهذا المخزن نسخة العرض منها. */
 export const useCartStore = defineStore("cart", () => {
@@ -41,6 +41,10 @@ export const useCartStore = defineStore("cart", () => {
     cart.value = await storeService.addItem(draft, currentLocale());
   }
 
+  async function addDesign(draft: DesignItemDraft): Promise<void> {
+    cart.value = await storeService.addDesignItem(draft, currentLocale());
+  }
+
   async function setQuantity(itemId: number, quantity: number): Promise<void> {
     cart.value = await storeService.setQuantity(itemId, quantity, currentLocale());
   }
@@ -49,5 +53,5 @@ export const useCartStore = defineStore("cart", () => {
     cart.value = await storeService.removeItem(itemId, currentLocale());
   }
 
-  return { cart, loading, loadError, count, locked, load, ensureLoaded, add, setQuantity, remove };
+  return { cart, loading, loadError, count, locked, load, ensureLoaded, add, addDesign, setQuantity, remove };
 });

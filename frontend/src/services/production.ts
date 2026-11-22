@@ -7,6 +7,10 @@ export interface Placement {
   order_id: number;
   customer_name: string;
   template_slug: string;
+  /** اسم القالب من الخادم، ورمز نسخة التصميم الجاهز وملف قصّه (فارغان لقطعة المصمِّم). */
+  name: string;
+  variant_code: string;
+  cut_file_url: string;
   copy_index: number;
   x_mm: string;
   y_mm: string;

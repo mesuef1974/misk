@@ -2,7 +2,7 @@ import { ApiError } from "@/api/client";
 import type { ParamField } from "@/domain/params";
 import { setLocale } from "@/i18n";
 import type { FieldLimit } from "@/services/store";
-import { formatDay, initialParams, limitFor, localized, safePaymentUrl, storeError, svgDataUrl, textLength } from "./store";
+import { formatDay, initialParams, limitFor, lineName, localized, safePaymentUrl, storeError, svgDataUrl, textLength } from "./store";
 
 describe("أخطاء مسارات المتجر", () => {
   it("يقرأ الرمز وأخطاء الحقول والاقتراحات وأقرب جاهزية", () => {
@@ -79,6 +79,14 @@ describe("عرض المتجر", () => {
     await setLocale("en");
     expect(localized("لوحة", "Plaque")).toBe("Plaque");
     expect(localized("لوحة", "")).toBe("لوحة");
+  });
+
+  it("بند التصميم الجاهز يُسمّى برمز نسخته، وبند المصمِّم باسمه وحده", async () => {
+    const box = { name: "علبة هدية", name_en: "Gift box" };
+    expect(lineName({ ...box, variant_code: "02" })).toBe("علبة هدية (نسخة 02)");
+    expect(lineName({ ...box, variant_code: "" })).toBe("علبة هدية");
+    await setLocale("en");
+    expect(lineName({ ...box, variant_code: "02" })).toBe("Gift box (version 02)");
   });
 
   it("اليوم باسمه وبأرقام لاتينية في اللغتين", async () => {

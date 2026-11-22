@@ -2,10 +2,29 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
+
+# مفتاح قوالب «تصاميم جاهزة»: ملف ثابت لا يرسمه المصمِّم، فلا يظهر في قوائم القوالب ولا يُطلب منها.
+READY_DESIGN_GENERATOR = "ready_design"
+# هامش اللوح في الترصيف. ما لا يسعه اللوح بعده لا يُرصَّف، فلا يُسعَّر ولا يُباع.
+SHEET_MARGIN_MM = Decimal("5")
 
 FIELD_TYPES = {"text", "int", "bool", "choice"}
 DEFAULT_TEXT_LENGTH = 200
+
+
+def fits_sheet(
+    width: Decimal,
+    height: Decimal,
+    sheet_width: Decimal,
+    sheet_height: Decimal,
+    margin: Decimal = SHEET_MARGIN_MM,
+) -> bool:
+    """القطعة يسعها اللوح بعد هامشه، بمقاسها أو مدوَّرةً ربع دورة."""
+    short, long = sorted((width, height))
+    usable_short, usable_long = sorted((sheet_width - 2 * margin, sheet_height - 2 * margin))
+    return 0 < short <= usable_short and long <= usable_long
 
 
 class ParamError(ValueError):

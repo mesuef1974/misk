@@ -91,6 +91,9 @@ export interface CartItem {
   template_slug: string;
   name: string;
   name_en: string;
+  /** بند تصميم جاهز: رابط صفحته ورمز نسخته؛ بند المصمِّم بلا رابط ورمزه فارغ. */
+  design_slug: string | null;
+  variant_code: string;
   material_id: number;
   material_name: string;
   material_name_en: string;
@@ -156,9 +159,19 @@ export interface TrackStep {
   at: string | null;
 }
 
+/** تصميم جاهز يُضاف بلا معاينة: الإقرار بالمقاس والخامة، والسعر من الخادم. */
+export interface DesignItemDraft {
+  design_slug: string;
+  variant_code: string;
+  material_id: number;
+  quantity: number;
+  acknowledged: boolean;
+}
+
 export interface TrackItem {
   name: string;
   name_en: string;
+  variant_code: string;
   material_name: string;
   material_name_en: string;
   quantity: number;
@@ -204,6 +217,8 @@ export const storeService = {
 
   cart: () => api.get<Cart>("/api/store/cart"),
   addItem: (draft: CartItemDraft, lang: Locale) => api.post<Cart>("/api/store/cart/items", { ...draft, lang }),
+  addDesignItem: (draft: DesignItemDraft, lang: Locale) =>
+    api.post<Cart>("/api/store/cart/design-items", { ...draft, lang }),
   setQuantity: (itemId: number, quantity: number, lang: Locale) =>
     api.patch<Cart>(`/api/store/cart/items/${itemId}`, { quantity, lang }),
   removeItem: (itemId: number, lang: Locale) => api.del<Cart>(`/api/store/cart/items/${itemId}?lang=${lang}`),

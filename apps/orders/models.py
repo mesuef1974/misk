@@ -14,6 +14,7 @@ from django.db import models
 
 from apps.catalog.models import Material, ProductTemplate
 from apps.core.models import TimeStampedModel
+from apps.designs.models import DesignVariant
 
 
 class Customer(TimeStampedModel):
@@ -102,6 +103,10 @@ class OrderItem(TimeStampedModel):
     svg_sha256 = models.CharField(max_length=64, blank=True)
     # أسباب المراجعة اليدوية من المصمِّم (نص ديني، لفظ الجلالة في اسم). غير فارغ = الطلب يمر بطابور المراجعة.
     review_reasons = models.JSONField(default=list, blank=True)
+    # بند «تصميم جاهز»: السعر من تقدير النسخة لحظة الإضافة، والمقاس والزمن منها لا من القالب.
+    design_variant = models.ForeignKey(
+        DesignVariant, on_delete=models.PROTECT, null=True, blank=True, related_name="order_items"
+    )
 
     class Meta:
         verbose_name = "بند طلب"

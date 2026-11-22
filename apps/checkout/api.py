@@ -59,6 +59,10 @@ MESSAGES: store.Messages = {
         "أقِرّ بمراجعة النص والتهجئة قبل الإضافة",
         "Please confirm you reviewed the text and spelling",
     ),
+    "size_not_acknowledged": (
+        "أقِرّ بمراجعة المقاس والخامة قبل الإضافة",
+        "Please confirm you reviewed the size and material",
+    ),
     "preview_mismatch": (
         "المعاينة تغيّرت؛ حدّثها ثم أضف المنتج",
         "The preview is out of date; refresh it and add the product again",
@@ -102,6 +106,15 @@ class CartItemIn(Schema):
     lang: Lang = "ar"
 
 
+class DesignItemIn(Schema):
+    design_slug: str = Field(min_length=1, max_length=100)
+    variant_code: str = Field("", max_length=16)
+    material_id: int
+    quantity: int = Field(1, ge=1, le=cart.MAX_LINE_QUANTITY)
+    acknowledged: bool = False  # «راجعتُ المقاس والخامة»
+    lang: Lang = "ar"
+
+
 class QuantityIn(Schema):
     quantity: int = Field(ge=1, le=cart.MAX_LINE_QUANTITY)
     lang: Lang = "ar"
@@ -112,6 +125,8 @@ class CartItemOut(Schema):
     template_slug: str
     name: str
     name_en: str
+    design_slug: str | None  # بند تصميم جاهز: رابط صفحته؛ وإلا فهو من المصمِّم
+    variant_code: str
     material_id: int
     material_name: str
     material_name_en: str
@@ -217,6 +232,24 @@ def add_item(request: HttpRequest, payload: CartItemIn):
         return Status(422, _error("invalid", lang, fields=fields))
     except designer.DesignRejectedError as exc:
         return Status(422, _error("invalid", lang, fields=exc.errors, suggestions=exc.suggestions))
+    request.session[SESSION_KEY] = str(order.client_ref)
+    return Status(200, _view(request))
+
+
+@cart_router.post("/design-items", response={200: CartOut, **_CART_ERRORS})
+def add_design_item(request: HttpRequest, payload: DesignItemIn):
+    _require_csrf(request)
+    try:
+        order = cart.add_design_item(
+            cart_ref=_cart_ref(request),
+            design_slug=payload.design_slug,
+            variant_code=payload.variant_code,
+            material_id=payload.material_id,
+            quantity=payload.quantity,
+            acknowledged=payload.acknowledged,
+        )
+    except cart.CartError as exc:
+        return _cart_error(exc, payload.lang)
     request.session[SESSION_KEY] = str(order.client_ref)
     return Status(200, _view(request))
 

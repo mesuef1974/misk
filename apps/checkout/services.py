@@ -24,6 +24,7 @@ from apps.catalog import designer
 from apps.catalog import domain as catalog_domain
 from apps.core.columns import column_length
 from apps.core.services import record_audit
+from apps.designs import selectors as design_selectors
 from apps.fulfillment import selectors as fulfillment_selectors
 from apps.fulfillment import services as fulfillment_services
 from apps.fulfillment.models import DeliveryZone
@@ -129,6 +130,11 @@ def _recheck_items(order: Order) -> None:
     """القالب أو المعايرة أو قائمة الكلمات قد تتغير والسلة مفتوحة: ما لا يُرسم اليوم كما أُقرّ لا يُباع."""
     changed = []
     for item in order.items.select_related("template", "material"):
+        if item.design_variant_id is not None:
+            # تصميم جاهز: لا رسم يُعاد. يُباع ما دام منشورًا وسعره على مادته هو ما أُضيف به.
+            if design_selectors.current_price(item.design_variant_id, item.material_id) != item.unit_price:
+                changed.append(item.pk)
+            continue
         try:
             if not item.template.is_active:
                 raise designer.DesignUnavailableError("not_found")

@@ -98,11 +98,12 @@ def tracking_view(order: Order) -> dict[str, Any]:
         fulfillment=order.fulfillment,
         reviewed=order.status == Status.UNDER_REVIEW or Status.UNDER_REVIEW in reached,
     )
-    rows = list(order.items.select_related("template", "material"))
+    rows = list(order.items.select_related("template", "material", "design_variant"))
     items = [
         {
             "name": item.template.name,
             "name_en": item.template.name_en,
+            "variant_code": item.design_variant.code if item.design_variant else "",
             "material_name": item.material.name,
             "material_name_en": item.material.name_en,
             "quantity": item.quantity,

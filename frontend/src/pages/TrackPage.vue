@@ -5,7 +5,7 @@ import { useI18n } from "vue-i18n";
 import { ApiError } from "@/api/client";
 import LiveNotice from "@/components/LiveNotice.vue";
 import { formatMoney } from "@/domain/orders";
-import { formatDay, formatMoment, formatTime, localized, storeError } from "@/domain/store";
+import { formatDay, formatMoment, formatTime, lineName, localized, storeError } from "@/domain/store";
 import { currentLocale } from "@/i18n";
 import { storeService, type PickupSlots, type Tracking } from "@/services/store";
 
@@ -158,7 +158,7 @@ watch([() => props.token, locale], load, { immediate: true });
       <ul class="lines">
         <li v-for="(item, index) in order.items" :key="index">
           <span>
-            {{ t("store.track.itemLine", { name: localized(item.name, item.name_en), material: localized(item.material_name, item.material_name_en) }) }}
+            {{ t("store.track.itemLine", { name: lineName(item), material: localized(item.material_name, item.material_name_en) }) }}
             <span class="muted num">× {{ item.quantity }}</span>
           </span>
           <span class="num">{{ formatMoney(item.line_total) }}</span>
