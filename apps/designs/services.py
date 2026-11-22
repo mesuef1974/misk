@@ -12,14 +12,23 @@ from pathlib import Path, PurePosixPath
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone
+from django.utils.text import slugify
 
 from apps.catalog import domain as catalog_domain
 from apps.catalog.models import Calibration, Material, ProductTemplate
 from apps.core.services import record_audit
 
 from . import estimate as estimating
-from . import scan, svg
-from .models import Design, DesignFile, DesignPack, DesignSource, DesignVariant, VariantEstimate
+from . import pricing, scan, selectors, svg
+from .models import (
+    Design,
+    DesignFile,
+    DesignPack,
+    DesignPricing,
+    DesignSource,
+    DesignVariant,
+    VariantEstimate,
+)
 
 ALTERNATE_FORMATS = {".dxf", ".eps", ".pdf", ".cdr", ".ai", ".dwg"}
 IMAGE_FORMATS = {".png", ".jpg", ".jpeg", ".webp"}
@@ -302,7 +311,8 @@ def _settings_for(material: Material) -> dict[str, estimating.Setting]:
 
 @transaction.atomic
 def refresh_estimates(variant: DesignVariant) -> list[VariantEstimate]:
-    """تقدير لكل مادة فعّالة من نوع تطلبه النسخة؛ ما لم يعد ينطبق يُحذف."""
+    """تقدير وسعر لكل مادة فعّالة من نوع تطلبه النسخة؛ ما لم يعد ينطبق يُحذف."""
+    rates = selectors.rates()
     operations = variant.analysis.get("operations", {})
     kinds = {g["material"] for g in operations.values()}
     areas = variant.analysis.get("outer_area_mm2", {})
@@ -328,6 +338,14 @@ def refresh_estimates(variant: DesignVariant) -> list[VariantEstimate]:
                 "material_area_mm2": result.material_area_mm2,
                 "material_cost": result.material_cost,
                 "calibration_ids": result.calibration_ids,
+                "price": pricing.price(
+                    rates=rates,
+                    material_cost=result.material_cost,
+                    total_seconds=result.total_seconds,
+                    complete=result.complete,
+                    assembly_fee=variant.design.assembly_fee,
+                    manual_price=variant.manual_price,
+                ),
             },
         )
         kept.append(row)
@@ -364,4 +382,61 @@ def link_template(design: Design, template: ProductTemplate, *, actor=None) -> D
     design.product_template = template
     design.save(update_fields=["product_template", "updated_at"])
     record_audit(action="designs.design.link_template", actor=actor, target=f"design:{design.pk}")
+    return design
+
+
+def reprice_all() -> int:
+    """يعيد تقدير كل نسخة محلَّلة وسعرها. يُستدعى من مهمة خلفية: يمرّ على الفهرس كله."""
+    count = 0
+    variants = DesignVariant.objects.filter(analyzed_at__isnull=False, analysis_error="")
+    for variant in variants.select_related("design").iterator():
+        refresh_estimates(variant)
+        count += 1
+    return count
+
+
+@transaction.atomic
+def save_pricing(
+    *, minute_rate: Decimal, margin_pct: Decimal, round_to: Decimal = Decimal("5"), actor=None
+) -> DesignPricing:
+    """الصف الوحيد لإعداد التسعير. الأسعار تُعاد بعده بـ `tasks.reprice_all_async`."""
+    row, _ = DesignPricing.objects.update_or_create(
+        pk=1, defaults={"minute_rate": minute_rate, "margin_pct": margin_pct, "round_to": round_to}
+    )
+    record_audit(
+        action="designs.pricing.save",
+        actor=actor,
+        target="pricing:1",
+        payload={"minute_rate": str(minute_rate), "margin_pct": str(margin_pct), "round_to": str(round_to)},
+    )
+    return row
+
+
+def _unique_slug(design: Design) -> str:
+    base = slugify(design.name_en)[:70] or f"design-{design.pk}"
+    taken = Design.objects.filter(slug=base).exclude(pk=design.pk).exists()
+    return f"{base}-{design.pk}" if taken else base
+
+
+@transaction.atomic
+def list_design(design: Design, *, actor=None) -> Design:
+    """ينشر التصميم في المتجر. إعادته لا تغيّر شيئًا، والرابط يثبت بعد أول نشر."""
+    if missing := selectors.listing_blockers(design):
+        raise DesignError("لا يُنشر، ينقصه: " + "، ".join(missing))
+    if design.is_listed:
+        return design
+    design.slug = design.slug or _unique_slug(design)
+    design.is_listed = True
+    design.save(update_fields=["slug", "is_listed", "updated_at"])
+    record_audit(action="designs.design.list", actor=actor, target=f"design:{design.pk}")
+    return design
+
+
+@transaction.atomic
+def unlist_design(design: Design, *, actor=None) -> Design:
+    if not design.is_listed:
+        return design
+    design.is_listed = False
+    design.save(update_fields=["is_listed", "updated_at"])
+    record_audit(action="designs.design.unlist", actor=actor, target=f"design:{design.pk}")
     return design

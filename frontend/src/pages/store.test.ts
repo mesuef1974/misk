@@ -10,6 +10,7 @@ import {
   type Cart,
   type CartItem,
   type Preview,
+  type StoreDesignDetail,
   type StoreTemplate,
   type StoreTemplateDetail,
   type Tracking,
@@ -17,6 +18,8 @@ import {
 import { useCartStore } from "@/stores/cart";
 import CartPage from "./CartPage.vue";
 import CheckoutPage from "./CheckoutPage.vue";
+import DesignPage from "./DesignPage.vue";
+import DesignsPage from "./DesignsPage.vue";
 import PolicyPage from "./PolicyPage.vue";
 import ProductPage from "./ProductPage.vue";
 import ProductsPage from "./ProductsPage.vue";
@@ -29,6 +32,8 @@ vi.mock("@/services/store", () => ({
     template: vi.fn(),
     limits: vi.fn(),
     preview: vi.fn(),
+    designs: vi.fn(),
+    design: vi.fn(),
     cart: vi.fn(),
     addItem: vi.fn(),
     setQuantity: vi.fn(),
@@ -44,6 +49,30 @@ vi.mock("@/services/store", () => ({
 vi.mock("@/services/session", () => ({
   sessionService: { me: vi.fn(), login: vi.fn(), logout: vi.fn() },
 }));
+
+const giftBox: StoreDesignDetail = {
+  slug: "gift-box",
+  name: "علبة هدية",
+  name_en: "Gift box",
+  category: "هدايا",
+  occasion: "",
+  price_from: "25.00",
+  image: { url: "/api/store/designs/gift-box/images/7", alt: "علبة هدية من الخشب", alt_en: "A wooden gift box" },
+  description: "علبة خشب بغطاء",
+  description_en: "A wooden box with a lid",
+  assembled_width_mm: "150.0",
+  assembled_height_mm: "70.0",
+  assembled_depth_mm: "150.0",
+  images: [{ url: "/api/store/designs/gift-box/images/7", alt: "علبة هدية من الخشب", alt_en: "A wooden gift box" }],
+  variants: [
+    {
+      code: "3mm",
+      sheet_width_mm: "600.0",
+      sheet_height_mm: "400.0",
+      offers: [{ material: { id: 4, name: "بتولا", name_en: "Birch", kind: "wood", thickness_mm: "3.00" }, price: "25.00" }],
+    },
+  ],
+};
 
 const plaque: StoreTemplate = {
   slug: "name-plaque",
@@ -149,6 +178,8 @@ beforeEach(() => {
     { field: "الاسم", when: { الخط: "المراي" }, max_chars: 4, min_text_height_mm: 3.4 },
   ]);
   vi.mocked(storeService.preview).mockResolvedValue(rendered);
+  vi.mocked(storeService.designs).mockResolvedValue([giftBox]);
+  vi.mocked(storeService.design).mockResolvedValue(giftBox);
   vi.mocked(storeService.cart).mockResolvedValue(cartOf());
   vi.mocked(storeService.zones).mockResolvedValue([{ id: 2, name: "اللؤلؤة", name_en: "The Pearl", fee: "25.00" }]);
   vi.mocked(sessionService.me).mockReset().mockResolvedValue(null);
@@ -205,6 +236,38 @@ describe("صفحة المنتجات", () => {
     await button(page, "إعادة المحاولة").trigger("click");
     await flushPromises();
     expect(page.find("a.product-card").exists()).toBe(true);
+    page.unmount();
+  });
+});
+
+describe("التصاميم الجاهزة", () => {
+  it("القائمة تعرض الصورة والاسم والسعر الذي يبدأ منه ورابط الصفحة", async () => {
+    const page = await show(DesignsPage, "/designs");
+    const card = page.get("a.design-card");
+    expect(card.text()).toContain("علبة هدية");
+    expect(card.text()).toContain("من 25.00 ر.ق");
+    expect(card.attributes("href")).toBe("/designs/gift-box");
+    expect(card.get("img").attributes()).toMatchObject({ src: "/api/store/designs/gift-box/images/7", alt: "علبة هدية من الخشب" });
+    page.unmount();
+  });
+
+  it("صفحة التصميم تعرض المقاس وسعر كل خامة، والطلب معطَّل", async () => {
+    const page = await show(DesignPage, "/en/designs/gift-box", { slug: "gift-box" });
+    expect(storeService.design).toHaveBeenCalledWith("gift-box", "en");
+    expect(page.get("h1").text()).toBe("Gift box");
+    expect(page.text()).toContain("150 × 70 × 150 mm");
+    expect(page.get(".offers li").text()).toContain("Birch, 3 mm");
+    expect(page.get(".offers li").text()).toContain("25.00");
+    expect(button(page, "Ordering opens soon").attributes("disabled")).toBeDefined();
+    expect(page.get(".page-head a").attributes("href")).toBe("/en/designs");
+    page.unmount();
+  });
+
+  it("تصميم غير منشور يعرض رسالة الخادم", async () => {
+    vi.mocked(storeService.design).mockRejectedValue(rejection(404, { code: "not_found", detail: "التصميم غير موجود" }));
+    const page = await show(DesignPage, "/designs/none", { slug: "none" });
+    expect(page.get('[role="alert"]').text()).toBe("التصميم غير موجود");
+    expect(page.find(".design").exists()).toBe(false);
     page.unmount();
   });
 });
@@ -582,7 +645,7 @@ describe("تنقّل القشرة", () => {
   it("الزائر يرى المتجر وعدد ما في سلته وروابط الثقة، لا أقسام الورشة", async () => {
     const app = await shell("/products");
     const main = app.get("nav.main");
-    expect(main.findAll("a").map((link) => link.attributes("href"))).toEqual(["/products", "/cart"]);
+    expect(main.findAll("a").map((link) => link.attributes("href"))).toEqual(["/products", "/designs", "/cart"]);
     expect(main.get(".count").text()).toBe("2");
     expect(useCartStore().count).toBe(2);
     expect(app.get("nav.store-foot").findAll("a").map((link) => link.attributes("href"))).toEqual(["/faq", "/returns", "/privacy", "/terms"]);

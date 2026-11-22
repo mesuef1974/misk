@@ -93,12 +93,17 @@ async function logout(): Promise<void> {
       </nav>
       <nav v-else class="main" :aria-label="t('nav.sections')">
         <RouterLink class="nav-item" :to="{ name: 'products' }"><BrandIcon name="favors" /><span>{{ t("store.nav.products") }}</span></RouterLink>
+        <RouterLink class="nav-item" :to="{ name: 'designs' }"><BrandIcon name="wood" /><span>{{ t("store.nav.designs") }}</span></RouterLink>
         <RouterLink class="nav-item" :to="{ name: 'cart' }" :aria-label="cart.count ? t('store.nav.cartCount', { count: cart.count }) : undefined">
           <BrandIcon name="order" /><span>{{ t("store.nav.cart") }}</span><span v-if="cart.count" class="pill num count" aria-hidden="true">{{ cart.count }}</span>
         </RouterLink>
       </nav>
       <nav class="aux" :aria-label="t('nav.account')">
-        <RouterLink v-if="session.isStaff" class="nav-item" :to="{ name: 'products' }">{{ t("store.nav.store") }}</RouterLink>
+        <!-- المشرف لا يرى قائمة المتجر، فهذان رابطاه إلى ما يراه الزائر. -->
+        <template v-if="session.isStaff">
+          <RouterLink class="nav-item" :to="{ name: 'products' }">{{ t("store.nav.store") }}</RouterLink>
+          <RouterLink class="nav-item" :to="{ name: 'designs' }">{{ t("store.nav.designs") }}</RouterLink>
+        </template>
         <RouterLink class="nav-item" :to="{ name: 'about' }">{{ t("nav.about") }}</RouterLink>
         <!-- اسم اللغة الأخرى بلغتها هي (lang عليه)، ووجهته الصفحة نفسها بتلك اللغة. -->
         <RouterLink v-if="alternate" class="nav-item" :to="alternate.to" :lang="alternate.lang" :aria-label="t('language.switchLabel')">
