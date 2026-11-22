@@ -33,6 +33,7 @@ from .models import (
 ALTERNATE_FORMATS = {".dxf", ".eps", ".pdf", ".cdr", ".ai", ".dwg"}
 IMAGE_FORMATS = {".png", ".jpg", ".jpeg", ".webp"}
 IGNORED = {"desktop.ini", "thumbs.db", ".ds_store"}
+MIN_SALE_SCALE_PERCENT = Decimal("10")
 _INSTRUCTIONS = re.compile(r"size\s*check|lightburn", re.IGNORECASE)
 _SIZE_REFERENCE = re.compile(r"size\s*preview", re.IGNORECASE)
 # قرار المالك 2026-11-21: مصدر عام لحزم البائعين المتفرقين، والملف أحادي اللون فيه قص على الخشب.
@@ -231,6 +232,8 @@ def analyze_variant(variant: DesignVariant, *, actor=None) -> DesignVariant:
     إعادته تستبدل نتيجته السابقة.
     """
     color_key = variant.design.source.color_key
+    percent = float(variant.sale_scale_percent or 100)
+    k = percent / 100
     rows = list(variant.files.filter(role=DesignFile.Role.ORIGINAL).exclude(file="").order_by("name", "pk"))
     try:
         if not rows:
@@ -238,7 +241,9 @@ def analyze_variant(variant: DesignVariant, *, actor=None) -> DesignVariant:
         parts = []
         for row in rows:
             data = _read(row)
-            parts.append((row.name, svg.analyze(data, color_key), svg.ready_to_cut(data, color_key)))
+            parts.append(
+                (row.name, svg.scaled(svg.analyze(data, color_key), k), svg.ready_to_cut(data, color_key, k))
+            )
     except (svg.SvgError, DesignError) as exc:
         variant.analysis, variant.analysis_error, variant.analyzed_at = {}, str(exc), timezone.now()
         variant.save(update_fields=["analysis", "analysis_error", "analyzed_at", "updated_at"])
@@ -262,6 +267,8 @@ def analyze_variant(variant: DesignVariant, *, actor=None) -> DesignVariant:
             groups.setdefault(_geometry(a), []).append(name)
         if same := [names for names in groups.values() if len(names) > 1]:
             variant.analysis["same_geometry"] = same
+    if k != 1:
+        variant.analysis["sale_scale_percent"] = percent
     variant.sheet_width_mm = Decimal(str(round(combined.width_mm, 1)))
     variant.sheet_height_mm = Decimal(str(round(combined.height_mm, 1)))
     variant.analysis_error, variant.analyzed_at = "", timezone.now()
@@ -273,6 +280,38 @@ def analyze_variant(variant: DesignVariant, *, actor=None) -> DesignVariant:
     refresh_estimates(variant)
     record_audit(action="designs.variant.analyze", actor=actor, target=f"variant:{variant.pk}")
     return variant
+
+
+def fit_to_sheet(variant: DesignVariant, *, actor=None) -> Decimal | None:
+    """يضبط نسبة البيع على أكبر نسبة صحيحة يسع بها أصغرُ لوح فعّال من مادة النسخة مقاسَ ملفها، بالتدوير.
+
+    يضبط النسبة وحدها؛ المقاس والتقدير وملف القص يتبعونها عند التحليل التالي. `None` = يسعه اللوح بمقاس الملف.
+    """
+    if not variant.sheet_width_mm or not variant.sheet_height_mm:
+        raise DesignError("النسخة بلا مقاس: حلِّلها أولًا")
+    # المقاس المحفوظ مقاس البيع المطبَّق في آخر تحليل، لا مقاس الملف.
+    applied = Decimal(str(variant.analysis.get("sale_scale_percent", 100))) / 100
+    short, long = sorted((variant.sheet_width_mm / applied, variant.sheet_height_mm / applied))
+    sheets = [
+        sorted((m.sheet_width_mm, m.sheet_height_mm))
+        for m in Material.objects.filter(is_active=True, kind__in=selectors.material_kinds(variant))
+    ]
+    if not sheets:
+        raise DesignError("لا مادة فعّالة من نوع مادة النسخة")
+    ratio = min(min(sheet[0] / short, sheet[1] / long) for sheet in sheets)
+    percent = None if ratio >= 1 else Decimal(int(ratio * 100))
+    if percent is not None and percent < MIN_SALE_SCALE_PERCENT:
+        raise DesignError(f"التصغير المطلوب دون {MIN_SALE_SCALE_PERCENT}٪ من مقاس الملف")
+    if percent != variant.sale_scale_percent:
+        variant.sale_scale_percent = percent
+        variant.save(update_fields=["sale_scale_percent", "updated_at"])
+        record_audit(
+            action="designs.variant.sale_scale",
+            actor=actor,
+            target=f"variant:{variant.pk}",
+            payload={"percent": None if percent is None else str(percent)},
+        )
+    return percent
 
 
 def _replace_ready_cut(variant: DesignVariant, readies: list[tuple[str, bytes]]) -> None:
