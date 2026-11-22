@@ -99,7 +99,11 @@ async function logout(): Promise<void> {
         </RouterLink>
       </nav>
       <nav class="aux" :aria-label="t('nav.account')">
-        <RouterLink v-if="session.isStaff" class="nav-item" :to="{ name: 'products' }">{{ t("store.nav.store") }}</RouterLink>
+        <!-- المشرف لا يرى قائمة المتجر، فهذان رابطاه إلى ما يراه الزائر. -->
+        <template v-if="session.isStaff">
+          <RouterLink class="nav-item" :to="{ name: 'products' }">{{ t("store.nav.store") }}</RouterLink>
+          <RouterLink class="nav-item" :to="{ name: 'designs' }">{{ t("store.nav.designs") }}</RouterLink>
+        </template>
         <RouterLink class="nav-item" :to="{ name: 'about' }">{{ t("nav.about") }}</RouterLink>
         <!-- اسم اللغة الأخرى بلغتها هي (lang عليه)، ووجهته الصفحة نفسها بتلك اللغة. -->
         <RouterLink v-if="alternate" class="nav-item" :to="alternate.to" :lang="alternate.lang" :aria-label="t('language.switchLabel')">
