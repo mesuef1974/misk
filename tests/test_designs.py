@@ -690,6 +690,27 @@ def test_showcase_image_thumbnail_is_webp_cached_and_revalidates(client, box_des
     assert Image.open(BytesIO(client.get(f"{url}?w=960").content)).width == 960
 
 
+def test_warm_images_fills_the_cache_for_listed_designs_only(box_design):
+    from io import BytesIO
+
+    from django.core.cache import cache
+    from PIL import Image
+
+    from apps.designs import tasks, thumbnails
+
+    _make_listable(box_design)
+    image = box_design.images.get()
+    big = BytesIO()
+    Image.new("RGB", (1200, 900), "#c8a165").save(big, "PNG")
+    image.file.save("big.png", SimpleUploadedFile("big.png", big.getvalue()), save=True)
+    cache.clear()
+    assert tasks.warm_images_async() == 0  # غير منشور: لا يُسخَّن
+    services.list_design(box_design)
+    assert tasks.warm_images_async() == 2 and tasks.warm_images_async() == 0  # idempotent
+    kind, body = thumbnails.cached(image, 480)
+    assert kind == "image/webp" and Image.open(BytesIO(body)).width == 480
+
+
 def test_unlisting_or_losing_the_license_hides_the_design(client, box_design):
     _make_listable(box_design)
     services.list_design(box_design)

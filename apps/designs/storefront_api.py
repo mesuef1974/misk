@@ -6,13 +6,10 @@
 
 from __future__ import annotations
 
-import hashlib
 from decimal import Decimal
-from io import BytesIO
 from pathlib import PurePosixPath
 from typing import Any
 
-from django.core.cache import cache
 from django.http import FileResponse, HttpRequest, HttpResponse
 from django.http.response import HttpResponseBase
 from ninja import Router, Schema, Status
@@ -20,16 +17,15 @@ from ninja import Router, Schema, Status
 from apps.catalog.storefront_api import ErrorOut, Lang, StoreMaterialOut, error_body
 from apps.core.throttling import ClientRateThrottle
 
-from . import selectors
+from . import selectors, thumbnails
 from .models import Design, DesignVariant
+from .thumbnails import THUMB_WIDTHS
 from .validators import IMAGE_TYPES
 
 router = Router(tags=["المتجر"], auth=None, throttle=[ClientRateThrottle("store-designs", "240/m")])
 
 MESSAGES = {"not_found": ("التصميم غير موجود", "Design not found")}
 IMAGE_CACHE = "public, max-age=604800"
-THUMB_WIDTHS = (480, 960)  # البطاقة والمعرض؛ نسخة الواجهة في DesignCard.vue وDesignPage.vue
-THUMB_TTL = 7 * 24 * 3600
 
 
 class DesignImageOut(Schema):
@@ -145,24 +141,6 @@ def design_detail(request: HttpRequest, slug: str, lang: Lang = "ar"):
     )
 
 
-def _thumbnail(data: bytes, width: int) -> bytes | None:
-    """نسخة WebP بعرض `width` على الأكثر، أو None إن لم تلزم (الأصل أصغر) أو تعذّر القراءة."""
-    try:
-        from PIL import Image  # noqa: PLC0415 — اعتمادية اختيارية: بدونها يُخدَم الأصل
-
-        with Image.open(BytesIO(data)) as source:
-            if source.width <= width:
-                return None
-            source.thumbnail((width, width * 4))
-            out = BytesIO()
-            source.convert("RGBA" if "A" in source.getbands() else "RGB").save(
-                out, "WEBP", quality=82, method=4
-            )
-            return out.getvalue()
-    except Exception:  # noqa: BLE001 — صورة تالفة أو Pillow غائبة: الأصل أنفع من خطأ
-        return None
-
-
 def _cached(response: HttpResponseBase, etag: str) -> HttpResponseBase:
     response.headers["ETag"] = etag
     response.headers["Cache-Control"] = IMAGE_CACHE
@@ -185,23 +163,15 @@ def design_image(request: HttpRequest, slug: str, image_id: int, w: int = 0):
     if content_type is None:
         return missing
     width = w if w in THUMB_WIDTHS else 0
-    key = f"{image.pk}:{image.file.name}:{width}"
-    etag = f'"{hashlib.sha256(key.encode()).hexdigest()[:20]}"'
-    if request.headers.get("If-None-Match") == etag:
-        return _cached(HttpResponse(status=304), etag)
-    cache_key = f"design-image:{hashlib.sha256(key.encode()).hexdigest()}"
-    hit = cache.get(cache_key) if width else None
-    if hit is not None:
-        return _cached(HttpResponse(hit[1], content_type=hit[0]), etag)
-    try:
-        handle = image.file.open("rb")
-    except OSError:
-        return missing
+    tag = thumbnails.etag(image, width)
+    if request.headers.get("If-None-Match") == tag:
+        return _cached(HttpResponse(status=304), tag)
     if not width:
-        return _cached(FileResponse(handle, content_type=content_type), etag)
-    with handle:
-        data = handle.read()
-    thumb = _thumbnail(data, width)
-    body, kind = (thumb, "image/webp") if thumb else (data, content_type)
-    cache.set(cache_key, (kind, body), THUMB_TTL)
-    return _cached(HttpResponse(body, content_type=kind), etag)
+        try:
+            return _cached(FileResponse(image.file.open("rb"), content_type=content_type), tag)
+        except OSError:
+            return missing
+    value = thumbnails.cached(image, width) or thumbnails.render(image, width)
+    if value is None:
+        return missing
+    return _cached(HttpResponse(value[1], content_type=value[0]), tag)
