@@ -47,6 +47,7 @@ const store: Messages["store"] = {
     loading: "Loading design…",
     back: "All designs",
     size: "Assembled size",
+    pieceSize: "Piece size",
     sizeValue: "{width} × {height} mm",
     sizeValueDeep: "{width} × {height} × {depth} mm",
     options: "Versions and materials",
