@@ -10,6 +10,7 @@ from decimal import Decimal
 from pathlib import PurePosixPath
 from typing import Any
 
+from django.core.cache import cache
 from django.http import FileResponse, HttpRequest, HttpResponse
 from django.http.response import HttpResponseBase
 from ninja import Router, Schema, Status
@@ -148,6 +149,21 @@ def _cached(response: HttpResponseBase, etag: str) -> HttpResponseBase:
     return response
 
 
+def _defer_heavy(design_id: int, image, content_type: str, missing):
+    """صورة أثقل من أن تُصغَّر في الويب: تُصغَّر في العامل، ويُخدَم الأصل الآن بتخزين قصير لا يثبّت الثقيل في المتصفحات."""
+    from . import tasks  # noqa: PLC0415 — tasks يستورد هذه الوحدة عبر thumbnails
+
+    if cache.add(f"design-image-warming:{design_id}", 1, 300):  # مهمة واحدة كل 5 دقائق لا عاصفة طلبات
+        tasks.warm_images_async.delay(design_id)
+    try:
+        response = FileResponse(image.file.open("rb"), content_type=content_type)
+    except OSError:
+        return missing
+    response.headers["Cache-Control"] = "public, max-age=60"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 @router.get("/{slug}/images/{image_id}", response={404: ErrorOut})
 def design_image(request: HttpRequest, slug: str, image_id: int, w: int = 0):
     """صورة عرض لتصميم منشور وحده. النوع من الامتداد الذي فُحص توقيعه عند الرفع، لا من تخمين المتصفح.
@@ -171,7 +187,10 @@ def design_image(request: HttpRequest, slug: str, image_id: int, w: int = 0):
             return _cached(FileResponse(image.file.open("rb"), content_type=content_type), tag)
         except OSError:
             return missing
-    value = thumbnails.cached(image, width) or thumbnails.render(image, width)
+    try:
+        value = thumbnails.cached(image, width) or thumbnails.render(image, width, on_demand=True)
+    except thumbnails.TooHeavy:
+        return _defer_heavy(image.design_id, image, content_type, missing)
     if value is None:
         return missing
     return _cached(HttpResponse(value[1], content_type=value[0]), tag)
