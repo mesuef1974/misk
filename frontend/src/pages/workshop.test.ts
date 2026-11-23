@@ -93,7 +93,7 @@ const order: Order = {
   items: [{ id: 10, template_slug: "card", name: "بطاقة", variant_code: "", material_id: 7, params: { name: "سارة" }, quantity: 2, unit_price: "25.00" }],
 };
 
-const piece = { order_item_id: 10, order_id: 4, customer_name: "أم سارة", template_slug: "card", name: "بطاقة", variant_code: "", cut_file_url: "" };
+const piece = { order_item_id: 10, order_id: 4, customer_name: "أم سارة", template_slug: "card", name: "بطاقة", variant_code: "", cut_file_url: "", personalization: [] };
 
 function sheet(overrides: Partial<Sheet> = {}): Sheet {
   return {

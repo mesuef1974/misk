@@ -51,6 +51,7 @@ export interface PieceGroup {
   variantCode: string;
   /** ملفات القص الجاهزة لقطع المجموعة، بلا تكرار: ملف لكل جزء من نسخة التصميم. */
   cutFiles: string[];
+  personalization: { label: string; value: string }[];
   copies: number;
 }
 
@@ -71,6 +72,7 @@ export function groupPlacements(sheet: Sheet): PieceGroup[] {
         name: placement.name,
         variantCode: placement.variant_code,
         cutFiles: placement.cut_file_url ? [placement.cut_file_url] : [],
+        personalization: placement.personalization ?? [],
         copies: 1,
       });
     }

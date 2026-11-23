@@ -131,9 +131,20 @@ def _recheck_items(order: Order) -> None:
     changed = []
     for item in order.items.select_related("template", "material"):
         if item.design_variant_id is not None:
-            # تصميم جاهز: لا رسم يُعاد. يُباع ما دام منشورًا وسعره على مادته هو ما أُضيف به.
+            # تصميم جاهز: لا رسم يُعاد. يُباع ما دام منشورًا وسعره على مادته هو ما أُضيف به، ونص تخصيصه
+            # ما زال يوافق حقوله وسياسة النص (قائمة الكلمات قد تتغير والسلة مفتوحة).
             if design_selectors.current_price(item.design_variant_id, item.material_id) != item.unit_price:
                 changed.append(item.pk)
+                continue
+            try:
+                cleaned = catalog_domain.clean_params(item.template.param_schema, item.params)
+                reasons = designer.check_text(item.template, cleaned)
+            except (designer.DesignRejectedError, catalog_domain.ParamError):
+                changed.append(item.pk)
+                continue
+            if reasons != item.review_reasons:
+                item.review_reasons = reasons
+                item.save(update_fields=["review_reasons", "updated_at"])
             continue
         try:
             if not item.template.is_active:

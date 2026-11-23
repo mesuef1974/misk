@@ -66,6 +66,8 @@ export interface StoreDesignDetail extends StoreDesign {
   assembled_depth_mm: string | null;
   images: StoreDesignImage[];
   variants: StoreDesignVariant[];
+  /** حقول التخصيص (نص تضيفه الورشة يدويًّا)؛ فارغة لما لا يُخصَّص. */
+  fields: ParamField[];
 }
 
 /** حدّ حقل نص عند تركيبة من حقول الاختيار (`when`): تقديري للعدّاد، والحكم في المعاينة. */
@@ -166,6 +168,8 @@ export interface DesignItemDraft {
   material_id: number;
   quantity: number;
   acknowledged: boolean;
+  /** نص التخصيص بحسب `StoreDesignDetail.fields`؛ كائن فارغ لتصميم بلا تخصيص. */
+  params: ParamValues;
 }
 
 export interface TrackItem {

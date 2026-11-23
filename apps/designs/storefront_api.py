@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from pathlib import PurePosixPath
+from typing import Any
 
 from django.http import FileResponse, HttpRequest
 from ninja import Router, Schema, Status
@@ -61,6 +62,7 @@ class DesignDetailOut(DesignOut):
     assembled_depth_mm: Decimal | None
     images: list[DesignImageOut]
     variants: list[DesignVariantOut]
+    fields: list[dict[str, Any]]  # حقول التخصيص بمخطط القالب؛ فارغة لما لا يُخصَّص
 
 
 def _images(design: Design) -> list[dict]:
@@ -131,6 +133,7 @@ def design_detail(request: HttpRequest, slug: str, lang: Lang = "ar"):
             "assembled_height_mm": design.assembled_height_mm,
             "assembled_depth_mm": design.assembled_depth_mm,
             "images": _images(design),
+            "fields": design.personalization,
             "variants": [_variant_out(entry["variant"], entry["offers"]) for entry in variants],
         },
     )

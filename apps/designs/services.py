@@ -411,6 +411,9 @@ def approve(design: Design, *, actor=None) -> Design:
         design.personalization = catalog_domain.validate_schema(design.personalization)
     except catalog_domain.ParamError as exc:
         raise DesignError(f"حقول التخصيص: {exc}") from exc
+    # التخصيص حقل نص واحد تضعه الورشة يدويًّا (docs/ready-designs-plan.md): لا اختيارات ولا أعداد.
+    if len(design.personalization) > 1 or any(field["type"] != "text" for field in design.personalization):
+        raise DesignError("حقول التخصيص: حقل نص واحد على الأكثر")
     design.status = Design.Status.APPROVED
     design.save(update_fields=["personalization", "status", "updated_at"])
     record_audit(action="designs.design.approve", actor=actor, target=f"design:{design.pk}")
@@ -444,7 +447,7 @@ def _sale_template_fields(design: Design) -> dict:
         "width_mm": max([width for width, _ in sizes] + [Decimal("1")]),
         "height_mm": max([height for _, height in sizes] + [Decimal("1")]),
         "material_kinds": sorted(kinds & set(Material.Kind.values)),
-        "param_schema": [],
+        "param_schema": design.personalization,  # حقول التخصيص؛ فارغة لما لا يُخصَّص
         "base_price": Decimal("0"),  # السعر من تقدير النسخة؛ الصفر يمنع طلبه من مسار المصمِّم
         "is_active": True,
     }
