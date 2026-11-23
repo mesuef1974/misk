@@ -690,6 +690,35 @@ def test_showcase_image_thumbnail_is_webp_cached_and_revalidates(client, box_des
     assert Image.open(BytesIO(client.get(f"{url}?w=960").content)).width == 960
 
 
+def test_heavy_image_is_deferred_to_the_worker_and_served_original_meanwhile(client, box_design, monkeypatch):
+    from io import BytesIO
+
+    from django.core.cache import cache
+    from PIL import Image
+
+    from apps.designs import thumbnails
+
+    _make_listable(box_design)
+    services.list_design(box_design)
+    image = box_design.images.get()
+    big = BytesIO()
+    Image.new("RGB", (1200, 900), "#c8a165").save(big, "PNG")
+    image.file.save("big.png", SimpleUploadedFile("big.png", big.getvalue()), save=True)
+    cache.clear()
+    monkeypatch.setattr(thumbnails, "ON_DEMAND_MAX_PIXELS", 1000)  # كل صورة هنا ثقيلة
+    url = client.get("/api/store/designs/gift-box").json()["images"][0]["url"]
+
+    first = client.get(f"{url}?w=480")
+    # الأصل الآن بتخزين قصير؛ والمهمة (متزامنة في الاختبار) سخّنت المصغّر بلا قيد.
+    assert (
+        b"".join(first.streaming_content) == big.getvalue() and first["Cache-Control"] == "public, max-age=60"
+    )
+    assert "ETag" not in first
+    assert thumbnails.cached(image, 480)[0] == "image/webp"
+    second = client.get(f"{url}?w=480")
+    assert second["Content-Type"] == "image/webp"
+
+
 def test_warm_images_fills_the_cache_for_listed_designs_only(box_design):
     from io import BytesIO
 
