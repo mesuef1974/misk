@@ -666,6 +666,30 @@ def test_store_designs_show_price_and_image_but_no_design_file(client, box_desig
     assert client.get(f"/media/{original.file.name}").status_code == 404
 
 
+def test_showcase_image_thumbnail_is_webp_cached_and_revalidates(client, box_design):
+    from io import BytesIO
+
+    from PIL import Image
+
+    _make_listable(box_design)
+    services.list_design(box_design)
+    image = box_design.images.get()
+    big = BytesIO()
+    Image.new("RGB", (1200, 900), "#c8a165").save(big, "PNG")
+    image.file.save("big.png", SimpleUploadedFile("big.png", big.getvalue()), save=True)
+    url = client.get("/api/store/designs/gift-box").json()["images"][0]["url"]
+
+    thumb = client.get(f"{url}?w=480")
+    assert thumb.status_code == 200 and thumb["Content-Type"] == "image/webp"
+    assert Image.open(BytesIO(thumb.content)).width == 480 and len(thumb.content) < len(big.getvalue())
+    assert client.get(f"{url}?w=480").content == thumb.content  # من الذاكرة المؤقتة
+    assert client.get(f"{url}?w=480", HTTP_IF_NONE_MATCH=thumb["ETag"]).status_code == 304
+    # عرض خارج القائمة المسموحة يُخدَم أصلًا لا مصغّرًا بمقاس اختياري.
+    original = client.get(f"{url}?w=7")
+    assert b"".join(original.streaming_content) == big.getvalue() and original["Content-Type"] == "image/png"
+    assert Image.open(BytesIO(client.get(f"{url}?w=960").content)).width == 960
+
+
 def test_unlisting_or_losing_the_license_hides_the_design(client, box_design):
     _make_listable(box_design)
     services.list_design(box_design)

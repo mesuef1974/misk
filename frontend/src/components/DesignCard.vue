@@ -14,7 +14,7 @@ const { t } = useI18n();
     <span class="shot">
       <img
         v-if="design.image"
-        :src="design.image.url"
+        :src="`${design.image.url}?w=480`"
         :alt="localized(design.image.alt, design.image.alt_en)"
         loading="lazy"
         decoding="async"
