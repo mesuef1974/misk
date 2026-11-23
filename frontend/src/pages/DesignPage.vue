@@ -151,12 +151,12 @@ watch(locale, () => loadError.value && load());
   <div v-else-if="detail" class="design">
     <section class="gallery">
       <div class="shot">
-        <img v-if="image" :src="image.url" :alt="localized(image.alt, image.alt_en)" />
+        <img v-if="image" :src="`${image.url}?w=960`" :alt="localized(image.alt, image.alt_en)" />
       </div>
       <ul v-if="detail.images.length > 1" class="thumbs">
         <li v-for="(item, index) in detail.images" :key="item.url">
           <button type="button" :class="{ active: index === shown }" :aria-pressed="index === shown" @click="shown = index">
-            <img :src="item.url" :alt="localized(item.alt, item.alt_en)" loading="lazy" />
+            <img :src="`${item.url}?w=480`" :alt="localized(item.alt, item.alt_en)" loading="lazy" />
           </button>
         </li>
       </ul>

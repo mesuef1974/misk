@@ -13,3 +13,5 @@ celery[redis]>=5.4
 uharfbuzz>=0.45
 python-bidi>=0.6
 shapely>=2.0
+# مصغّرات صور عرض التصاميم الجاهزة (apps/designs/storefront_api.py)
+Pillow>=11.0

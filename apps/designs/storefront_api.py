@@ -6,11 +6,15 @@
 
 from __future__ import annotations
 
+import hashlib
 from decimal import Decimal
+from io import BytesIO
 from pathlib import PurePosixPath
 from typing import Any
 
-from django.http import FileResponse, HttpRequest
+from django.core.cache import cache
+from django.http import FileResponse, HttpRequest, HttpResponse
+from django.http.response import HttpResponseBase
 from ninja import Router, Schema, Status
 
 from apps.catalog.storefront_api import ErrorOut, Lang, StoreMaterialOut, error_body
@@ -23,7 +27,9 @@ from .validators import IMAGE_TYPES
 router = Router(tags=["المتجر"], auth=None, throttle=[ClientRateThrottle("store-designs", "240/m")])
 
 MESSAGES = {"not_found": ("التصميم غير موجود", "Design not found")}
-IMAGE_CACHE = "public, max-age=86400"
+IMAGE_CACHE = "public, max-age=604800"
+THUMB_WIDTHS = (480, 960)  # البطاقة والمعرض؛ نسخة الواجهة في DesignCard.vue وDesignPage.vue
+THUMB_TTL = 7 * 24 * 3600
 
 
 class DesignImageOut(Schema):
@@ -139,9 +145,37 @@ def design_detail(request: HttpRequest, slug: str, lang: Lang = "ar"):
     )
 
 
+def _thumbnail(data: bytes, width: int) -> bytes | None:
+    """نسخة WebP بعرض `width` على الأكثر، أو None إن لم تلزم (الأصل أصغر) أو تعذّر القراءة."""
+    try:
+        from PIL import Image  # noqa: PLC0415 — اعتمادية اختيارية: بدونها يُخدَم الأصل
+
+        with Image.open(BytesIO(data)) as source:
+            if source.width <= width:
+                return None
+            source.thumbnail((width, width * 4))
+            out = BytesIO()
+            source.convert("RGBA" if "A" in source.getbands() else "RGB").save(
+                out, "WEBP", quality=82, method=4
+            )
+            return out.getvalue()
+    except Exception:  # noqa: BLE001 — صورة تالفة أو Pillow غائبة: الأصل أنفع من خطأ
+        return None
+
+
+def _cached(response: HttpResponseBase, etag: str) -> HttpResponseBase:
+    response.headers["ETag"] = etag
+    response.headers["Cache-Control"] = IMAGE_CACHE
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 @router.get("/{slug}/images/{image_id}", response={404: ErrorOut})
-def design_image(request: HttpRequest, slug: str, image_id: int):
-    """صورة عرض لتصميم منشور وحده. النوع من الامتداد الذي فُحص توقيعه عند الرفع، لا من تخمين المتصفح."""
+def design_image(request: HttpRequest, slug: str, image_id: int, w: int = 0):
+    """صورة عرض لتصميم منشور وحده. النوع من الامتداد الذي فُحص توقيعه عند الرفع، لا من تخمين المتصفح.
+
+    `w` عرض مصغّر من القائمة المسموحة (يُخزَّن في الذاكرة المؤقتة ويُخدَم WebP)؛ وبلا `w` الأصل.
+    الـETag من اسم الملف والعرض، فتعود 304 بلا لمس المخزن."""
     missing = Status(404, error_body("not_found", "ar", messages=MESSAGES))
     design = selectors.listed_designs().filter(slug=slug).first()
     image = next((row for row in design.images.all() if row.pk == image_id), None) if design else None
@@ -150,11 +184,24 @@ def design_image(request: HttpRequest, slug: str, image_id: int):
     content_type = IMAGE_TYPES.get(PurePosixPath(image.file.name or "").suffix.lower())
     if content_type is None:
         return missing
+    width = w if w in THUMB_WIDTHS else 0
+    key = f"{image.pk}:{image.file.name}:{width}"
+    etag = f'"{hashlib.sha256(key.encode()).hexdigest()[:20]}"'
+    if request.headers.get("If-None-Match") == etag:
+        return _cached(HttpResponse(status=304), etag)
+    cache_key = f"design-image:{hashlib.sha256(key.encode()).hexdigest()}"
+    hit = cache.get(cache_key) if width else None
+    if hit is not None:
+        return _cached(HttpResponse(hit[1], content_type=hit[0]), etag)
     try:
         handle = image.file.open("rb")
     except OSError:
         return missing
-    response = FileResponse(handle, content_type=content_type)
-    response.headers["Cache-Control"] = IMAGE_CACHE
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    return response
+    if not width:
+        return _cached(FileResponse(handle, content_type=content_type), etag)
+    with handle:
+        data = handle.read()
+    thumb = _thumbnail(data, width)
+    body, kind = (thumb, "image/webp") if thumb else (data, content_type)
+    cache.set(cache_key, (kind, body), THUMB_TTL)
+    return _cached(HttpResponse(body, content_type=kind), etag)

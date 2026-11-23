@@ -251,7 +251,7 @@ describe("التصاميم الجاهزة", () => {
     expect(card.text()).toContain("علبة هدية");
     expect(card.text()).toContain("من 25.00 ر.ق");
     expect(card.attributes("href")).toBe("/designs/gift-box");
-    expect(card.get("img").attributes()).toMatchObject({ src: "/api/store/designs/gift-box/images/7", alt: "علبة هدية من الخشب" });
+    expect(card.get("img").attributes()).toMatchObject({ src: "/api/store/designs/gift-box/images/7?w=480", alt: "علبة هدية من الخشب" });
     page.unmount();
   });
 
