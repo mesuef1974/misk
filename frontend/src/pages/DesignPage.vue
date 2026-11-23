@@ -173,7 +173,7 @@ watch(locale, () => loadError.value && load());
         <div role="radiogroup" aria-labelledby="options-title" class="variants">
           <div v-for="variant in detail.variants" :key="variant.code" class="variant">
             <h3 v-if="detail.variants.length > 1 && variant.code">{{ t("store.design.variant", { code: variant.code }) }}</h3>
-            <p v-if="variantSize(variant)" class="hint num">{{ t("store.design.size") }}: {{ variantSize(variant) }}</p>
+            <p v-if="variantSize(variant)" class="hint num">{{ t("store.design.pieceSize") }}: {{ variantSize(variant) }}</p>
             <ul class="offers">
               <li v-for="offer in variant.offers" :key="offer.material.id">
                 <label class="check">

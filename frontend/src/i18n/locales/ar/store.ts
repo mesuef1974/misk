@@ -48,6 +48,7 @@ export default {
     loading: "يحمّل التصميم…",
     back: "كل التصاميم",
     size: "المقاس بعد التجميع",
+    pieceSize: "مقاس القطعة",
     sizeValue: "{width} × {height} مم",
     sizeValueDeep: "{width} × {height} × {depth} مم",
     options: "النسخ والخامات",
