@@ -120,10 +120,13 @@ def add_design_item(
     material_id: int,
     quantity: int,
     acknowledged: bool,
+    params: dict[str, Any] | None = None,
 ) -> Order:
     """يضيف تصميمًا جاهزًا: لا معاينة ولا بصمة معاينة، والإقرار إقرار بالمقاس والخامة.
 
     السعر من تقدير النسخة على المادة لحظة الإضافة، والبصمة بصمة ملف النسخة. يُرفض ما ليس منشورًا أو بلا سعر.
+    `params` نص التخصيص إن كان للتصميم حقول (`Design.personalization`): يُفحص بسياسة النص نفسها ويُحفظ على البند،
+    وتضعه الورشة يدويًّا في الملف قبل القص؛ ما يستدعي مراجعة يقف به الطلب في الطابور.
     """
     if not acknowledged:
         raise CartError("size_not_acknowledged")
@@ -136,15 +139,19 @@ def add_design_item(
     if price is None:  # العرض لا يحمل إلا ما له سعر؛ الفحص للنوع
         raise CartError("not_for_sale")
     template = design_services.ensure_sale_template(design)
+    cleaned = catalog_domain.clean_params(template.param_schema, params or {})
+    reasons = designer.check_text(template, cleaned)
     order = _open(cart_ref)
     OrderItem.objects.create(
         order=order,
         template=template,
         material=offer.material,
         design_variant=variant,
+        params=cleaned,
         quantity=quantity,
         unit_price=price,
         svg_sha256=variant.svg_sha256,
+        review_reasons=reasons,
     )
     return order
 

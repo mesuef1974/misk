@@ -279,6 +279,9 @@ async function scrap(sheetId: number): Promise<void> {
           <a v-for="(url, index) in group.cutFiles" :key="url" :href="url" target="_blank" rel="noopener">
             {{ group.cutFiles.length > 1 ? t("production.sheet.cutFilePart", { part: index + 1 }) : t("production.sheet.cutFile") }}
           </a>
+          <span v-for="item in group.personalization" :key="item.label" class="personal">
+            {{ item.label }}: <bdi dir="auto">{{ item.value }}</bdi>
+          </span>
           <RouterLink :to="{ name: 'order-detail', params: { id: group.orderId } }">
             {{ t("production.sheet.order", { id: group.orderId }) }}
           </RouterLink>
@@ -352,4 +355,5 @@ async function scrap(sheetId: number): Promise<void> {
 .runs li.is-ok { border-inline-start-color: var(--accent); }
 .runs li.is-failed { border-inline-start-color: var(--risk); }
 .retry { margin-inline-start: 12px; }
+.personal { font-weight: 600; }
 </style>

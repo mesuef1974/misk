@@ -123,7 +123,7 @@ def limits(template: ProductTemplate, material: Material) -> list[FieldLimit]:
     return result
 
 
-def _policy(template: ProductTemplate, params: dict[str, Any]) -> list[str]:
+def check_text(template: ProductTemplate, params: dict[str, Any]) -> list[str]:
     """يرفض المسيء والديني على قالب لا يسمح؛ ويعيد أسباب المراجعة اليدوية لما يُقبل."""
     errors: dict[str, str] = {}
     reasons: set[str] = set()
@@ -189,7 +189,7 @@ def render(template: ProductTemplate, material: Material, params: Any) -> Render
     cleaned = domain.clean_params(template.param_schema, params)
     if errors := gen.check(cleaned):
         raise DesignRejectedError(errors)
-    reasons = _policy(template, cleaned)
+    reasons = check_text(template, cleaned)
 
     # الرسم نفسه يُحفظ دقائق: العميل يعيد الطلب نفسه وهو يقلّب الخيارات، والناتج حتمي من هذه المدخلات.
     fingerprint = json.dumps(

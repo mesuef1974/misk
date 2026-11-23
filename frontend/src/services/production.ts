@@ -11,6 +11,8 @@ export interface Placement {
   name: string;
   variant_code: string;
   cut_file_url: string;
+  /** نص التخصيص الذي تضعه الورشة يدويًّا في الملف قبل القص (تصميم جاهز فقط). */
+  personalization: { label: string; value: string }[];
   copy_index: number;
   x_mm: string;
   y_mm: string;

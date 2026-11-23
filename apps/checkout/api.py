@@ -112,6 +112,7 @@ class DesignItemIn(Schema):
     material_id: int
     quantity: int = Field(1, ge=1, le=cart.MAX_LINE_QUANTITY)
     acknowledged: bool = False  # «راجعتُ المقاس والخامة»
+    params: dict[str, Any] = {}  # نص التخصيص إن كان للتصميم حقول
     lang: Lang = "ar"
 
 
@@ -247,9 +248,15 @@ def add_design_item(request: HttpRequest, payload: DesignItemIn):
             material_id=payload.material_id,
             quantity=payload.quantity,
             acknowledged=payload.acknowledged,
+            params=payload.params,
         )
     except cart.CartError as exc:
         return _cart_error(exc, payload.lang)
+    except catalog_domain.ParamError as exc:
+        fields = {name: store.param_code(message) for name, message in exc.errors.items()}
+        return Status(422, _error("invalid", payload.lang, fields=fields))
+    except designer.DesignRejectedError as exc:
+        return Status(422, _error("invalid", payload.lang, fields=exc.errors, suggestions=exc.suggestions))
     request.session[SESSION_KEY] = str(order.client_ref)
     return Status(200, _view(request))
 

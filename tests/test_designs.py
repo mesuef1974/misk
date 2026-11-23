@@ -1004,3 +1004,84 @@ def test_multi_part_variant_plans_a_piece_per_part_and_rotates_to_fit(client, li
     order_services.transition(order_id=order.pk, to_status="in_production", actor=staff_user)
     with pytest.raises(order_services.OrderError, match="4"):  # بقيت أربع قطع لم تُقصّ
         order_services.transition(order_id=order.pk, to_status="ready", actor=staff_user)
+
+
+# ---- التخصيص: نص تضيفه الورشة يدويًّا قبل القص (الطلب 3) ----
+
+NAME_FIELD = [{"name": "name", "type": "text", "label": "الاسم", "label_en": "Name", "max_length": 12}]
+
+
+@pytest.fixture
+def personal(box_design):
+    box_design.personalization = NAME_FIELD
+    box_design.save()
+    _make_listable(box_design)
+    return services.list_design(box_design)
+
+
+def test_approval_allows_one_text_field_only(box_design):
+    for bad in (
+        NAME_FIELD + [{"name": "line2", "type": "text", "label": "س", "label_en": "L"}],
+        [{"name": "size", "type": "int", "label": "حجم", "label_en": "Size"}],
+    ):
+        box_design.personalization = bad
+        with pytest.raises(services.DesignError, match="حقل نص واحد"):
+            services.approve(box_design)
+
+
+def test_detail_exposes_fields_and_template_carries_the_schema(client, personal, wood):
+    assert client.get(f"/api/store/designs/{personal.slug}").json()["fields"] == NAME_FIELD
+    assert personal.product_template.param_schema == NAME_FIELD
+
+
+def test_personalized_design_keeps_text_on_the_item_and_shows_it_to_the_workshop(
+    client, personal, wood, pay, staff_user
+):
+    missing = _add_design(client, personal, wood)
+    assert missing.status_code == 422 and missing.json()["fields"]["name"]["code"] == "required"
+    long = _add_design(client, personal, wood, params={"name": "ا" * 13})
+    assert long.status_code == 422 and long.json()["fields"]["name"]["code"] == "too_long"
+    unknown = _add_design(client, personal, wood, params={"name": "سارة", "x": "y"})
+    assert unknown.status_code == 422 and unknown.json()["fields"]["x"]["code"] == "unknown_field"
+    assert not Order.objects.filter(items__isnull=False).exists()
+
+    cart = _add_design(client, personal, wood, params={"name": "  سارة   علي "}).json()
+    (line,) = cart["items"]
+    assert line["params"] == {"name": "سارة علي"} and not line["needs_review"]
+
+    assert _checkout(client).status_code == 200
+    payment = Payment.objects.latest("id")
+    assert _notify(client, pay, payment).json()["outcome"] == "confirmed"
+    production_services.plan_sheets(material_id=wood.pk)
+    client.force_login(staff_user)
+    (row,) = client.get("/api/production/sheets").json()["items"]
+    assert row["placements"][0]["personalization"] == [{"label": "الاسم", "value": "سارة علي"}]
+
+
+def test_design_without_fields_takes_no_text_and_shows_none(client, listed, wood):
+    assert client.get(f"/api/store/designs/{listed.slug}").json()["fields"] == []
+    refused = _add_design(client, listed, wood, params={"name": "سارة"})
+    assert refused.status_code == 422 and refused.json()["fields"]["name"]["code"] == "unknown_field"
+
+
+def test_offensive_text_is_refused_and_divine_name_waits_in_the_review_queue(client, personal, wood, pay):
+    offensive = _add_design(client, personal, wood, params={"name": "كلب"})
+    assert offensive.status_code == 422 and offensive.json()["fields"]["name"]["code"] == "offensive"
+    religious = _add_design(client, personal, wood, params={"name": "بسم الله"})
+    assert (
+        religious.status_code == 422 and religious.json()["fields"]["name"]["code"] == "religious_not_allowed"
+    )
+
+    cart = _add_design(client, personal, wood, params={"name": "عبدالله"}).json()
+    (line,) = cart["items"]
+    assert line["needs_review"] and cart["needs_review"]
+    assert Order.objects.get().items.get().review_reasons == ["divine_name"]
+
+
+def test_checkout_refuses_text_the_design_no_longer_accepts(client, personal, wood, pay):
+    assert _add_design(client, personal, wood, params={"name": "سارة"}).status_code == 200
+    personal.personalization = [{**NAME_FIELD[0], "max_length": 3}]
+    personal.save()
+    services.ensure_sale_template(personal)
+    changed = _checkout(client)
+    assert changed.status_code == 422 and changed.json()["code"] == "design_changed"

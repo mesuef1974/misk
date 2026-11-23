@@ -32,6 +32,7 @@ class PlacementOut(Schema):
     name: str
     variant_code: str  # غير فارغ لنسخة مسمّاة من تصميم جاهز
     cut_file_url: str  # ملف القص الجاهز لقطعة تصميم جاهز (للمشرفين)؛ فارغ لقطعة المصمِّم
+    personalization: list[dict[str, str]]  # نص التخصيص الذي تضعه الورشة يدويًّا في الملف قبل القص: label وvalue
     copy_index: int
     x_mm: Decimal
     y_mm: Decimal
@@ -58,6 +59,14 @@ class PlacementOut(Schema):
     def resolve_variant_code(obj) -> str:
         variant = obj.order_item.design_variant
         return variant.code if variant else ""
+
+    @staticmethod
+    def resolve_personalization(obj) -> list[dict[str, str]]:
+        item = obj.order_item
+        if item.design_variant_id is None:
+            return []
+        labels = {field["name"]: field.get("label") or field["name"] for field in item.template.param_schema}
+        return [{"label": labels.get(name, name), "value": str(value)} for name, value in item.params.items()]
 
     @staticmethod
     def resolve_cut_file_url(obj) -> str:

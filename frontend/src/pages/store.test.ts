@@ -65,6 +65,7 @@ const giftBox: StoreDesignDetail = {
   assembled_height_mm: "70.0",
   assembled_depth_mm: "150.0",
   images: [{ url: "/api/store/designs/gift-box/images/7", alt: "علبة هدية من الخشب", alt_en: "A wooden gift box" }],
+  fields: [],
   variants: [
     {
       code: "3mm",
@@ -277,10 +278,34 @@ describe("التصاميم الجاهزة", () => {
     await page.get("form").trigger("submit");
     await flushPromises();
     expect(storeService.addDesignItem).toHaveBeenCalledWith(
-      { design_slug: "gift-box", variant_code: "3mm", material_id: 4, quantity: 2, acknowledged: true },
+      { design_slug: "gift-box", variant_code: "3mm", material_id: 4, quantity: 2, acknowledged: true, params: {} },
       "ar",
     );
     expect(router.currentRoute.value.name).toBe("cart");
+    page.unmount();
+  });
+
+  it("تصميم بحقل تخصيص: النص مطلوب ويُرسل منظَّفًا، وتعديله يُسقط الإقرار، وخطأ الخادم يظهر بجانب الحقل", async () => {
+    const name = { name: "name", type: "text" as const, label: "الاسم", label_en: "Name", max_length: 10 };
+    vi.mocked(storeService.design).mockResolvedValue({ ...giftBox, fields: [name] });
+    vi.mocked(storeService.addDesignItem).mockRejectedValueOnce(
+      rejection(422, { code: "invalid", detail: "بعض الحقول غير صالحة", fields: { name: { code: "offensive", message: "لا نحفر هذا النص" } } }),
+    );
+    const page = await show(DesignPage, "/designs/gift-box", { slug: "gift-box" });
+    expect(page.get("fieldset legend").text()).toContain("اكتب ما يُضاف");
+    const ack = page.get('input[name="acknowledged"]');
+    await ack.setValue(true);
+    expect(button(page, "أضف إلى السلة").attributes("disabled")).toBeDefined(); // النص مطلوب
+
+    await page.get('input[name="name"]').setValue("  سارة   علي ");
+    await ack.setValue(true);
+    await page.get('input[name="name"]').setValue("سارة  ");
+    expect((ack.element as HTMLInputElement).checked).toBe(false);
+    await ack.setValue(true);
+    await page.get("form").trigger("submit");
+    await flushPromises();
+    expect(vi.mocked(storeService.addDesignItem).mock.calls[0][0]).toMatchObject({ params: { name: "سارة" } });
+    expect(page.get(".error").text()).toBe("لا نحفر هذا النص");
     page.unmount();
   });
 
