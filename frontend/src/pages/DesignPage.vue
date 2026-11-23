@@ -76,6 +76,11 @@ const size = computed(() => {
     ? t("store.design.sizeValueDeep", { ...named, depth: number(design.assembled_depth_mm) })
     : t("store.design.sizeValue", named);
 });
+// مقاس النسخة المباعة (قياس القطعة المقصوصة): يظهر لكل نسخة حتى لو لم يُدخَل مقاس التركيب للتصميم.
+const variantSize = (variant: { sheet_width_mm: string | null; sheet_height_mm: string | null }) =>
+  variant.sheet_width_mm && variant.sheet_height_mm
+    ? t("store.design.sizeValue", { width: number(variant.sheet_width_mm), height: number(variant.sheet_height_mm) })
+    : "";
 const image = computed(() => detail.value?.images[shown.value] ?? null);
 
 async function load(): Promise<void> {
@@ -168,6 +173,7 @@ watch(locale, () => loadError.value && load());
         <div role="radiogroup" aria-labelledby="options-title" class="variants">
           <div v-for="variant in detail.variants" :key="variant.code" class="variant">
             <h3 v-if="detail.variants.length > 1 && variant.code">{{ t("store.design.variant", { code: variant.code }) }}</h3>
+            <p v-if="variantSize(variant)" class="hint num">{{ t("store.design.size") }}: {{ variantSize(variant) }}</p>
             <ul class="offers">
               <li v-for="offer in variant.offers" :key="offer.material.id">
                 <label class="check">
