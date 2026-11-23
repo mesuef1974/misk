@@ -6,8 +6,8 @@ from celery import shared_task
 from django.contrib.auth import get_user_model
 from django.db import OperationalError
 
-from . import services
-from .models import DesignVariant
+from . import services, thumbnails
+from .models import DesignImage, DesignVariant
 
 
 @shared_task(
@@ -28,3 +28,14 @@ def analyze_variant_async(variant_id: int, actor_id: int | None = None) -> str:
 def reprice_all_async() -> int:
     """بعد تغيير إعداد التسعير أو أجرة تجميع أو سعر لوح. idempotent: الناتج من المدخلات القائمة وحدها."""
     return services.reprice_all()
+
+
+@shared_task(
+    name="designs.warm_images", autoretry_for=(OperationalError,), max_retries=3, default_retry_delay=10
+)
+def warm_images_async(design_id: int | None = None) -> int:
+    """يسخّن مصغّرات صور التصاميم المنشورة (أو تصميم واحد) في الذاكرة المؤقتة. idempotent."""
+    images = DesignImage.objects.filter(design__is_listed=True)
+    if design_id is not None:
+        images = images.filter(design_id=design_id)
+    return thumbnails.warm(images)
