@@ -33,11 +33,15 @@ def _source_tag(name: str | None) -> str:
     return f"{name}#{THUMB_VERSION}"
 
 
+def _source_of(tag: str) -> str:
+    """اسم الأصل من وسم البناء؛ الوسم بلا `#` من النسخة 1 (قبل THUMB_VERSION) وهو اسم الأصل نفسه."""
+    return tag.rpartition("#")[0] if "#" in tag else tag
+
+
 def is_current(image: DesignImage) -> bool:
     """المصغّرات كلها موجودة ومبنية من الأصل الحالي (بأي نسخة بناء): صالحة للخدمة."""
     return bool(
-        image.thumbs_for.rpartition("#")[0] == image.file.name
-        and all(thumb_field(image, w) for w in THUMB_WIDTHS)
+        _source_of(image.thumbs_for) == image.file.name and all(thumb_field(image, w) for w in THUMB_WIDTHS)
     )
 
 

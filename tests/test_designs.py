@@ -796,7 +796,8 @@ def test_adaptive_quality_shrinks_detailed_images_and_old_version_thumbs_still_s
     # مصغّرات بنسخة بناء أقدم تبقى صالحة للخدمة ويعاد بناؤها بالأمر.
     assert thumbnails.build(image)
     image.refresh_from_db()
-    type(image).objects.filter(pk=image.pk).update(thumbs_for=image.file.name + "#1")
+    # النسخة 1 كما في الإنتاج: وسمها اسم الأصل بلا `#`.
+    type(image).objects.filter(pk=image.pk).update(thumbs_for=image.file.name)
     image.refresh_from_db()
     assert thumbnails.is_current(image) and not thumbnails.is_latest(image)
     assert thumbnails.build_missing() == 1
