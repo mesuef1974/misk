@@ -666,78 +666,110 @@ def test_store_designs_show_price_and_image_but_no_design_file(client, box_desig
     assert client.get(f"/media/{original.file.name}").status_code == 404
 
 
-def test_showcase_image_thumbnail_is_webp_cached_and_revalidates(client, box_design):
+def _big_image(box_design):
     from io import BytesIO
 
     from PIL import Image
 
-    _make_listable(box_design)
-    services.list_design(box_design)
     image = box_design.images.get()
     big = BytesIO()
     Image.new("RGB", (1200, 900), "#c8a165").save(big, "PNG")
     image.file.save("big.png", SimpleUploadedFile("big.png", big.getvalue()), save=True)
-    url = client.get("/api/store/designs/gift-box").json()["images"][0]["url"]
-
-    thumb = client.get(f"{url}?w=480")
-    assert thumb.status_code == 200 and thumb["Content-Type"] == "image/webp"
-    assert Image.open(BytesIO(thumb.content)).width == 480 and len(thumb.content) < len(big.getvalue())
-    assert client.get(f"{url}?w=480").content == thumb.content  # من الذاكرة المؤقتة
-    assert client.get(f"{url}?w=480", HTTP_IF_NONE_MATCH=thumb["ETag"]).status_code == 304
-    # عرض خارج القائمة المسموحة يُخدَم أصلًا لا مصغّرًا بمقاس اختياري.
-    original = client.get(f"{url}?w=7")
-    assert b"".join(original.streaming_content) == big.getvalue() and original["Content-Type"] == "image/png"
-    assert Image.open(BytesIO(client.get(f"{url}?w=960").content)).width == 960
+    return image, big.getvalue()
 
 
-def test_heavy_image_is_deferred_to_the_worker_and_served_original_meanwhile(client, box_design, monkeypatch):
+def test_upload_schedules_thumbnails_built_once_and_served_from_storage(
+    client, box_design, django_capture_on_commit_callbacks
+):
     from io import BytesIO
 
-    from django.core.cache import cache
     from PIL import Image
 
     from apps.designs import thumbnails
 
     _make_listable(box_design)
     services.list_design(box_design)
-    image = box_design.images.get()
-    big = BytesIO()
-    Image.new("RGB", (1200, 900), "#c8a165").save(big, "PNG")
-    image.file.save("big.png", SimpleUploadedFile("big.png", big.getvalue()), save=True)
-    cache.clear()
-    monkeypatch.setattr(thumbnails, "ON_DEMAND_MAX_PIXELS", 1000)  # كل صورة هنا ثقيلة
+    with django_capture_on_commit_callbacks(execute=True):
+        image, big = _big_image(box_design)  # الإشارة تجدول المهمة (متزامنة في الاختبار)
+    image.refresh_from_db()
+    assert thumbnails.is_current(image) and image.thumbs_for == image.file.name
     url = client.get("/api/store/designs/gift-box").json()["images"][0]["url"]
 
-    first = client.get(f"{url}?w=480")
-    # الأصل الآن بتخزين قصير؛ والمهمة (متزامنة في الاختبار) سخّنت المصغّر بلا قيد.
-    assert (
-        b"".join(first.streaming_content) == big.getvalue() and first["Cache-Control"] == "public, max-age=60"
-    )
-    assert "ETag" not in first
-    assert thumbnails.cached(image, 480)[0] == "image/webp"
-    second = client.get(f"{url}?w=480")
-    assert second["Content-Type"] == "image/webp"
+    thumb = client.get(f"{url}?w=480")
+    body = b"".join(thumb.streaming_content)
+    assert thumb.status_code == 200 and thumb["Content-Type"] == "image/webp"
+    assert "public" in thumb["Cache-Control"] and thumb["ETag"]
+    assert Image.open(BytesIO(body)).width == 480 and len(body) < len(big)
+    assert client.get(f"{url}?w=480", HTTP_IF_NONE_MATCH=thumb["ETag"]).status_code == 304
+    assert Image.open(BytesIO(b"".join(client.get(f"{url}?w=960").streaming_content))).width == 960
+    # عرض خارج القائمة المسموحة يُخدَم أصلًا لا مصغّرًا بمقاس اختياري.
+    original = client.get(f"{url}?w=7")
+    assert b"".join(original.streaming_content) == big and original["Content-Type"] == "image/png"
+
+    names = (image.thumb_480.name, image.thumb_960.name)
+    assert thumbnails.build(image) is False  # idempotent: لا إعادة بناء لما طابق أصله
+    image.refresh_from_db()
+    assert (image.thumb_480.name, image.thumb_960.name) == names
 
 
-def test_warm_images_fills_the_cache_for_listed_designs_only(box_design):
-    from io import BytesIO
-
+def test_unbuilt_thumbnail_serves_original_briefly_then_the_worker_builds_it(client, box_design, monkeypatch):
     from django.core.cache import cache
-    from PIL import Image
 
     from apps.designs import tasks, thumbnails
 
     _make_listable(box_design)
-    image = box_design.images.get()
-    big = BytesIO()
-    Image.new("RGB", (1200, 900), "#c8a165").save(big, "PNG")
-    image.file.save("big.png", SimpleUploadedFile("big.png", big.getvalue()), save=True)
-    cache.clear()
-    assert tasks.warm_images_async() == 0  # غير منشور: لا يُسخَّن
     services.list_design(box_design)
-    assert tasks.warm_images_async() == 2 and tasks.warm_images_async() == 0  # idempotent
-    kind, body = thumbnails.cached(image, 480)
-    assert kind == "image/webp" and Image.open(BytesIO(body)).width == 480
+    image, big = _big_image(box_design)  # بلا تنفيذ on_commit: لم تُبنَ مصغّراتها
+    assert not thumbnails.is_current(image)
+    cache.clear()
+    queued = []
+    monkeypatch.setattr(tasks.build_thumbs_async, "delay", queued.append)
+    url = client.get("/api/store/designs/gift-box").json()["images"][0]["url"]
+
+    first = client.get(f"{url}?w=480")
+    assert b"".join(first.streaming_content) == big and first["Cache-Control"] == "public, max-age=60"
+    assert "ETag" not in first
+    client.get(f"{url}?w=960")
+    assert queued == [image.pk]  # مهمة واحدة لا عاصفة طلبات
+
+    assert tasks.build_thumbs_async(image.pk) is True
+    assert client.get(f"{url}?w=480")["Content-Type"] == "image/webp"
+
+
+def test_replacing_the_original_rebuilds_thumbnails_with_new_names(box_design):
+    from io import BytesIO
+
+    from PIL import Image
+
+    from apps.designs import thumbnails
+
+    _make_listable(box_design)
+    image, _ = _big_image(box_design)
+    assert thumbnails.build(image)
+    image.refresh_from_db()
+    old = image.thumb_480.name
+    other = BytesIO()
+    Image.new("RGB", (1000, 700), "#112233").save(other, "PNG")
+    image.file.save("other.png", SimpleUploadedFile("other.png", other.getvalue()), save=True)
+    assert not thumbnails.is_current(image)
+    assert thumbnails.build(image)
+    image.refresh_from_db()
+    assert image.thumb_480.name != old and image.thumbs_for == image.file.name
+
+
+def test_build_design_thumbs_command_backfills_missing_only(box_design):
+    from io import StringIO
+
+    from django.core.management import call_command
+
+    _make_listable(box_design)
+    _big_image(box_design)
+    out = StringIO()
+    call_command("build_design_thumbs", stdout=out)
+    assert "1" in out.getvalue()
+    out = StringIO()
+    call_command("build_design_thumbs", stdout=out)
+    assert "0" in out.getvalue()
 
 
 def test_unlisting_or_losing_the_license_hides_the_design(client, box_design):

@@ -149,12 +149,12 @@ def _cached(response: HttpResponseBase, etag: str) -> HttpResponseBase:
     return response
 
 
-def _defer_heavy(design_id: int, image, content_type: str, missing):
-    """صورة أثقل من أن تُصغَّر في الويب: تُصغَّر في العامل، ويُخدَم الأصل الآن بتخزين قصير لا يثبّت الثقيل في المتصفحات."""
-    from . import tasks  # noqa: PLC0415 — tasks يستورد هذه الوحدة عبر thumbnails
+def _original(image, content_type: str, missing):
+    """الأصل بتخزين قصير لا يثبّت الثقيل في المتصفحات: احتياط ريثما تُبنى المصغّرات في العامل."""
+    from . import tasks  # noqa: PLC0415 — tasks يستورد thumbnails الذي يستورد النماذج
 
-    if cache.add(f"design-image-warming:{design_id}", 1, 300):  # مهمة واحدة كل 5 دقائق لا عاصفة طلبات
-        tasks.warm_images_async.delay(design_id)
+    if cache.add(f"design-thumbs-queued:{image.pk}", 1, 300):  # مهمة واحدة كل 5 دقائق لا عاصفة طلبات
+        tasks.build_thumbs_async.delay(image.pk)
     try:
         response = FileResponse(image.file.open("rb"), content_type=content_type)
     except OSError:
@@ -168,8 +168,8 @@ def _defer_heavy(design_id: int, image, content_type: str, missing):
 def design_image(request: HttpRequest, slug: str, image_id: int, w: int = 0):
     """صورة عرض لتصميم منشور وحده. النوع من الامتداد الذي فُحص توقيعه عند الرفع، لا من تخمين المتصفح.
 
-    `w` عرض مصغّر من القائمة المسموحة (يُخزَّن في الذاكرة المؤقتة ويُخدَم WebP)؛ وبلا `w` الأصل.
-    الـETag من اسم الملف والعرض، فتعود 304 بلا لمس المخزن."""
+    `w` عرض مصغّر من القائمة المسموحة: يُخدَم ملف WebP الجاهز من التخزين؛ وبلا `w` الأصل.
+    ما لم تُبنَ مصغّراته بعد يُخدَم أصله مؤقتًا. الـETag من اسم الملف، فتعود 304 بلا لمس المخزن."""
     missing = Status(404, error_body("not_found", "ar", messages=MESSAGES))
     design = selectors.listed_designs().filter(slug=slug).first()
     image = next((row for row in design.images.all() if row.pk == image_id), None) if design else None
@@ -179,18 +179,16 @@ def design_image(request: HttpRequest, slug: str, image_id: int, w: int = 0):
     if content_type is None:
         return missing
     width = w if w in THUMB_WIDTHS else 0
+    if width and not thumbnails.is_current(image):
+        return _original(image, content_type, missing)
     tag = thumbnails.etag(image, width)
     if request.headers.get("If-None-Match") == tag:
         return _cached(HttpResponse(status=304), tag)
-    if not width:
-        try:
-            return _cached(FileResponse(image.file.open("rb"), content_type=content_type), tag)
-        except OSError:
-            return missing
     try:
-        value = thumbnails.cached(image, width) or thumbnails.render(image, width, on_demand=True)
-    except thumbnails.TooHeavy:
-        return _defer_heavy(image.design_id, image, content_type, missing)
-    if value is None:
-        return missing
-    return _cached(HttpResponse(value[1], content_type=value[0]), tag)
+        if width:
+            return _cached(
+                FileResponse(thumbnails.thumb_field(image, width).open("rb"), content_type="image/webp"), tag
+            )
+        return _cached(FileResponse(image.file.open("rb"), content_type=content_type), tag)
+    except OSError:
+        return _original(image, content_type, missing) if width else missing
