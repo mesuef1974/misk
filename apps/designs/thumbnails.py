@@ -9,11 +9,14 @@ import hashlib
 from io import BytesIO
 from pathlib import PurePosixPath
 
+from django.core.cache import cache
 from django.core.files.base import ContentFile
 
 from .models import DesignImage
 from .validators import IMAGE_TYPES
 
+CACHE_TTL = 7 * 24 * 3600
+CACHE_MAX_BYTES = 2 * 1024 * 1024  # أكبر من هذا يُقرأ من التخزين كل مرة بدل حجز ذاكرة Redis
 THUMB_WIDTHS = (480, 960)  # البطاقة والمعرض؛ نسخة الواجهة في DesignCard.vue وDesignPage.vue
 
 
@@ -30,6 +33,20 @@ def etag(image: DesignImage, width: int) -> str:
     """بصمة الملف المخدوم: اسمه، فاستبدال الملف يبطل التخزين في المتصفح."""
     name = thumb_field(image, width).name if width else image.file.name
     return f'"{hashlib.sha256(f"{image.pk}:{name}".encode()).hexdigest()[:20]}"'
+
+
+def body(image: DesignImage, width: int) -> bytes:
+    """بايتات المصغّر الجاهز: من Redis، وإلا من التخزين ثم تُحفظ. المفتاح من اسم الملف فاستبداله يبطله.
+
+    Redis طبقة تسريع لا مصدر حقيقة: ضياعها يعيد القراءة من التخزين. يرفع OSError إن غاب الملف."""
+    key = f"design-thumb:{etag(image, width).strip(chr(34))}"
+    data = cache.get(key)
+    if data is None:
+        with thumb_field(image, width).open("rb") as handle:
+            data = handle.read()
+        if len(data) <= CACHE_MAX_BYTES:
+            cache.set(key, data, CACHE_TTL)
+    return data
 
 
 def _resize(data: bytes, width: int) -> bytes | None:
