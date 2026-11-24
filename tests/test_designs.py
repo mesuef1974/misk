@@ -696,12 +696,15 @@ def test_upload_schedules_thumbnails_built_once_and_served_from_storage(
     url = client.get("/api/store/designs/gift-box").json()["images"][0]["url"]
 
     thumb = client.get(f"{url}?w=480")
-    body = b"".join(thumb.streaming_content)
+    body = thumb.content
     assert thumb.status_code == 200 and thumb["Content-Type"] == "image/webp"
     assert "public" in thumb["Cache-Control"] and thumb["ETag"]
     assert Image.open(BytesIO(body)).width == 480 and len(body) < len(big)
     assert client.get(f"{url}?w=480", HTTP_IF_NONE_MATCH=thumb["ETag"]).status_code == 304
-    assert Image.open(BytesIO(b"".join(client.get(f"{url}?w=960").streaming_content))).width == 960
+    assert Image.open(BytesIO(client.get(f"{url}?w=960").content)).width == 960
+    # الطلب الثاني من Redis: يعمل ولو غاب ملف التخزين.
+    image.thumb_480.storage.delete(image.thumb_480.name)
+    assert client.get(f"{url}?w=480").content == body
     # عرض خارج القائمة المسموحة يُخدَم أصلًا لا مصغّرًا بمقاس اختياري.
     original = client.get(f"{url}?w=7")
     assert b"".join(original.streaming_content) == big and original["Content-Type"] == "image/png"

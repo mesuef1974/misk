@@ -186,9 +186,7 @@ def design_image(request: HttpRequest, slug: str, image_id: int, w: int = 0):
         return _cached(HttpResponse(status=304), tag)
     try:
         if width:
-            return _cached(
-                FileResponse(thumbnails.thumb_field(image, width).open("rb"), content_type="image/webp"), tag
-            )
+            return _cached(HttpResponse(thumbnails.body(image, width), content_type="image/webp"), tag)
         return _cached(FileResponse(image.file.open("rb"), content_type=content_type), tag)
     except OSError:
         return _original(image, content_type, missing) if width else missing
