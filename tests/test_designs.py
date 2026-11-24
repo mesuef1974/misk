@@ -188,6 +188,19 @@ def test_estimate_none_without_operations_on_material():
 # ——— الاستيراد والتحليل ———
 
 
+def test_showcase_image_rejects_huge_dimensions_before_decoding(monkeypatch):
+    from io import BytesIO
+
+    from PIL import Image
+
+    real = BytesIO()
+    Image.new("RGB", (100, 100), "#c8a165").save(real, "PNG")
+    validators.validate_showcase_image(SimpleUploadedFile("ok.png", real.getvalue()))
+    monkeypatch.setattr(validators, "MAX_IMAGE_PIXELS", 5000)  # 10 آلاف بكسل هنا «هائلة»
+    with pytest.raises(ValidationError, match="كبيرة جدًا"):
+        validators.validate_showcase_image(SimpleUploadedFile("big.png", real.getvalue()))
+
+
 @pytest.fixture
 def media(settings, tmp_path):
     settings.MEDIA_ROOT = tmp_path / "media"
