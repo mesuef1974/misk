@@ -1,5 +1,3 @@
-from functools import partial
-
 from django.contrib import admin, messages
 from django.db import transaction
 
@@ -82,8 +80,6 @@ class DesignAdmin(admin.ModelAdmin):
                 services.list_design(design, actor=request.user)
             except services.DesignError as exc:
                 self.message_user(request, f"{design}: {exc}", messages.ERROR)
-            else:
-                transaction.on_commit(partial(tasks.warm_images_async.delay, design.pk))
 
     @admin.action(description="أخفِ من المتجر")
     def unlist_from_store(self, request, queryset):

@@ -31,11 +31,9 @@ def reprice_all_async() -> int:
 
 
 @shared_task(
-    name="designs.warm_images", autoretry_for=(OperationalError,), max_retries=3, default_retry_delay=10
+    name="designs.build_thumbs", autoretry_for=(OperationalError,), max_retries=3, default_retry_delay=10
 )
-def warm_images_async(design_id: int | None = None) -> int:
-    """يسخّن مصغّرات صور التصاميم المنشورة (أو تصميم واحد) في الذاكرة المؤقتة. idempotent."""
-    images = DesignImage.objects.filter(design__is_listed=True)
-    if design_id is not None:
-        images = images.filter(design_id=design_id)
-    return thumbnails.warm(images)
+def build_thumbs_async(image_id: int) -> bool:
+    """يبني مصغّرات صورة عرض بعد رفعها أو استبدالها. idempotent: لا يعيد بناء ما طابق أصله."""
+    image = DesignImage.objects.filter(pk=image_id).first()
+    return thumbnails.build(image) if image else False

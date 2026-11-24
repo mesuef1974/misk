@@ -1,7 +1,7 @@
-"""مصغّرات صور عرض التصاميم الجاهزة: التوليد والذاكرة المؤقتة والتسخين، مشتركة بين المسار العام والمهمة الخلفية.
+"""مصغّرات صور عرض التصاميم الجاهزة: تُبنى مرة واحدة بعد الرفع وتُحفظ في التخزين بجوار الأصل.
 
-الذاكرة المؤقتة (Redis) تبقى بين النشرات، فالتسخين يلزم عند نشر تصميم جديد وعند انقضاء `THUMB_TTL`
-لا عند كل نشر للشيفرة. الدالة idempotent: إعادتها تكتب القيمة نفسها."""
+لا Pillow ولا ذاكرة مؤقتة في مسار الطلب: الواجهة تخدم الملف الجاهز. البناء idempotent: تُبنى المصغّرات
+ما دامت لا تطابق اسم الملف الأصلي الحالي (`thumbs_for`)، فاستبدال الأصل يعيد بناءها وإعادة المهمة آمنة."""
 
 from __future__ import annotations
 
@@ -9,87 +9,70 @@ import hashlib
 from io import BytesIO
 from pathlib import PurePosixPath
 
-from django.core.cache import cache
+from django.core.files.base import ContentFile
 
 from .models import DesignImage
 from .validators import IMAGE_TYPES
 
 THUMB_WIDTHS = (480, 960)  # البطاقة والمعرض؛ نسخة الواجهة في DesignCard.vue وDesignPage.vue
-THUMB_TTL = 7 * 24 * 3600
-# فك صورة PNG يحجز ~4 بايت للبكسل (RGBA)، و135 ميغابكسل ≈ 540 ميغابايت: في عملية الويب يُرفض ما فوق هذا الحد
-# فيُخدَم الأصل مؤقتًا ويُصغَّر في العامل. JPEG يُخفَّض عند الفك داخل `thumbnail` (draft) فلا يحجز المقاس الكامل.
-ON_DEMAND_MAX_PIXELS = 24_000_000
 
 
-class TooHeavy(Exception):  # noqa: N818 — إشارة تحكّم لا خطأ
-    """الصورة أثقل من أن تُصغَّر أثناء الطلب؛ يُؤجَّل التصغير إلى مهمة خلفية."""
+def thumb_field(image: DesignImage, width: int):
+    return getattr(image, f"thumb_{width}")
 
 
-def digest(image: DesignImage, width: int) -> str:
-    """بصمة الصورة والعرض: من اسم الملف، فاستبدال الملف يبطل الذاكرة والـETag معًا."""
-    return hashlib.sha256(f"{image.pk}:{image.file.name}:{width}".encode()).hexdigest()
+def is_current(image: DesignImage) -> bool:
+    """المصغّرات كلها موجودة ومبنية من الأصل الحالي."""
+    return bool(image.thumbs_for == image.file.name and all(thumb_field(image, w) for w in THUMB_WIDTHS))
 
 
 def etag(image: DesignImage, width: int) -> str:
-    return f'"{digest(image, width)[:20]}"'
+    """بصمة الملف المخدوم: اسمه، فاستبدال الملف يبطل التخزين في المتصفح."""
+    name = thumb_field(image, width).name if width else image.file.name
+    return f'"{hashlib.sha256(f"{image.pk}:{name}".encode()).hexdigest()[:20]}"'
 
 
-def _cache_key(image: DesignImage, width: int) -> str:
-    return f"design-image:{digest(image, width)}"
-
-
-def cached(image: DesignImage, width: int) -> tuple[str, bytes] | None:
-    return cache.get(_cache_key(image, width))
-
-
-def _resize(data: bytes, width: int, *, on_demand: bool) -> bytes | None:
-    """نسخة WebP بعرض `width` على الأكثر، أو None إن لم تلزم (الأصل أصغر) أو تعذّرت القراءة.
-
-    يرفع `TooHeavy` أثناء الطلب لما فوق `ON_DEMAND_MAX_PIXELS`؛ والقياس من الترويسة قبل فك البكسلات."""
+def _resize(data: bytes, width: int) -> bytes | None:
+    """WebP بعرض `width` على الأكثر (بلا تكبير)، أو None إن تعذّرت القراءة."""
     try:
         from PIL import Image  # noqa: PLC0415 — اعتمادية اختيارية: بدونها يُخدَم الأصل
 
         with Image.open(BytesIO(data)) as source:
-            if source.width <= width:
-                return None
-            if on_demand and source.width * source.height > ON_DEMAND_MAX_PIXELS:
-                raise TooHeavy
-
             source.thumbnail((width, width * 4))
             out = BytesIO()
             source.convert("RGBA" if "A" in source.getbands() else "RGB").save(
                 out, "WEBP", quality=82, method=4
             )
             return out.getvalue()
-    except TooHeavy:
-        raise
     except Exception:  # noqa: BLE001 — صورة تالفة أو Pillow غائبة: الأصل أنفع من خطأ
         return None
 
 
-def render(image: DesignImage, width: int, *, on_demand: bool = False) -> tuple[str, bytes] | None:
-    """يقرأ الأصل من المخزن ويكتب المصغّر في الذاكرة المؤقتة. None إن تعذّر فتح الملف أو نوعه غير معروف.
-
-    `on_demand` (مسار الويب) يرفع `TooHeavy` للصور الثقيلة؛ والمهمة الخلفية والأمر لا يقيّدان."""
-    kind = IMAGE_TYPES.get(PurePosixPath(image.file.name or "").suffix.lower())
-    if kind is None:
-        return None
+def build(image: DesignImage) -> bool:
+    """يبني المصغّرات ويحفظها. يعيد True إن بُني شيء الآن. يعمل في العامل لا في الويب (فك الصور الضخمة ثقيل)."""
+    if is_current(image) or PurePosixPath(image.file.name or "").suffix.lower() not in IMAGE_TYPES:
+        return False
     try:
         with image.file.open("rb") as handle:
             data = handle.read()
     except OSError:
-        return None
-    thumb = _resize(data, width, on_demand=on_demand)
-    value = (kind, data) if thumb is None else ("image/webp", thumb)
-    cache.set(_cache_key(image, width), value, THUMB_TTL)
-    return value
+        return False
+    stamp = hashlib.sha256(str(image.file.name).encode()).hexdigest()[:8]
+    made = {}
+    for width in THUMB_WIDTHS:
+        body = _resize(data, width)
+        if body is None:
+            return False
+        made[width] = (f"{image.pk}-{stamp}-{width}.webp", body)
+    for width, (name, body) in made.items():
+        thumb_field(image, width).save(name, ContentFile(body), save=False)
+    # update لا save: حفظ النموذج يطلق الإشارة فيعيد جدولة المهمة بلا نهاية.
+    DesignImage.objects.filter(pk=image.pk).update(
+        thumb_480=image.thumb_480.name, thumb_960=image.thumb_960.name, thumbs_for=image.file.name
+    )
+    return True
 
 
-def warm(images, *, widths: tuple[int, ...] = THUMB_WIDTHS) -> int:
-    """يسخّن ما لم يكن في الذاكرة. يعيد عدد ما وُلِّد الآن."""
-    made = 0
-    for image in images:
-        for width in widths:
-            if cached(image, width) is None and render(image, width) is not None:
-                made += 1
-    return made
+def build_missing() -> int:
+    """يبني ما ينقصه مصغّر من كل الصور (ملء رجعي بعد النشر). يعيد عدد الصور التي بُنيت."""
+    return sum(build(image) for image in DesignImage.objects.all() if not is_current(image))

@@ -203,6 +203,10 @@ class DesignImage(TimeStampedModel):
 
     design = models.ForeignKey(Design, on_delete=models.CASCADE, related_name="images")
     file = models.FileField(upload_to="designs/showcase/", validators=[validate_showcase_image])
+    # مصغّرات WebP يبنيها العامل بعد الرفع (apps/designs/thumbnails.py)؛ `thumbs_for` اسم الأصل الذي بُنيت منه.
+    thumb_480 = models.FileField(upload_to="designs/showcase/thumbs/", blank=True, editable=False)
+    thumb_960 = models.FileField(upload_to="designs/showcase/thumbs/", blank=True, editable=False)
+    thumbs_for = models.CharField(max_length=255, blank=True, editable=False)
     alt_ar = models.CharField(max_length=200, blank=True)
     alt_en = models.CharField(max_length=200, blank=True)
     sort = models.PositiveSmallIntegerField(default=0)
