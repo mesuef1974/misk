@@ -705,7 +705,7 @@ def test_upload_schedules_thumbnails_built_once_and_served_from_storage(
     with django_capture_on_commit_callbacks(execute=True):
         image, big = _big_image(box_design)  # الإشارة تجدول المهمة (متزامنة في الاختبار)
     image.refresh_from_db()
-    assert thumbnails.is_current(image) and image.thumbs_for == image.file.name
+    assert thumbnails.is_latest(image) and image.thumbs_for == f"{image.file.name}#{thumbnails.THUMB_VERSION}"
     url = client.get("/api/store/designs/gift-box").json()["images"][0]["url"]
 
     thumb = client.get(f"{url}?w=480")
@@ -770,7 +770,38 @@ def test_replacing_the_original_rebuilds_thumbnails_with_new_names(box_design):
     assert not thumbnails.is_current(image)
     assert thumbnails.build(image)
     image.refresh_from_db()
-    assert image.thumb_480.name != old and image.thumbs_for == image.file.name
+    assert image.thumb_480.name != old and thumbnails.is_latest(image)
+
+
+def test_adaptive_quality_shrinks_detailed_images_and_old_version_thumbs_still_serve(box_design, monkeypatch):
+    import os
+    from io import BytesIO
+
+    from PIL import Image
+
+    from apps.designs import thumbnails
+
+    _make_listable(box_design)
+    image = box_design.images.get()
+    noisy = BytesIO()
+    Image.frombytes("RGB", (600, 600), os.urandom(600 * 600 * 3)).save(noisy, "PNG")
+    image.file.save("noisy.png", SimpleUploadedFile("noisy.png", noisy.getvalue()), save=True)
+
+    monkeypatch.setattr(thumbnails, "QUALITY_STEPS", (80,))
+    fixed = len(thumbnails._resize(noisy.getvalue(), 480))
+    monkeypatch.setattr(thumbnails, "QUALITY_STEPS", (80, 65, 50))
+    monkeypatch.setattr(thumbnails, "TARGET_BYTES", 1000)  # لا يبلغه أي مصغّر هنا: تنزل الجودة للنهاية
+    assert len(thumbnails._resize(noisy.getvalue(), 480)) < fixed
+
+    # مصغّرات بنسخة بناء أقدم تبقى صالحة للخدمة ويعاد بناؤها بالأمر.
+    assert thumbnails.build(image)
+    image.refresh_from_db()
+    type(image).objects.filter(pk=image.pk).update(thumbs_for=image.file.name + "#1")
+    image.refresh_from_db()
+    assert thumbnails.is_current(image) and not thumbnails.is_latest(image)
+    assert thumbnails.build_missing() == 1
+    image.refresh_from_db()
+    assert thumbnails.is_latest(image)
 
 
 def test_build_design_thumbs_command_backfills_missing_only(box_design):
