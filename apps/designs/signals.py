@@ -14,5 +14,5 @@ from .models import DesignImage
 
 @receiver(post_save, sender=DesignImage, dispatch_uid="designs.build_thumbs_on_save")
 def schedule_thumbs(sender, instance: DesignImage, raw: bool = False, **kwargs) -> None:
-    if not raw and instance.file and not thumbnails.is_current(instance):
+    if not raw and instance.file and not thumbnails.is_latest(instance):
         transaction.on_commit(partial(tasks.build_thumbs_async.delay, instance.pk))

@@ -1,7 +1,7 @@
 """مصغّرات صور عرض التصاميم الجاهزة: تُبنى مرة واحدة بعد الرفع وتُحفظ في التخزين بجوار الأصل.
 
 لا Pillow ولا ذاكرة مؤقتة في مسار الطلب: الواجهة تخدم الملف الجاهز. البناء idempotent: تُبنى المصغّرات
-ما دامت لا تطابق اسم الملف الأصلي الحالي (`thumbs_for`)، فاستبدال الأصل يعيد بناءها وإعادة المهمة آمنة."""
+ما دامت لا تطابق اسم الملف الأصلي الحالي ونسخة البناء (`thumbs_for`)، فاستبدال الأصل يعيد بناءها وإعادة المهمة آمنة."""
 
 from __future__ import annotations
 
@@ -18,15 +18,32 @@ from .validators import IMAGE_TYPES
 CACHE_TTL = 7 * 24 * 3600
 CACHE_MAX_BYTES = 2 * 1024 * 1024  # أكبر من هذا يُقرأ من التخزين كل مرة بدل حجز ذاكرة Redis
 THUMB_WIDTHS = (480, 960)  # البطاقة والمعرض؛ نسخة الواجهة في DesignCard.vue وDesignPage.vue
+# نسخة طريقة البناء: رفعها يعيد بناء ما بُني بطريقة أقدم (الأمر build_design_thumbs) وتُخدَم القديمة ريثما يحدث ذلك.
+THUMB_VERSION = 2
+# الجودة تنزل درجات حتى يبلغ الملف هذا الحجم: صور النقوش الدقيقة تبلغ 700 ك.ب بجودة ثابتة 82، وزمنها زمن نقل.
+QUALITY_STEPS = (80, 65, 50)
+TARGET_BYTES = 150 * 1024
 
 
 def thumb_field(image: DesignImage, width: int):
     return getattr(image, f"thumb_{width}")
 
 
+def _source_tag(name: str | None) -> str:
+    return f"{name}#{THUMB_VERSION}"
+
+
 def is_current(image: DesignImage) -> bool:
-    """المصغّرات كلها موجودة ومبنية من الأصل الحالي."""
-    return bool(image.thumbs_for == image.file.name and all(thumb_field(image, w) for w in THUMB_WIDTHS))
+    """المصغّرات كلها موجودة ومبنية من الأصل الحالي (بأي نسخة بناء): صالحة للخدمة."""
+    return bool(
+        image.thumbs_for.rpartition("#")[0] == image.file.name
+        and all(thumb_field(image, w) for w in THUMB_WIDTHS)
+    )
+
+
+def is_latest(image: DesignImage) -> bool:
+    """مبنية من الأصل الحالي بنسخة البناء الحالية: لا حاجة لإعادة البناء."""
+    return is_current(image) and image.thumbs_for == _source_tag(image.file.name)
 
 
 def etag(image: DesignImage, width: int) -> str:
@@ -56,10 +73,12 @@ def _resize(data: bytes, width: int) -> bytes | None:
 
         with Image.open(BytesIO(data)) as source:
             source.thumbnail((width, width * 4))
-            out = BytesIO()
-            source.convert("RGBA" if "A" in source.getbands() else "RGB").save(
-                out, "WEBP", quality=82, method=4
-            )
+            flat = source.convert("RGBA" if "A" in source.getbands() else "RGB")
+            for quality in QUALITY_STEPS:
+                out = BytesIO()
+                flat.save(out, "WEBP", quality=quality, method=4)
+                if out.tell() <= TARGET_BYTES:
+                    break
             return out.getvalue()
     except Exception:  # noqa: BLE001 — صورة تالفة أو Pillow غائبة: الأصل أنفع من خطأ
         return None
@@ -67,14 +86,14 @@ def _resize(data: bytes, width: int) -> bytes | None:
 
 def build(image: DesignImage) -> bool:
     """يبني المصغّرات ويحفظها. يعيد True إن بُني شيء الآن. يعمل في العامل لا في الويب (فك الصور الضخمة ثقيل)."""
-    if is_current(image) or PurePosixPath(image.file.name or "").suffix.lower() not in IMAGE_TYPES:
+    if is_latest(image) or PurePosixPath(image.file.name or "").suffix.lower() not in IMAGE_TYPES:
         return False
     try:
         with image.file.open("rb") as handle:
             data = handle.read()
     except OSError:
         return False
-    stamp = hashlib.sha256(str(image.file.name).encode()).hexdigest()[:8]
+    stamp = hashlib.sha256(_source_tag(image.file.name).encode()).hexdigest()[:8]
     made = {}
     for width in THUMB_WIDTHS:
         body = _resize(data, width)
@@ -85,11 +104,13 @@ def build(image: DesignImage) -> bool:
         thumb_field(image, width).save(name, ContentFile(body), save=False)
     # update لا save: حفظ النموذج يطلق الإشارة فيعيد جدولة المهمة بلا نهاية.
     DesignImage.objects.filter(pk=image.pk).update(
-        thumb_480=image.thumb_480.name, thumb_960=image.thumb_960.name, thumbs_for=image.file.name
+        thumb_480=image.thumb_480.name,
+        thumb_960=image.thumb_960.name,
+        thumbs_for=_source_tag(image.file.name),
     )
     return True
 
 
 def build_missing() -> int:
     """يبني ما ينقصه مصغّر من كل الصور (ملء رجعي بعد النشر). يعيد عدد الصور التي بُنيت."""
-    return sum(build(image) for image in DesignImage.objects.all() if not is_current(image))
+    return sum(build(image) for image in DesignImage.objects.all() if not is_latest(image))
