@@ -1,14 +1,16 @@
-"""تسجيل أحداث المتجر: زيادة عدّاد اليوم. القياس لا يُفشل طلب العميل أبدًا: الخطأ يُسجَّل ويُبتلع."""
+"""تسجيل أحداث المتجر: زيادة عدّاد اليوم. القياس لا يُفشل طلب العميل أبدًا: الخطأ يُسجَّل ويُبتلع.
+وحفظ لقطة مؤشرات الخطة الأسبوعية."""
 
 from __future__ import annotations
 
 import logging
+from datetime import date
 
 from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 
-from .models import StoreEventCount
+from .models import PlanSnapshot, StoreEventCount
 
 logger = logging.getLogger(__name__)
 Kind = StoreEventCount.Kind
@@ -39,3 +41,9 @@ def record(kind: str, subject: str = "") -> None:
             _bump(kind, subject)
     except DatabaseError:
         logger.exception("تعذّر تسجيل حدث المتجر %s %s", kind, subject)
+
+
+def save_snapshot(week_end: date, metrics: dict[str, float]) -> PlanSnapshot:
+    """يحفظ لقطة الأسبوع أو يستبدلها. idempotent: إعادة المهمة للأسبوع نفسه لا تضيف صفًّا."""
+    snapshot, _ = PlanSnapshot.objects.update_or_create(week_end=week_end, defaults={"metrics": metrics})
+    return snapshot

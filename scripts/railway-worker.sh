@@ -32,7 +32,8 @@ while :; do
 done
 # قوالب تُصيَّر داخل العامل (PDF مثلًا) تحتاج manifest الثابت في قرصها هي.
 python manage.py collectstatic --noinput --clear
-exec celery -A config worker \
+# beat مضمَّن: العامل نسخة واحدة (.railway/railway.ts). إن زادت النسخ فانقله إلى خدمة مستقلة كي لا تتكرر الجدولة.
+exec celery -A config worker   --beat --schedule="${CELERY_BEAT_SCHEDULE_FILE:-/tmp/celerybeat-schedule}" \
   --loglevel="${CELERY_LOG_LEVEL:-info}" \
   --concurrency="${CELERY_WORKER_CONCURRENCY:-2}" \
   --max-tasks-per-child="${CELERY_WORKER_MAX_TASKS_PER_CHILD:-100}"

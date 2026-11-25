@@ -103,7 +103,14 @@ def set_kpi(plan: dict, kpi_id: str, value: float, on: date, field: str = "value
 
 
 def ingest(plan: dict, snapshot: dict, on: date) -> list[str]:
-    """لقطة `{معرّف المؤشر: قيمة}`. المعرّف المجهول خطأ لا تجاهل: لقطة لا تطابق الخطة عيب يجب أن يظهر."""
+    """لقطة `{معرّف المؤشر: قيمة}`، أو المحفوظة `{"week_end": تاريخ, "metrics": {…}}` وتاريخها يغلب `on`.
+    المعرّف المجهول خطأ لا تجاهل: لقطة لا تطابق الخطة عيب يجب أن يظهر."""
+    if "metrics" in snapshot:
+        try:
+            on = date.fromisoformat(snapshot["week_end"])
+        except (TypeError, ValueError) as exc:
+            raise PlanError(f"تاريخ اللقطة غير صالح: {snapshot.get('week_end')}") from exc
+        snapshot = snapshot["metrics"]
     for kpi_id, value in snapshot.items():
         set_kpi(plan, kpi_id, value, on)
     return sorted(snapshot)

@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Collection
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db.models import Sum
 
 from apps.designs import selectors as design_selectors
 
-from .models import StoreEventCount
+from .models import PlanSnapshot, StoreEventCount
 from .services import design_subject
 
 # عتبة «التصميم الغالي» في المؤشر I8.k1 (docs/growth-plan.json)، بالريال.
 HIGH_PRICE = Decimal("300")
+SATURDAY = 5  # `date.weekday()`
 
 
 def totals(
@@ -71,3 +72,13 @@ def plan_metrics(start: date, end: date) -> dict[str, float]:
         "I8.k1": _cart_rate(start, end, high_priced),
     }
     return {kpi: value for kpi, value in found.items() if value is not None}
+
+
+def last_week(today: date) -> tuple[date, date]:
+    """آخر أسبوع مكتمل قبل `today`، من الأحد إلى السبت: المراجعة الأسبوعية يوم الأحد تقرأ الأسبوع الذي انتهى أمس."""
+    end = today - timedelta(days=(today.weekday() - SATURDAY) % 7 or 7)
+    return end - timedelta(days=6), end
+
+
+def latest_snapshot() -> PlanSnapshot | None:
+    return PlanSnapshot.objects.order_by("-week_end").first()

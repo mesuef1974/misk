@@ -174,3 +174,71 @@ def test_plan_metrics_is_empty_without_listings_and_feeds_plan_ingest():
     plan = growth.load()
     assert growth.ingest(plan, snapshot, date(2026, 12, 7)) == ["C0.k1"]
     assert growth.find_kpi(plan, "C0.k1")["value"] == 100.0
+
+
+def test_last_week_is_the_latest_complete_sunday_to_saturday():
+    saturday = date(2026, 12, 5)
+    assert saturday.weekday() == selectors.SATURDAY
+    week = (date(2026, 11, 29), saturday)
+    for offset in range(1, 8):  # من الأحد إلى السبت التالي: الأسبوع الجاري لم يكتمل
+        assert selectors.last_week(saturday + timedelta(days=offset)) == week
+    assert selectors.last_week(saturday + timedelta(days=8))[1] == saturday + timedelta(days=7)
+
+
+def test_snapshot_task_saves_one_row_per_week_and_replaces_it_on_rerun(monkeypatch):
+    from apps.analytics import tasks
+    from apps.analytics.models import PlanSnapshot
+
+    sunday = date(2026, 12, 6)
+    monkeypatch.setattr(tasks.timezone, "localdate", lambda: sunday)
+    _listed_design("named", price="150", complete=True, personalization=[{"key": "name", "type": "text"}])
+    StoreEventCount.objects.create(day=date(2026, 12, 5), kind="view", subject="design:named", count=10)
+    StoreEventCount.objects.create(day=date(2026, 11, 29), kind="cart_add", subject="design:named", count=2)
+    StoreEventCount.objects.create(
+        day=sunday, kind="cart_add", subject="design:named", count=9
+    )  # الأسبوع الجاري
+
+    assert tasks.snapshot_plan_metrics.delay().get() == "2026-12-05"
+    assert PlanSnapshot.objects.get().metrics == {"C0.k1": 100.0, "I1.k1": 20.0}
+
+    StoreEventCount.objects.filter(kind="view").update(count=20)
+    monkeypatch.setattr(tasks.timezone, "localdate", lambda: sunday + timedelta(days=3))
+    tasks.snapshot_plan_metrics.delay()
+    assert [(s.week_end, s.metrics["I1.k1"]) for s in PlanSnapshot.objects.all()] == [
+        (date(2026, 12, 5), 10.0)
+    ]
+
+
+def test_snapshot_task_is_scheduled_daily_under_its_registered_name(settings):
+    from apps.analytics import tasks
+
+    entry = settings.CELERY_BEAT_SCHEDULE["analytics-plan-snapshot"]
+    assert entry["task"] == tasks.snapshot_plan_metrics.name
+    assert settings.CELERY_TIMEZONE == settings.TIME_ZONE
+
+
+def test_saved_snapshot_is_printed_with_its_week_and_read_by_plan_ingest():
+    import json
+    import sys
+    from io import StringIO
+    from pathlib import Path
+
+    from django.conf import settings
+    from django.core.management import CommandError, call_command
+
+    sys.path.insert(0, str(Path(settings.BASE_DIR) / "automation"))
+    import plan as growth
+
+    with pytest.raises(CommandError, match="لا لقطة محفوظة"):
+        call_command("plan_metrics", "--saved")
+    services.save_snapshot(date(2026, 11, 28), {"C0.k1": 10.0})
+    services.save_snapshot(date(2026, 12, 5), {"C0.k1": 75.0})
+    out = StringIO()
+    call_command("plan_metrics", "--saved", stdout=out)
+    saved = json.loads(out.getvalue())
+    assert saved == {"week_end": "2026-12-05", "metrics": {"C0.k1": 75.0}}
+
+    plan = growth.load()
+    assert growth.ingest(plan, saved, date(2026, 12, 9)) == ["C0.k1"]
+    kpi = growth.find_kpi(plan, "C0.k1")
+    assert (kpi["value"], kpi["measured_at"]) == (75.0, "2026-12-05")

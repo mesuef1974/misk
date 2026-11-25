@@ -98,6 +98,16 @@ def test_ingest_records_values_and_rejects_unknown_ids():
         growth.ingest(plan, {"غير موجود": 1}, TODAY)
 
 
+def test_ingest_takes_the_date_of_a_saved_snapshot():
+    plan = sample()
+    saved = {"week_end": "2026-11-28", "metrics": {"A.k1": 12}}
+    assert growth.ingest(plan, saved, TODAY) == ["A.k1"]
+    kpi = plan["initiatives"][0]["kpis"][0]
+    assert (kpi["value"], kpi["measured_at"]) == (12, "2026-11-28")
+    with pytest.raises(growth.PlanError):
+        growth.ingest(plan, {"week_end": "الأحد", "metrics": {"A.k1": 1}}, TODAY)
+
+
 def test_validate_rejects_broken_plans():
     for path, value in (("phase", "P9"), ("depends_on", ["Z"])):
         plan = sample()
