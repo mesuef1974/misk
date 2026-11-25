@@ -21,7 +21,14 @@ python automation/ledger.py show <card_id>
 python automation/runner.py --once            # يلتقط بطاقة واحدة
 python automation/runner.py --dry-run         # يعرض ما سيفعله دون تنفيذ
 python automation/runner.py --approve-baseline # المالك وحده: يطبع إعداد git وخطّافاته ويعتمده ويرفع الإيقاف
+python automation/plan.py render              # يولّد docs/growth-plan.md من docs/growth-plan.json
+python automation/plan.py check               # يفشل إن كان التقرير قديمًا أو الخطة غير صالحة
+python automation/plan.py kpi I1.k2 32        # قيمة مؤشر؛ --field baseline|target للأساس والهدف
+python automation/plan.py ingest snapshot.json # لقطة {معرّف المؤشر: قيمة} من أمر القياس
 ```
+
+خطة النمو (`plan.py`): الخطة بيانات في `docs/growth-plan.json`، والتقرير مولَّد منها. خطوة لها `card` تأخذ حالتها من
+الدفتر (`merged`/`deployed` = تمت) فتتحدّث بلا تحرير. `tests/test_plan.py` يفشل إن عُدِّلت الخطة ولم يُولَّد التقرير.
 
 قبل أول تشغيل يعتمد المالك بصمة إعداد git (`--approve-baseline`)، وتُحفظ خارج المستودع في `MISK_RUNNER_STATE`
 (افتراضًا `~/.misk-runner`). أي تغيّر عنها، أو في أثناء تشغيل بطاقة، يكتب ملف `halt` هناك فيقف المشغّل حتى يراجع المالك
