@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path, re_path
 
+from apps.analytics.api import router as events_router
 from apps.capacity.api import router as capacity_router
 from apps.catalog.api import router as catalog_router
 from apps.catalog.storefront_api import router as store_router
@@ -26,6 +27,7 @@ api.add_router("/store", store_router)
 api.add_router("/store/cart", cart_router)
 api.add_router("/store/delivery-zones", zones_router)
 api.add_router("/store/designs", designs_router)
+api.add_router("/store/events", events_router)
 api.add_router("/store/track", track_router)
 
 urlpatterns = [

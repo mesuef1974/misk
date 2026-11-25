@@ -219,6 +219,10 @@ export const storeService = {
   design: (designSlug: string, lang: Locale) =>
     api.get<StoreDesignDetail>(`/api/store/designs/${slug(designSlug)}?lang=${lang}`),
 
+  /** إشارة قياس «عُرضت صفحة المنتج»: مجموع يومي بلا هوية. فشلها لا يهمّ الزائر فيُبتلع. */
+  viewed: (kind: "design" | "template", productSlug: string): Promise<void> =>
+    api.post<void>("/api/store/events/view", { kind, slug: productSlug }).catch(() => undefined),
+
   cart: () => api.get<Cart>("/api/store/cart"),
   addItem: (draft: CartItemDraft, lang: Locale) => api.post<Cart>("/api/store/cart/items", { ...draft, lang }),
   addDesignItem: (draft: DesignItemDraft, lang: Locale) =>

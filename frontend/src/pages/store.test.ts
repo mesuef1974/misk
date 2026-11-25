@@ -34,6 +34,7 @@ vi.mock("@/services/store", () => ({
     preview: vi.fn(),
     designs: vi.fn(),
     design: vi.fn(),
+    viewed: vi.fn(),
     cart: vi.fn(),
     addItem: vi.fn(),
     addDesignItem: vi.fn(),
@@ -258,6 +259,7 @@ describe("التصاميم الجاهزة", () => {
   it("صفحة التصميم تعرض المقاس وسعر كل خامة", async () => {
     const page = await show(DesignPage, "/en/designs/gift-box", { slug: "gift-box" });
     expect(storeService.design).toHaveBeenCalledWith("gift-box", "en");
+    expect(storeService.viewed).toHaveBeenCalledExactlyOnceWith("design", "gift-box");
     expect(page.get("h1").text()).toBe("Gift box");
     expect(page.text()).toContain("150 × 70 × 150 mm");
     expect(page.get(".offers li").text()).toContain("Birch, 3 mm");
@@ -334,6 +336,7 @@ describe("التصاميم الجاهزة", () => {
     vi.mocked(storeService.design).mockRejectedValue(rejection(404, { code: "not_found", detail: "التصميم غير موجود" }));
     const page = await show(DesignPage, "/designs/none", { slug: "none" });
     expect(page.get('[role="alert"]').text()).toBe("التصميم غير موجود");
+    expect(storeService.viewed).not.toHaveBeenCalled();
     expect(page.find(".design").exists()).toBe(false);
     page.unmount();
   });

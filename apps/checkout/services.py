@@ -12,12 +12,14 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from functools import partial
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 from django.utils import timezone
 
+from apps.analytics import services as analytics
 from apps.capacity import selectors as capacity_selectors
 from apps.capacity import services as capacity_services
 from apps.catalog import designer
@@ -261,6 +263,8 @@ def _open_payment(
         target=f"order:{order.pk}",
         payload={"payment": payment.pk, "provider": provider_name, "amount": str(amount)},
     )
+    # جلسة دفع جديدة وحدها تُعدّ: إعادة الطلب تعيد الجلسة القائمة من أعلى ولا تبلغ هنا.
+    transaction.on_commit(partial(analytics.record, analytics.Kind.CHECKOUT_START))
     _after_commit_sweep(checkout_ttl() + timedelta(seconds=30))
     return payment
 

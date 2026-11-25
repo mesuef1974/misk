@@ -17,6 +17,7 @@ from ninja import Field, Router, Schema, Status
 from ninja.errors import HttpError
 from ninja.utils import check_csrf
 
+from apps.analytics import services as analytics
 from apps.catalog import designer
 from apps.catalog import domain as catalog_domain
 from apps.catalog import storefront_api as store
@@ -234,6 +235,7 @@ def add_item(request: HttpRequest, payload: CartItemIn):
     except designer.DesignRejectedError as exc:
         return Status(422, _error("invalid", lang, fields=exc.errors, suggestions=exc.suggestions))
     request.session[SESSION_KEY] = str(order.client_ref)
+    analytics.record(analytics.Kind.CART_ADD, analytics.template_subject(payload.template_slug))
     return Status(200, _view(request))
 
 
@@ -258,6 +260,7 @@ def add_design_item(request: HttpRequest, payload: DesignItemIn):
     except designer.DesignRejectedError as exc:
         return Status(422, _error("invalid", payload.lang, fields=exc.errors, suggestions=exc.suggestions))
     request.session[SESSION_KEY] = str(order.client_ref)
+    analytics.record(analytics.Kind.CART_ADD, analytics.design_subject(payload.design_slug))
     return Status(200, _view(request))
 
 
