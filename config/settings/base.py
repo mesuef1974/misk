@@ -254,6 +254,12 @@ CELERY_BEAT_SCHEDULE = {
         "task": "analytics.snapshot_plan_metrics",
         "schedule": crontab(hour=3, minute=0),
     },
+    # مهلة الدفع المنتهية والسلال المهجورة والاسترداد المتعثّر لا تنتظر زائرًا يفتح دفعًا. خمس دقائق = مهلة
+    # إعادة الاسترداد (`checkout.services.REFUND_RETRY_AFTER`)، وأقصى تأخّر في تحرير سعة طلب انتهت مهلته.
+    "checkout-sweep": {
+        "task": "checkout.sweep",
+        "schedule": crontab(minute="*/5"),
+    },
 }
 
 # تخطيط الألواح في عامل Celery بدل الطلب نفسه (قاعدة 300ms). يشترط عاملًا وRedis مشتركًا بين الويب والعامل،

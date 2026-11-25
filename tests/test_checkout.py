@@ -512,3 +512,21 @@ def test_task_names_are_registered():
     from apps.checkout import tasks
 
     assert tasks.sweep.name == "checkout.sweep" and tasks.refund_payment.name == "checkout.refund"
+
+
+def test_sweep_is_scheduled_on_beat_no_later_than_the_refund_retry_window(settings):
+    from celery.schedules import crontab
+
+    from apps.checkout import tasks
+
+    entry = settings.CELERY_BEAT_SCHEDULE["checkout-sweep"]
+    assert entry["task"] == tasks.sweep.name
+    assert entry["schedule"] == crontab(minute="*/5")
+    assert timedelta(minutes=5) <= services.REFUND_RETRY_AFTER
+
+
+def test_every_scheduled_task_is_registered(settings):
+    from config.celery import app
+
+    app.loader.import_default_modules()
+    assert {entry["task"] for entry in settings.CELERY_BEAT_SCHEDULE.values()} <= set(app.tasks)

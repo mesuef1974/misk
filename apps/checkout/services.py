@@ -362,7 +362,8 @@ def _apply(payment: Payment, event: providers.Event) -> str:
 
 
 def _after_commit_sweep(delay: timedelta) -> None:
-    """مع عامل Celery تُجدول مهمة عند نهاية المهلة؛ بلا عامل يكنس كل طلب دفع ما سبقه."""
+    """مع عامل Celery تُجدول مهمة عند نهاية المهلة بالضبط؛ وكنس beat الدوري (`CELERY_BEAT_SCHEDULE`) وكنس كل
+    فتح دفع يلتقطان ما فاتها."""
     if not settings.PLANNING_ASYNC:
         return
     from . import tasks
