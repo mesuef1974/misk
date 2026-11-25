@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import dj_database_url
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -246,6 +247,14 @@ CELERY_TASK_TIME_LIMIT = 300
 CELERY_TASK_ALWAYS_EAGER = False
 # نتيجة مهمة التخطيط تُقرأ بالاستطلاع ثم لا حاجة إليها؛ ساعة تكفي ولا تملأ Redis.
 CELERY_RESULT_EXPIRES = 60 * 60
+CELERY_TIMEZONE = TIME_ZONE
+# beat مضمَّن في العامل الوحيد (scripts/railway-worker.sh). المهام المجدولة idempotent: تكرارها لا يضر.
+CELERY_BEAT_SCHEDULE = {
+    "analytics-plan-snapshot": {
+        "task": "analytics.snapshot_plan_metrics",
+        "schedule": crontab(hour=3, minute=0),
+    },
+}
 
 # تخطيط الألواح في عامل Celery بدل الطلب نفسه (قاعدة 300ms). يشترط عاملًا وRedis مشتركًا بين الويب والعامل،
 # فهو معطَّل افتراضًا: بلاهما تبقى المهمة في طابور لا يقرؤه أحد ويتعطّل التخطيط كله.

@@ -1,8 +1,11 @@
-"""عدّادات أحداث المتجر اليومية: مجاميع وحدها. لا صف لكل زائر ولا عنوان ولا جلسة ولا متصفح، فلا بيانات شخصية."""
+"""عدّادات أحداث المتجر اليومية: مجاميع وحدها. لا صف لكل زائر ولا عنوان ولا جلسة ولا متصفح، فلا بيانات شخصية.
+ولقطة مؤشرات خطة النمو الأسبوعية."""
 
 from __future__ import annotations
 
 from django.db import models
+
+from apps.core.models import TimeStampedModel
 
 
 class StoreEventCount(models.Model):
@@ -29,3 +32,19 @@ class StoreEventCount(models.Model):
 
     def __str__(self) -> str:
         return f"{self.day} {self.get_kind_display()} {self.subject}: {self.count}"
+
+
+class PlanSnapshot(TimeStampedModel):
+    """لقطة مؤشرات خطة النمو لأسبوع ينتهي بـ`week_end` (الأحد إلى السبت). صف واحد لكل أسبوع: إعادة الحساب تستبدله."""
+
+    week_end = models.DateField("آخر يوم في الأسبوع", unique=True)
+    # `{معرّف المؤشر: قيمة}` بصيغة `automation/plan.py ingest`؛ ما لا بيانات له غائب.
+    metrics = models.JSONField("المؤشرات", default=dict)
+
+    class Meta:
+        verbose_name = "لقطة مؤشرات"
+        verbose_name_plural = "لقطات مؤشرات الخطة"
+        ordering = ["-week_end"]
+
+    def __str__(self) -> str:
+        return f"{self.week_end}: {len(self.metrics)} مؤشر"
