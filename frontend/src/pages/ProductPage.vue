@@ -41,6 +41,7 @@ const adding = ref(false);
 /** يزيد عند كل طلب معاينة وكل تحميل: ردّ طلب أقدم لا يكتب فوق الأحدث. */
 let previewTicket = 0;
 let loadTicket = 0;
+let counted = "";
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 const name = computed(() => (detail.value ? localized(detail.value.name, detail.value.name_en) : ""));
@@ -79,6 +80,10 @@ async function load(): Promise<void> {
     params.value = initialParams(loaded.fields);
     materialId.value = loaded.materials[0]?.id ?? "";
     detail.value = loaded;
+    if (counted !== props.slug) {
+      counted = props.slug;
+      void storeService.viewed("template", props.slug);
+    }
   } catch (error) {
     if (ticket === loadTicket) loadError.value = storeError(error, t("errors.unexpected")).message;
   }

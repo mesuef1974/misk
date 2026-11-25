@@ -31,6 +31,7 @@ const fieldErrors = ref<Record<string, string>>({});
 const adding = ref(false);
 const notice = ref("");
 let ticket = 0;
+let counted = "";
 
 const offerKey = (code: string, materialId: number) => `${code}|${materialId}`;
 const offers = computed(() =>
@@ -93,6 +94,11 @@ async function load(): Promise<void> {
     const result = await storeService.design(props.slug, currentLocale());
     if (mine !== ticket) return;
     detail.value = result;
+    // مرة لكل تصميم لا لكل إعادة تحميل (تبديل اللغة، تغيّر السعر).
+    if (counted !== result.slug) {
+      counted = result.slug;
+      void storeService.viewed("design", result.slug);
+    }
     params.value = initialParams(result.fields);
     // عرض واحد لا اختيار فيه؛ والاختيار السابق يبقى إن بقي معروضًا بعد إعادة التحميل.
     if (offers.value.length === 1) choice.value = offerKey(offers.value[0].variant.code, offers.value[0].offer.material.id);

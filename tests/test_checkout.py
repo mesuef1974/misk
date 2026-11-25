@@ -9,6 +9,7 @@ import pytest
 from django.test import Client
 from django.utils import timezone
 
+from apps.analytics.models import StoreEventCount
 from apps.capacity.models import Closure
 from apps.catalog import designer
 from apps.catalog import services as catalog_services
@@ -210,11 +211,24 @@ def test_checkout_opens_one_session_and_locks_cart(client, case, material, pay):
     # الإعادة تعيد الجلسة نفسها، والسلة مقفلة والدفع مفتوح.
     assert _checkout(client).json()["payment_url"] == body["payment_url"]
     assert Payment.objects.count() == 1
+    counts = {(r.kind, r.subject): r.count for r in StoreEventCount.objects.all()}
+    assert counts == {("cart_add", f"template:{case.slug}"): 1}
     cart = client.get("/api/store/cart").json()
     assert cart["status"] == "awaiting_payment" and cart["payment_url"] == body["payment_url"]
     assert _add(client, case, material, NAME).status_code == 409
     item_id = cart["items"][0]["id"]
     assert _json(client, "patch", f"/api/store/cart/items/{item_id}", {"quantity": 1}).status_code == 409
+
+
+@pytest.mark.django_db
+def test_checkout_start_is_counted_once_per_payment_session(
+    client, case, material, pay, django_capture_on_commit_callbacks
+):
+    _add(client, case, material, NAME)
+    with django_capture_on_commit_callbacks(execute=True):
+        assert _checkout(client).status_code == 200
+        assert _checkout(client).status_code == 200
+    assert StoreEventCount.objects.get(kind="checkout_start").count == 1
 
 
 @pytest.mark.django_db

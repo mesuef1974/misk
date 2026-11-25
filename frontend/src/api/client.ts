@@ -103,6 +103,8 @@ async function request<T>(
     const detail = raw === "Unauthorized" ? "" : raw;
     throw new ApiError(res.status, detail || fallback(res.status), body);
   }
+  // 204 بلا جسم: إشارات القياس لا تعيد شيئًا.
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 

@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "apps.checkout",
     "apps.fulfillment",
     "apps.notifications",
+    "apps.analytics",
 ]
 
 MIDDLEWARE = [
