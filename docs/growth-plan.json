@@ -15,8 +15,8 @@
       "phase": "P0",
       "why": "لا مؤشر في هذه الخطة يُقاس آليًّا قبله: لا عدّاد زيارات ولا لقطة مؤشرات اليوم.",
       "steps": [
-        {"id": "M0.1", "title": "أحداث المتجر: عرض تصميم، إضافة للسلة، بدء دفع (جدول أحداث مجهول الهوية، بلا بيانات شخصية)", "status": "in_progress", "card": null},
-        {"id": "M0.2", "title": "أمر `plan_metrics` يحسب المؤشرات من قاعدة البيانات ويخرجها JSON", "status": "pending", "card": null},
+        {"id": "M0.1", "title": "أحداث المتجر: عرض تصميم، إضافة للسلة، بدء دفع (جدول أحداث مجهول الهوية، بلا بيانات شخصية)", "status": "done", "card": null},
+        {"id": "M0.2", "title": "أمر `plan_metrics` يحسب المؤشرات من قاعدة البيانات ويخرجها JSON", "status": "in_progress", "card": null},
         {"id": "M0.3", "title": "مهمة Celery beat أسبوعية تحفظ لقطة المؤشرات، و`automation/plan.py ingest` يقرؤها", "status": "pending", "card": null},
         {"id": "M0.4", "title": "قياس خط الأساس لكل مؤشر (أسبوعان من البيانات)", "status": "pending", "card": null}
       ],
